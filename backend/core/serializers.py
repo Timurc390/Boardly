@@ -1,97 +1,105 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer # Імпортуємо базовий серіалізатор Djoser
+from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
 from .models import (
     Profile, Board, Membership, List, Card, CardMember,
     Label, CardLabel, Checklist, ChecklistItem, Activity
 )
 
+from rest_framework import serializers
+from django.contrib.auth.models import User
+from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
+from .models import (
+    Profile, Board, Membership, List, Card, 
+    Label, Checklist, ChecklistItem, Activity
+)
+
 # ----------------------------------------------------------------------
-# 1. СЕРІАЛІЗАТОРИ КОРИСТУВАЧІВ ТА ПРОФІЛЮ
+# 1. AUTH & PROFILE SERIALIZERS
 # ----------------------------------------------------------------------
 
-# НОВИЙ СЕРІАЛІЗАТОР ДЛЯ РЕЄСТРАЦІЇ
 class UserCreateSerializer(DjoserUserCreateSerializer):
-    """
-    Спеціалізований серіалізатор для створення користувача (реєстрації).
-    Наслідує логіку хешування пароля від Djoser.
-    """
     class Meta(DjoserUserCreateSerializer.Meta):
-        # Додаємо поля first_name та last_name для реєстрації
-        fields = ('id', 'username', 'email', 'password', 'first_name', 'last_name') 
+        fields = ('id', 'username', 'email', 'password', 'first_name', 'last_name')
 
 class ProfileSerializer(serializers.ModelSerializer):
-    """Серіалізатор для моделі Profile."""
     class Meta:
         model = Profile
         fields = ('organization', 'theme')
 
 class UserSerializer(serializers.ModelSerializer):
     """
-    Базовий серіалізатор для моделі User. 
-    Використовується для відображення власників, учасників та виконавців карток.
+    Сериализатор пользователя с поддержкой вложенного обновления профиля.
     """
-    profile = ProfileSerializer(read_only=True) # Вкладаємо профіль
+    profile = ProfileSerializer(required=False)
     
     class Meta:
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'profile')
-        read_only_fields = ('username', 'email') # Забороняємо змінювати логін та email через цей серіалізатор
+        read_only_fields = ('username', 'email')
 
+    def update(self, instance, validated_data):
+        """
+        Переопределяем метод update для сохранения вложенных данных профиля.
+        """
+        # Извлекаем данные профиля
+        profile_data = validated_data.pop('profile', None)
 
+        # Обновляем поля User (имя, фамилия)
+        instance = super().update(instance, validated_data)
+
+        # Обновляем поля Profile, если они были переданы
+        if profile_data:
+            # Получаем или создаем профиль (на случай если его почему-то нет)
+            profile_instance, _ = Profile.objects.get_or_create(user=instance)
+            
+            # Обновляем поля профиля
+            for attr, value in profile_data.items():
+                setattr(profile_instance, attr, value)
+            profile_instance.save()
+
+        return instance
 # ----------------------------------------------------------------------
-# 2. СЕРІАЛІЗАТОРИ ДЕТАЛІЗАЦІЇ
+# 2. СЕРІАЛІЗАТОРИ ДЕТАЛІЗАЦІЇ (Membership, Checklist, Label, Activity)
 # ----------------------------------------------------------------------
 
-# Серіалізатор для проміжної таблиці Membership (для відображення учасників дошки)
 class MembershipSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True) # Відображаємо деталі користувача
-    
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Membership
         fields = ('user', 'role')
 
-# Серіалізатор для окремого пункту підзадачі
 class ChecklistItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChecklistItem
         fields = ('id', 'text', 'is_checked', 'order')
 
-# Серіалізатор для чек-листа (включає його пункти)
 class ChecklistSerializer(serializers.ModelSerializer):
-    items = ChecklistItemSerializer(many=True, read_only=True) # Вкладаємо пункти підзадач
-    
+    items = ChecklistItemSerializer(many=True, read_only=True)
     class Meta:
         model = Checklist
         fields = ('id', 'title', 'items')
 
-# Серіалізатор для міток
 class LabelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Label
         fields = ('id', 'name', 'color')
 
-# Серіалізатор для Журналу Дій (Activity)
 class ActivitySerializer(serializers.ModelSerializer):
-    """Серіалізатор для моделі Activity (Журнал дій)."""
-    user = UserSerializer(read_only=True) # Відображаємо, хто виконав дію
-    
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Activity
-        fields = ('id', 'board', 'user', 'action_text', 'timestamp')
-        read_only_fields = ('board', 'user', 'action_text', 'timestamp') # Усе читається лише
+        fields = ('id', 'board', 'user', 'action_text', 'timestamp') # Додайте action_type, якщо він є в моделі
+        read_only_fields = ('board', 'user', 'action_text', 'timestamp')
 
 # ----------------------------------------------------------------------
-# 3. СЕРІАЛІЗАТОРИ КАРТОК, СПИСКІВ ТА ДОШОК (З Вкладеннями)
+# 3. СЕРІАЛІЗАТОРИ КАРТОК, СПИСКІВ ТА ДОШОК
 # ----------------------------------------------------------------------
 
 class CardSerializer(serializers.ModelSerializer):
-    """Серіалізатор для моделі Card."""
-    # Відображаємо учасників та чек-листи безпосередньо у картці
     checklists = ChecklistSerializer(many=True, read_only=True)
-    # Зверніть увагу: ми використовуємо CardLabel для зв'язку з мітками. 
     labels = LabelSerializer(many=True, read_only=True, source='label_set') 
-    members = UserSerializer(many=True, read_only=True) # Відображаємо призначених користувачів
+    members = UserSerializer(many=True, read_only=True)
 
     class Meta:
         model = Card
@@ -101,22 +109,16 @@ class CardSerializer(serializers.ModelSerializer):
         )
 
 class ListSerializer(serializers.ModelSerializer):
-    """Серіалізатор для моделі List (включає картки)."""
-    cards = CardSerializer(many=True, read_only=True) # Вкладаємо всі картки у список
-    
+    cards = CardSerializer(many=True, read_only=True)
     class Meta:
         model = List
         fields = ('id', 'title', 'order', 'is_archived', 'board', 'cards')
 
 class BoardSerializer(serializers.ModelSerializer):
-    """
-    Основний серіалізатор для моделі Board.
-    Вкладає учасників та списки для повного відображення дошки.
-    """
-    owner = UserSerializer(read_only=True) # Власник дошки
-    members = MembershipSerializer(source='membership_set', many=True, read_only=True) # Учасники дошки
-    lists = ListSerializer(many=True, read_only=True) # Списки на дошці
-    labels = LabelSerializer(many=True, read_only=True) # Мітки дошки
+    owner = UserSerializer(read_only=True)
+    members = MembershipSerializer(source='membership_set', many=True, read_only=True)
+    lists = ListSerializer(many=True, read_only=True)
+    labels = LabelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Board

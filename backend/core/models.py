@@ -250,24 +250,42 @@ class ChecklistItem(models.Model):
 # ----------------------------------------------------------------------
 # 5. СИСТЕМНІ ЕЛЕМЕНТИ (Activity)
 # ----------------------------------------------------------------------
-
 class Activity(models.Model):
     """
     Таблиця: Activity
-    Журнал дій для відстеження змін на Дошці (Real-time оновлення).
+    Журнал дій. Тепер містить типи подій для кращої структури.
     """
-    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='activities', verbose_name="Дошка")
+    # Визначаємо типи дій
+    ACTION_TYPES = (
+        ('CREATE_BOARD', 'Створення дошки'),
+        ('UPDATE_BOARD', 'Оновлення дошки'),
+        ('CREATE_LIST', 'Створення списку'),
+        ('MOVE_LIST', 'Переміщення списку'),
+        ('CREATE_CARD', 'Створення картки'),
+        ('MOVE_CARD', 'Переміщення картки'),
+        ('UPDATE_CARD', 'Оновлення картки'),
+        ('ARCHIVE_CARD', 'Архівування картки'),
+        ('MEMBER_JOIN', 'Приєднання учасника'),
+    )
+
+    board = models.ForeignKey('Board', on_delete=models.CASCADE, related_name='activities', verbose_name="Дошка")
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="Користувач")
+    
+    # Нове поле для типу дії
+    action_type = models.CharField(max_length=50, choices=ACTION_TYPES, verbose_name="Тип дії")
+    
+    # Текст залишаємо для швидкого відображення, але типи допоможуть у фільтрації
     action_text = models.TextField(verbose_name="Опис дії")
+    
+    # Додаткове поле для зберігання ID об'єкта, з яким взаємодіяли (наприклад, ID картки)
+    target_id = models.IntegerField(null=True, blank=True, verbose_name="ID цілі")
+    
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name="Час дії")
-    
-    # Додаткові поля для детального відстеження, наприклад:
-    # card = models.ForeignKey(Card, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Пов'язана Картка")
-    
+
     class Meta:
         verbose_name = "Дія"
         verbose_name_plural = "Журнал дій"
-        ordering = ['-timestamp'] # Сортування від найновіших до найстаріших
+        ordering = ['-timestamp']
 
     def __str__(self):
-        return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] {self.user.username if self.user else 'Система'}: {self.action_text}"
+        return f"[{self.action_type}] {self.user.username if self.user else 'Система'}: {self.action_text}"

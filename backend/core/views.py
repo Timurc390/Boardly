@@ -14,26 +14,38 @@ from .serializers import (
 from .permissions import IsOwnerOrReadOnly 
 
 # ----------------------------------------------------------------------
-# АВТЕНТИФІКАЦІЯ
+# AUTHENTICATION & USER MANAGEMENT
 # ----------------------------------------------------------------------
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet для відображення всіх користувачів.
+    ViewSet для пользователей.
+    Содержит action 'me' для получения и редактирования своего профиля.
     """
     queryset = User.objects.all().select_related('profile')
     serializer_class = UserSerializer
-    # ВИПРАВЛЕНО: Тимчасово дозволяємо будь-який доступ для перевірки з'єднання
-    permission_classes = [permissions.AllowAny] 
+    permission_classes = [permissions.IsAuthenticated]
 
-# ----------------------------------------------------------------------
-# 2. УПРАВЛІННЯ ДОШКАМИ
-# ----------------------------------------------------------------------
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        """
+        Кастомный эндпоинт users/me/.
+        Использует UserSerializer, который умеет сохранять профиль.
+        """
+        user = request.user
+        
+        if request.method == 'GET':
+            serializer = self.get_serializer(user)
+            return Response(serializer.data)
+        
+        elif request.method == 'PATCH':
+            # partial=True позволяет обновлять только часть полей
+            serializer = self.get_serializer(user, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
 
 class BoardViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet для CRUD операцій з Дошками (Board).
-    """
     serializer_class = BoardSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
 
@@ -41,17 +53,11 @@ class BoardViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_anonymous:
             return Board.objects.none()
-        
-        # Повертає лише дошки, до яких користувач має доступ (власник або учасник)
-        return Board.objects.filter(
-            models.Q(owner=user) | models.Q(members=user)
-        ).distinct().prefetch_related('lists', 'members', 'labels')
+        return Board.objects.filter(Q(owner=user) | Q(members=user)).distinct()
 
     def perform_create(self, serializer):
-        """При створенні дошки, автоматично встановлює поточного користувача як власника та адміністратора."""
-        new_board = serializer.save(owner=self.request.user)
-        # Автоматично додаємо власника як учасника (Admin) через проміжну таблицю Membership
-        Membership.objects.create(user=self.request.user, board=new_board, role='admin')
+        serializer.save(owner=self.request.user)
+
         
     # Кастомний ендпоінт для швидкого додавання до Обраних
     @action(detail=True, methods=['post'])
@@ -116,6 +122,7 @@ class LabelViewSet(viewsets.ModelViewSet):
 # ----------------------------------------------------------------------
 # 4. ДЕТАЛІЗАЦІЯ КАРТКИ ТА ЖУРНАЛ ДІЙ
 # ----------------------------------------------------------------------
+
 
 class ChecklistViewSet(viewsets.ModelViewSet):
     """ViewSet для CRUD операцій з Чек-листами (Checklist)."""
