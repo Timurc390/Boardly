@@ -2,19 +2,24 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from core.views import (
-    UserViewSet, BoardViewSet, ListViewSet, CardViewSet, 
-    LabelViewSet, ChecklistViewSet, ChecklistItemViewSet, ActivityViewSet
+    UserViewSet, BoardViewSet, BoardMemberViewSet, FavoriteBoardViewSet,
+    ListViewSet, CardViewSet, 
+    LabelViewSet, ChecklistViewSet, ChecklistItemViewSet, AttachmentViewSet, CommentViewSet, ActivityViewSet
 )
 
 # Використовуємо DefaultRouter для автоматичного створення URL маршрутів
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'boards', BoardViewSet, basename='board')
+router.register(r'board-members', BoardMemberViewSet, basename='board-member')
+router.register(r'favorites', FavoriteBoardViewSet, basename='favorite-board')
 router.register(r'lists', ListViewSet, basename='list') 
 router.register(r'cards', CardViewSet, basename='card')
 router.register(r'labels', LabelViewSet, basename='label')
 router.register(r'checklists', ChecklistViewSet, basename='checklist')
 router.register(r'checklist-items', ChecklistItemViewSet, basename='checklist-item')
+router.register(r'attachments', AttachmentViewSet, basename='attachment')
+router.register(r'comments', CommentViewSet, basename='comment')
 router.register(r'activities', ActivityViewSet, basename='activity')
 
 

@@ -20,7 +20,7 @@ SECRET_KEY = 'django-insecure-some-secret-key' # Потрібно замінит
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1'] # Додаємо локальні хости
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -84,11 +84,11 @@ WSGI_APPLICATION = 'boardly_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'boardly_db',                 # ІМ'Я ВАШОЇ БАЗИ ДАНИХ
-        'USER': 'wanderingonlyup',            # КОРИСТУВАЧ POSTGRESQL
-        'PASSWORD': 'admin123',               # ПАРОЛЬ
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.getenv('POSTGRES_DB', 'boardly_db'),
+        'USER': os.getenv('POSTGRES_USER', 'wanderingonlyup'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'admin123'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
 
@@ -143,6 +143,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+# Додаткові origins з env (через кому), наприклад для ngrok
+extra_origins = os.getenv('CORS_EXTRA_ORIGINS')
+if extra_origins:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins.split(',') if o.strip()])
 
 # Дозволяємо надсилати cookies та заголовки авторизації (важливо для аутентифікації)
 CORS_ALLOW_CREDENTIALS = True 

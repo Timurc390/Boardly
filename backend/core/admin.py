@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Profile, Board, Membership, List, Card, CardMember, 
+    Profile, Board, BoardMember, FavoriteBoard, List, Card, CardMember, 
     Label, CardLabel, Checklist, ChecklistItem, Activity
 )
 from django.contrib.auth.models import User
@@ -12,8 +12,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 # ----------------------------------------------------------------------
 
 # Учасники Дошки (для BoardAdmin)
-class MembershipInline(admin.TabularInline):
-    model = Membership
+class BoardMemberInline(admin.TabularInline):
+    model = BoardMember
     extra = 1 # Кількість порожніх рядків для додавання нових учасників
     fields = ('user', 'role')
     raw_id_fields = ('user',) # Використовуємо поле для ID, щоб уникнути завантаження всіх користувачів
@@ -83,7 +83,7 @@ class BoardAdmin(admin.ModelAdmin):
     search_fields = ('title', 'description')
     readonly_fields = ('invite_link', 'created_at') # Посилання-запрошення генерується автоматично
 
-    inlines = [MembershipInline, ListInline, LabelInline] # Вбудовуємо дочірні об'єкти
+    inlines = [BoardMemberInline, ListInline, LabelInline] # Вбудовуємо дочірні об'єкти
 
 
 # 3. СПИСКИ ТА КАРТКИ
@@ -118,9 +118,10 @@ class ChecklistAdmin(admin.ModelAdmin):
 # Прості моделі реєструємо стандартно
 admin.site.register(CardLabel) 
 admin.site.register(ChecklistItem)
-# Membership та Label вже вбудовані у BoardAdmin, їх можна прибрати з прямої реєстрації
-# admin.site.register(Membership) 
+# BoardMember та Label вже вбудовані у BoardAdmin, їх можна прибрати з прямої реєстрації
+# admin.site.register(BoardMember) 
 # admin.site.register(Label) 
+admin.site.register(FavoriteBoard)
 
 
 # 5. СИСТЕМНІ ЕЛЕМЕНТИ

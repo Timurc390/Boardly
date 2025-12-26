@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 import uuid
 
 # ----------------------------------------------------------------------
@@ -69,8 +70,8 @@ class Board(models.Model):
     # invite_link буде генеруватися автоматично, ми використовуємо UUID для унікальності
     invite_link = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Посилання-запрошення")
     
-    # Зв'язок Багато до Багатьох через проміжну модель Membership
-    members = models.ManyToManyField(User, through='Membership', related_name='boards', verbose_name="Учасники")
+    # Зв'язок Багато до Багатьох через проміжну модель BoardMember
+    members = models.ManyToManyField(User, through='BoardMember', related_name='boards', verbose_name="Учасники")
 
     class Meta:
         verbose_name = "Дошка"
@@ -81,9 +82,9 @@ class Board(models.Model):
     def __str__(self):
         return self.title
 
-class Membership(models.Model):
+class BoardMember(models.Model):
     """
-    Проміжна таблиця: Membership
+    Проміжна таблиця: BoardMember
     Зв'язок M:M між User та Board. Зберігає роль учасника на Дошці.
     """
     ROLE_CHOICES = (
@@ -91,15 +92,16 @@ class Membership(models.Model):
         ('member', 'Учасник'),
     )
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Користувач")
-    board = models.ForeignKey(Board, on_delete=models.CASCADE, verbose_name="Дошка")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Користувач", related_name='board_memberships')
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, verbose_name="Дошка", related_name='memberships')
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='member', verbose_name="Роль")
 
     class Meta:
-        verbose_name = "Участь у Дошці"
-        verbose_name_plural = "Участь у Дошках"
+        verbose_name = "Учасник Дошки"
+        verbose_name_plural = "Учасники Дошки"
         # Складений унікальний ключ: користувач може бути учасником дошки лише один раз
-        unique_together = ('user', 'board') 
+        unique_together = ('user', 'board')
+        db_table = 'core_membership'
 
     def __str__(self):
         return f"{self.user.username} - {self.board.title} ({self.role})"
@@ -143,6 +145,8 @@ class Card(models.Model):
     due_date = models.DateTimeField(null=True, blank=True, verbose_name="Кінцевий термін")
     is_completed = models.BooleanField(default=False, verbose_name="Завершено")
     is_archived = models.BooleanField(default=False, verbose_name="Архівувати Картку")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="Створено")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Оновлено")
 
     # Зв'язок M:M через CardMember для призначення учасників
     members = models.ManyToManyField(User, through='CardMember', related_name='assigned_cards', verbose_name="Призначені учасники")
@@ -202,8 +206,8 @@ class CardLabel(models.Model):
     Проміжна таблиця: CardLabel
     Зв'язок M:M між Card та Label (Картка може мати багато міток, мітка - на багатьох картках).
     """
-    card = models.ForeignKey(Card, on_delete=models.CASCADE, verbose_name="Картка")
-    label = models.ForeignKey(Label, on_delete=models.CASCADE, verbose_name="Мітка")
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, verbose_name="Картка", related_name='card_labels')
+    label = models.ForeignKey(Label, on_delete=models.CASCADE, verbose_name="Мітка", related_name='card_labels')
 
     class Meta:
         verbose_name = "Присвоєння мітки"
@@ -221,10 +225,12 @@ class Checklist(models.Model):
     """
     card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='checklists', verbose_name="Картка")
     title = models.CharField(max_length=255, verbose_name="Назва чек-листа")
+    order = models.IntegerField(default=0, verbose_name="Позиція")
 
     class Meta:
         verbose_name = "Чек-лист"
         verbose_name_plural = "Чек-листи"
+        ordering = ['order']
 
     def __str__(self):
         return f"{self.title} для {self.card.title}"
@@ -246,6 +252,37 @@ class ChecklistItem(models.Model):
 
     def __str__(self):
         return self.text
+
+
+# ----------------------------------------------------------------------
+# Додаткові сутності картки: Вкладення та Коментарі
+# ----------------------------------------------------------------------
+class Attachment(models.Model):
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='attachments', verbose_name="Картка")
+    file = models.FileField(upload_to='attachments/', verbose_name="Файл")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Час завантаження")
+
+    class Meta:
+        verbose_name = "Вкладення"
+        verbose_name_plural = "Вкладення"
+
+    def __str__(self):
+        return f"Вкладення для {self.card.title}"
+
+
+class Comment(models.Model):
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='comments', verbose_name="Картка")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='card_comments', verbose_name="Користувач")
+    content = models.TextField(verbose_name="Текст коментаря")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Час створення")
+
+    class Meta:
+        verbose_name = "Коментар"
+        verbose_name_plural = "Коментарі"
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.username}: {self.content[:30]}"
 
 # ----------------------------------------------------------------------
 # 5. СИСТЕМНІ ЕЛЕМЕНТИ (Activity)
@@ -289,3 +326,22 @@ class Activity(models.Model):
 
     def __str__(self):
         return f"[{self.action_type}] {self.user.username if self.user else 'Система'}: {self.action_text}"
+
+
+# ----------------------------------------------------------------------
+# 6. ОБРАНЕ ДОШКИ (FavoriteBoard)
+# ----------------------------------------------------------------------
+class FavoriteBoard(models.Model):
+    """
+    Зв'язок користувача з обраними дошками.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_boards')
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='favorited_by')
+
+    class Meta:
+        verbose_name = "Обрана Дошка"
+        verbose_name_plural = "Обрані Дошки"
+        unique_together = ('user', 'board')
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.board.title}"

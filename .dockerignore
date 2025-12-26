@@ -1,0 +1,15 @@
+node_modules
+frontend/node_modules
+frontend/build
+backend/.venv_win
+*.pyc
+__pycache__
+*.log
+.git
+.gitignore
+frontend/.eslintcache
+frontend/.turbo
+frontend/.next
+frontend/.cache
+backend/.mypy_cache
+backend/.pytest_cache
