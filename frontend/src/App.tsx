@@ -1,19 +1,25 @@
+// src/App.tsx
 import React from 'react';
-import { AuthProvider } from './AuthContext';
-import AuthComponent from './AuthComponent';
-import './App.css'; // Припускаємо, що App.css існує
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthScreen } from './screens/AuthScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { globalStyles } from './styles';
 
-const App: React.FC = () => {
-  return (
-    <AuthProvider>
-      <div className="App">
-        <header className="App-header">
-          <h1>Boardly Clone</h1>
-          <AuthComponent />
-        </header>
-      </div>
-    </AuthProvider>
-  );
+// Компонент-перемикач: вирішує, який екран показати
+const MainSwitch: React.FC = () => {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <ProfileScreen /> : <AuthScreen />;
 };
 
-export default App;
+export default function App() {
+  return (
+    <>
+      {/* Підключаємо глобальні стилі */}
+      <style>{globalStyles}</style>
+      
+      <AuthProvider>
+        <MainSwitch />
+      </AuthProvider>
+    </>
+  );
+}
