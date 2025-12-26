@@ -1,7 +1,8 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import axios from 'axios';
 
-const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '') + '/api';
+const apiBase = (process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '') + '/api';
+const API_URL = apiBase;
 
 export interface ProfileData {
   organization: string;

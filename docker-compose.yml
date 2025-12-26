@@ -24,8 +24,8 @@ services:
       POSTGRES_PASSWORD: admin123
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-http://localhost:3000}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,nonhostilely-unhampered-noah.ngrok-free.dev,*.ngrok-free.app,*.ngrok-free.dev}
+      CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-http://localhost:3000,https://nonhostilely-unhampered-noah.ngrok-free.dev}
     depends_on:
       - db
     ports:
@@ -36,7 +36,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000}
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-https://nonhostilely-unhampered-noah.ngrok-free.dev}
     restart: unless-stopped
     ports:
       - "3000:80"
