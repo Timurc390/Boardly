@@ -1,8 +1,10 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import axios from 'axios';
 
+// --- КОНФІГУРАЦІЯ ---
 const API_URL = 'http://localhost:8000/api';
 
+// --- ТИПИ ---
 export interface ProfileData {
   organization: string;
   theme: 'light' | 'dark';
@@ -22,9 +24,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   login: (data: any) => Promise<void>;
+  googleLogin: (token: string) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => void;
-  updateProfile: (data: Partial<User> & { organization?: string, theme?: string }) => Promise<void>;
+  updateProfile: (data: any) => Promise<void>;
+  // Нові методи для скидання паролю
+  resetPassword: (email: string) => Promise<void>;
+  resetPasswordConfirm: (data: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,24 +55,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchMe = async (token: string) => {
     try {
-      // ВАЖНО: Используем наш кастомный endpoint /users/me/ вместо /auth/users/me/
-      // Это гарантирует использование нашего сериализатора с логикой профиля
       const response = await axios.get(`${API_URL}/users/me/`, {
         headers: { Authorization: `Token ${token}` }
       });
       setUser(response.data);
     } catch (error) {
-      console.error("Session expired or invalid token", error);
+      console.error("Помилка сесії:", error);
       logout();
     }
   };
 
   const login = async (data: any) => {
-    // Логин оставляем через Djoser
     const response = await axios.post(`${API_URL}/auth/token/login/`, data);
     const token = response.data.auth_token;
     setAuthToken(token);
     localStorage.setItem('authToken', token);
+  };
+
+  const googleLogin = async (googleToken: string) => {
+    try {
+      const response = await axios.post(`${API_URL}/auth/google/`, {
+        access_token: googleToken, 
+        id_token: googleToken 
+      });
+      const token = response.data.key;
+      setAuthToken(token);
+      localStorage.setItem('authToken', token);
+    } catch (error) {
+      console.error("Помилка Google Auth:", error);
+      throw error;
+    }
   };
 
   const register = async (data: any) => {
@@ -91,16 +109,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateProfile = async (data: any) => {
     if (!authToken) return;
-    // ВАЖНО: Используем PATCH на наш кастомный endpoint
     await axios.patch(`${API_URL}/users/me/`, data, {
       headers: { Authorization: `Token ${authToken}` }
     });
-    // После обновления перезапрашиваем данные, чтобы обновить UI
     await fetchMe(authToken);
   };
 
+  // 1. Запит на скидання паролю (відправка листа)
+  const resetPassword = async (email: string) => {
+    await axios.post(`${API_URL}/auth/users/reset_password/`, { email });
+  };
+
+  // 2. Підтвердження скидання (новий пароль)
+  const resetPasswordConfirm = async (data: any) => {
+    // data має містити: uid, token, new_password, re_new_password
+    await axios.post(`${API_URL}/auth/users/reset_password_confirm/`, data);
+  };
+
   return (
-    <AuthContext.Provider value={{ authToken, isAuthenticated: !!authToken, user, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ 
+      authToken, isAuthenticated: !!authToken, user, 
+      login, googleLogin, register, logout, updateProfile,
+      resetPassword, resetPasswordConfirm 
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -3,6 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.db import models
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from dj_rest_auth.registration.views import SocialLoginView
+
 from .models import (
     Board, List, Card, CardMember, Label, CardLabel, Checklist, ChecklistItem, Activity
 )
@@ -14,32 +17,39 @@ from .serializers import (
 from .permissions import IsOwnerOrReadOnly 
 
 # ----------------------------------------------------------------------
-# AUTHENTICATION & USER MANAGEMENT
+# 1. СОЦІАЛЬНА АВТОРИЗАЦІЯ (Google)
+# ----------------------------------------------------------------------
+
+class GoogleLogin(SocialLoginView):
+    """
+    Ендпоінт для входу через Google.
+    Приймає {'access_token': 'YOUR_GOOGLE_ID_TOKEN'}
+    """
+    adapter_class = GoogleOAuth2Adapter
+    # client_class = OAuth2Client  <-- ЦЕЙ РЯДОК МАЄ БУТИ ЗАКОМЕНТОВАНИЙ АБО ВИДАЛЕНИЙ
+    # callback_url також не потрібен для GSI flow, якщо ми не обмінюємо код
+
+# ----------------------------------------------------------------------
+# 2. УПРАВЛІННЯ КОРИСТУВАЧАМИ
 # ----------------------------------------------------------------------
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet для пользователей.
-    Содержит action 'me' для получения и редактирования своего профиля.
+    ViewSet для відображення всіх користувачів.
     """
     queryset = User.objects.all().select_related('profile')
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=False, methods=['get', 'patch'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=False, methods=['get', 'patch'], url_path='me')
     def me(self, request):
-        """
-        Кастомный эндпоинт users/me/.
-        Использует UserSerializer, который умеет сохранять профиль.
-        """
+        """Ендпоїнт для отримання та оновлення даних поточного юзера."""
         user = request.user
-        
         if request.method == 'GET':
             serializer = self.get_serializer(user)
             return Response(serializer.data)
         
         elif request.method == 'PATCH':
-            # partial=True позволяет обновлять только часть полей
             serializer = self.get_serializer(user, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()

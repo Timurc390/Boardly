@@ -3,7 +3,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from core.views import (
     UserViewSet, BoardViewSet, ListViewSet, CardViewSet, 
-    LabelViewSet, ChecklistViewSet, ChecklistItemViewSet, ActivityViewSet
+    LabelViewSet, ChecklistViewSet, ChecklistItemViewSet, ActivityViewSet,
+    GoogleLogin
 )
 
 # Використовуємо DefaultRouter для автоматичного створення URL маршрутів
@@ -27,5 +28,8 @@ urlpatterns = [
     # Підключаємо маршрути DRF до головного API шляху
     path('api/', include(router.urls)),
     # Маршрути для аутентифікації DRF (можна використовувати для тестування)
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+
+    # Соціальна авторизація
+    path('api/auth/google/', GoogleLogin.as_view(), name='google_login')
 ]

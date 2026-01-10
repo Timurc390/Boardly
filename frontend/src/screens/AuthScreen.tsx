@@ -1,15 +1,77 @@
-// src/screens/AuthScreen.tsx
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom'; // Додаємо useNavigate
 import { useAuth } from '../context/AuthContext';
 
+// ЗАМІНІТЬ НА ВАШ РЕАЛЬНИЙ CLIENT ID
+const GOOGLE_CLIENT_ID = '374249918192-fq8ktn1acvuhsr3ecmfq1fd861afcj1d.apps.googleusercontent.com';
+
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 export const AuthScreen: React.FC = () => {
-  const { login, register } = useAuth();
+  // Дістаємо isAuthenticated з контексту
+  const { login, register, googleLogin, isAuthenticated } = useAuth();
+  const navigate = useNavigate(); // Хук для перенаправлення
+  
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  // --- ВАЖЛИВО: АВТОМАТИЧНЕ ПЕРЕНАПРАВЛЕННЯ ---
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Якщо ми авторизовані — одразу йдемо на головну (Профіль)
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
+  // ---------------------------------------------
+
+  // --- GOOGLE AUTH INITIALIZATION ---
+  useEffect(() => {
+    const handleCredentialResponse = async (response: any) => {
+      try {
+        await googleLogin(response.credential);
+      } catch (err) {
+        console.error(err);
+        setError('Не вдалося увійти через Google.');
+      }
+    };
+
+    const initializeGoogleButton = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse
+        });
+        
+        const parent = document.getElementById("googleSignInDiv");
+        if (parent) {
+            window.google.accounts.id.renderButton(
+              parent,
+              { theme: "outline", size: "large", width: "320" } 
+            );
+        }
+      }
+    };
+
+    if (!document.getElementById('google-client-script')) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.id = 'google-client-script';
+      script.async = true;
+      script.defer = true;
+      script.onload = initializeGoogleButton;
+      document.body.appendChild(script);
+    } else {
+      initializeGoogleButton();
+    }
+  }, [googleLogin]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -17,16 +79,19 @@ export const AuthScreen: React.FC = () => {
       if (isRegistering) {
         await register(formData);
       } else {
+        // Використовуємо логін, який ввів користувач (це username)
         await login({ username: formData.username, password: formData.password });
       }
+      // Тут не потрібно робити navigate('/'), бо спрацює useEffect вище
     } catch (err: any) {
+      console.error(err);
       if (err.response?.data) {
-        // Обробка помилок від DRF/Djoser
-        const firstErrorKey = Object.keys(err.response.data)[0];
-        const msg = err.response.data[firstErrorKey];
-        setError(`${firstErrorKey}: ${Array.isArray(msg) ? msg[0] : msg}`);
+         const data = err.response.data;
+         const key = Object.keys(data)[0];
+         const val = data[key];
+         setError(`${key}: ${Array.isArray(val) ? val[0] : val}`);
       } else {
-        setError('Помилка з\'єднання з сервером');
+         setError('Помилка авторизації.');
       }
     } finally {
       setLoading(false);
@@ -39,15 +104,15 @@ export const AuthScreen: React.FC = () => {
         <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#0052CC', marginBottom: '20px' }}>
             📋 Boardly
         </div>
-        <div style={{ marginBottom: '20px', fontWeight: 600, color: '#5E6C84' }}>
+        <h3 style={{ margin: '0 0 20px 0', color: '#5E6C84' }}>
             {isRegistering ? 'Створити акаунт' : 'Вхід в систему'}
-        </div>
+        </h3>
         
         {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Логін</label>
+            <label className="form-label">Логин (Username)</label>
             <input
               className="form-input"
               type="text"
@@ -58,7 +123,7 @@ export const AuthScreen: React.FC = () => {
           </div>
 
           {isRegistering && (
-            <div style={{ display: 'flex', gap: '15px' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Ім'я</label>
                 <input
@@ -98,9 +163,21 @@ export const AuthScreen: React.FC = () => {
             disabled={loading}
             className={`btn ${isRegistering ? 'btn-success' : 'btn-primary'}`}
           >
-            {loading ? 'Обробка...' : isRegistering ? 'Зареєструватися' : 'Увійти'}
+            {loading ? 'Обробка...' : (isRegistering ? 'Зареєструватися' : 'Увійти')}
           </button>
         </form>
+        
+        {!isRegistering && (
+          <div style={{ textAlign: 'right', marginTop: '10px' }}>
+            <Link to="/forgot-password" style={{ color: '#0052CC', fontSize: '13px', textDecoration: 'none' }}>
+              Забули пароль?
+            </Link>
+          </div>
+        )}
+
+        <div style={{ margin: '20px 0', color: '#888', fontSize: '14px' }}>— АБО —</div>
+
+        <div id="googleSignInDiv" style={{ height: '44px', marginBottom: '15px', display: 'flex', justifyContent: 'center' }}></div>
 
         <button
           className="btn-link"

@@ -42,7 +42,18 @@ INSTALLED_APPS = [
     
     # My apps
     'core', # Реєструємо наш основний додаток для моделей
+
+    # Google authentication apps
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
 ]
+
+SITE_ID = 1
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -54,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'boardly_project.urls'
@@ -162,21 +174,25 @@ REST_FRAMEWORK = {
     ]
 }
 
-# ----------------------------------------------------------------------
-# DJOSER НАЛАШТУВАННЯ
-# ----------------------------------------------------------------------
+# 1. Налаштування Email (для розробки виводимо в консоль)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Коли будемо готові до продакшну, замінимо на SMTP:
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@gmail.com'
+# EMAIL_HOST_PASSWORD = 'your-app-password'
 
+# 2. Налаштування Djoser
 DJOSER = {
-    # Використовуємо аутентифікацію по токенах
-    'PASSWORD_RESET_CONFIRM_URL': '#/password/reset/confirm/{uid}/{token}',
-    'USERNAME_RESET_CONFIRM_URL': '#/username/reset/confirm/{uid}/{token}',
-    'ACTIVATION_URL': '#/activate/{uid}/{token}',
-    'SEND_ACTIVATION_EMAIL': False, # Для простоти відключаємо активацію по email
-    'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',
+    'PASSWORD_RESET_CONFIRM_URL': 'password-reset/{uid}/{token}',
+    'USERNAME_RESET_CONFIRM_URL': 'username-reset/{uid}/{token}',
+    'ACTIVATION_URL': 'activate/{uid}/{token}',
+    'SEND_ACTIVATION_EMAIL': False,
     'SERIALIZERS': {
-        # ВИПРАВЛЕНО: Використовуємо наш спеціалізований серіалізатор для створення користувача
-        'user_create': 'core.serializers.UserCreateSerializer', 
-        # Використовуємо наш загальний серіалізатор для відображення
-        'user': 'core.serializers.UserSerializer', 
-    }
+        'user_create': 'core.serializers.UserCreateSerializer',
+        'user': 'core.serializers.UserSerializer',
+        'current_user': 'core.serializers.UserSerializer',
+    },
 }
