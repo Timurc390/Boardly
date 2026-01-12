@@ -2,7 +2,6 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://localhost:8000",
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@testing-library/dom": "^10.4.1",

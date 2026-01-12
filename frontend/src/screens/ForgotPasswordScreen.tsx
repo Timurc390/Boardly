@@ -34,7 +34,7 @@ export const ForgotPasswordScreen: React.FC = () => {
             <p style={{ color: '#5E6C84', marginBottom: '20px' }}>
               Перевірте вашу пошту (або консоль розробника Django), щоб знайти посилання для скидання паролю.
             </p>
-            <Link to="/login" className="btn btn-primary" style={{ display: 'block', textDecoration: 'none' }}>
+            <Link to="/auth" className="btn btn-primary" style={{ display: 'block', textDecoration: 'none' }}>
               Повернутися до входу
             </Link>
           </div>
@@ -64,7 +64,7 @@ export const ForgotPasswordScreen: React.FC = () => {
               </button>
             </form>
 
-            <Link to="/login" className="btn-link" style={{ display: 'block', marginTop: '15px' }}>
+            <Link to="/auth" className="btn-link" style={{ display: 'block', marginTop: '15px' }}>
               Я згадав пароль
             </Link>
           </>

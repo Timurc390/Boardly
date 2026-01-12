@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext, ReactNode } from
 import axios from 'axios';
 import { User, ProfileData } from '../types';
 
-const API_URL = '/api';
+const API_URL = 'http://localhost:8000/api';
 
 interface AuthContextType {
   authToken: string | null;

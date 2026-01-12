@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Board } from '../types';
 
-const API_URL = '/api';
+const API_URL = 'http://localhost:8000/api';
 
 export const BoardListScreen: React.FC = () => {
   const { authToken, user, logout } = useAuth();
@@ -46,7 +46,7 @@ export const BoardListScreen: React.FC = () => {
 
       <div className="boards-grid">
         {boards.map(board => (
-          <Link key={board.id} to={`/board2/${board.id}`} className="board-tile">
+          <Link key={board.id} to={`/boards/${board.id}`} className="board-tile">
             <h3 style={{margin:0}}>{board.title}</h3>
             {board.description && <p style={{fontSize:'12px', margin:'8px 0 0', opacity:0.7}}>{board.description}</p>}
           </Link>
@@ -124,7 +124,7 @@ export const BoardDetailScreen: React.FC = () => {
     <div className="board-layout">
       <div className="board-header">
         <div style={{display:'flex', alignItems:'center', gap:'20px'}}>
-            <Link to="/board2" className="btn-secondary" style={{textDecoration:'none'}}>← Назад</Link>
+            <Link to="/" className="btn-secondary" style={{textDecoration:'none'}}>← Назад</Link>
             <h2 style={{margin:0, color:'white'}}>{board.title}</h2>
         </div>
       </div>

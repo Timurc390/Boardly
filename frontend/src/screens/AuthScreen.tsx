@@ -11,11 +11,11 @@ declare global {
   }
 }
 
-export const AuthScreen: React.FC<{ defaultRegister?: boolean }> = ({ defaultRegister = false }) => {
+export const AuthScreen: React.FC = () => {
   const { login, register, googleLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
-  const [isRegistering, setIsRegistering] = useState(defaultRegister);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,13 +23,9 @@ export const AuthScreen: React.FC<{ defaultRegister?: boolean }> = ({ defaultReg
   // Авто-редирект
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/board');
+      navigate('/');
     }
   }, [isAuthenticated, navigate]);
-
-  useEffect(() => {
-    setIsRegistering(defaultRegister);
-  }, [defaultRegister]);
 
   // Google Script Init
   useEffect(() => {

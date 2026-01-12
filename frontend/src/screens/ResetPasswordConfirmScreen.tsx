@@ -30,7 +30,7 @@ export const ResetPasswordConfirmScreen: React.FC = () => {
         re_new_password: reNewPassword
       });
       setStatus('success');
-      setTimeout(() => navigate('/login'), 3000);
+      setTimeout(() => navigate('/auth'), 3000);
     } catch (error: any) {
       setStatus('error');
       // Обробка помилок від Djoser/Django
