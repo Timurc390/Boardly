@@ -31,7 +31,7 @@ export const ProfileScreen: React.FC = () => {
         last_name: editData.last_name,
         profile: {
             organization: editData.organization,
-            theme: editData.theme
+            theme: editData.theme as "light" | "dark"
         }
       });
       setIsEditing(false);

@@ -289,3 +289,46 @@ class Activity(models.Model):
 
     def __str__(self):
         return f"[{self.action_type}] {self.user.username if self.user else 'Система'}: {self.action_text}"
+
+# ----------------------------------------------------------------------
+# 6. ВКЛАДЕННЯ (Attachments)
+# ----------------------------------------------------------------------
+
+class Attachment(models.Model):
+    """
+    Таблиця: Attachment
+    Файли, прикріплені до картки.
+    """
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='attachments', verbose_name="Картка")
+    file = models.FileField(upload_to='attachments/', verbose_name="Файл")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата завантаження")
+    
+    class Meta:
+        verbose_name = "Вкладення"
+        verbose_name_plural = "Вкладення"
+
+    def __str__(self):
+        return f"Вкладення для {self.card.title}"
+
+# ----------------------------------------------------------------------
+# 7. КОМЕНТАРІ (Comments)
+# ----------------------------------------------------------------------
+
+class Comment(models.Model):
+    """
+    Таблиця: Comment
+    Коментарі до карток.
+    """
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='comments', verbose_name="Картка")
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments', verbose_name="Автор")
+    text = models.TextField(verbose_name="Текст коментаря")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата створення")
+
+    class Meta:
+        verbose_name = "Коментар"
+        verbose_name_plural = "Коментарі"
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Коментар від {self.author.username}: {self.text[:20]}..."
+    

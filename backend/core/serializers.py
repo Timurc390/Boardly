@@ -3,15 +3,7 @@ from django.contrib.auth.models import User
 from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
 from .models import (
     Profile, Board, Membership, List, Card, CardMember,
-    Label, CardLabel, Checklist, ChecklistItem, Activity
-)
-
-from rest_framework import serializers
-from django.contrib.auth.models import User
-from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
-from .models import (
-    Profile, Board, Membership, List, Card, 
-    Label, Checklist, ChecklistItem, Activity
+    Label, CardLabel, Checklist, ChecklistItem, Activity, Attachment, Comment
 )
 
 # ----------------------------------------------------------------------
@@ -92,6 +84,19 @@ class ActivitySerializer(serializers.ModelSerializer):
         fields = ('id', 'board', 'user', 'action_text', 'timestamp') # Додайте action_type, якщо він є в моделі
         read_only_fields = ('board', 'user', 'action_text', 'timestamp')
 
+class AttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Attachment
+        fields = ('id', 'card', 'file', 'uploaded_at')
+        read_only_fields = ('uploaded_at',)
+
+class CommentSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    class Meta:
+        model = Comment
+        fields = ('id', 'card', 'author', 'text', 'created_at')
+        read_only_fields = ('author', 'created_at')
+
 # ----------------------------------------------------------------------
 # 3. СЕРІАЛІЗАТОРИ КАРТОК, СПИСКІВ ТА ДОШОК
 # ----------------------------------------------------------------------
@@ -100,12 +105,14 @@ class CardSerializer(serializers.ModelSerializer):
     checklists = ChecklistSerializer(many=True, read_only=True)
     labels = LabelSerializer(many=True, read_only=True, source='label_set') 
     members = UserSerializer(many=True, read_only=True)
+    attachments = AttachmentSerializer(many=True, read_only=True)
+    comments = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Card
         fields = (
             'id', 'title', 'description', 'order', 'due_date', 
-            'is_completed', 'is_archived', 'list', 'members', 'labels', 'checklists'
+            'is_completed', 'is_archived', 'list', 'members', 'labels', 'checklists', 'attachments', 'comments'
         )
 
 class ListSerializer(serializers.ModelSerializer):

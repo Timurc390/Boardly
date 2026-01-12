@@ -5,14 +5,17 @@ from django.contrib.auth.models import User
 from django.db import models
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
+from django.db.models import Q
 
+# Додаємо Attachment та Comment у імпорт моделей
 from .models import (
-    Board, List, Card, CardMember, Label, CardLabel, Checklist, ChecklistItem, Activity
+    Board, List, Card, CardMember, Label, CardLabel, Checklist, ChecklistItem, Activity, Membership, Attachment, Comment
 )
+# Додаємо AttachmentSerializer та CommentSerializer у імпорт серіалізаторів
 from .serializers import (
     UserSerializer, BoardSerializer, ListSerializer, CardSerializer, 
     LabelSerializer, ChecklistSerializer, ChecklistItemSerializer, 
-    MembershipSerializer, ActivitySerializer
+    MembershipSerializer, ActivitySerializer, AttachmentSerializer, CommentSerializer
 )
 from .permissions import IsOwnerOrReadOnly 
 
@@ -76,6 +79,22 @@ class BoardViewSet(viewsets.ModelViewSet):
         board.is_favorite = not board.is_favorite
         board.save()
         return Response({'status': 'success', 'is_favorite': board.is_favorite})
+
+class FavoriteBoardViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet для отримання списку обраних дошок поточного користувача.
+    """
+    serializer_class = BoardSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_anonymous:
+            return Board.objects.none()
+        # Повертаємо дошки, де юзер є власником або учасником, І які позначені як обрані
+        return Board.objects.filter(
+            (Q(owner=user) | Q(members=user)) & Q(is_favorite=True)
+        ).distinct()
 
 
 # ----------------------------------------------------------------------
@@ -169,3 +188,58 @@ class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
             # У реальному проєкті потрібно додати перевірку доступу до Board
             queryset = queryset.filter(board__id=board_id)
         return queryset.order_by('-timestamp')
+
+# ----------------------------------------------------------------------
+# 5. УЧАСНИКИ ДОШКИ (НОВЕ)
+# ----------------------------------------------------------------------
+
+class BoardMemberViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet для управління учасниками дошки (Membership).
+    Дозволяє додавати користувачів до дошки, змінювати їх ролі або видаляти.
+    """
+    serializer_class = MembershipSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Фільтруємо учасників за board_id."""
+        queryset = Membership.objects.all().select_related('user', 'board')
+        board_id = self.request.query_params.get('board_id')
+        if board_id:
+            queryset = queryset.filter(board__id=board_id)
+        return queryset
+
+class AttachmentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet для управління вкладеннями (Attachment).
+    """
+    serializer_class = AttachmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Фільтруємо вкладення за card_id."""
+        queryset = Attachment.objects.all()
+        card_id = self.request.query_params.get('card_id')
+        if card_id:
+            queryset = queryset.filter(card__id=card_id)
+        return queryset
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet для управління коментарями.
+    """
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Фільтруємо коментарі за card_id."""
+        queryset = Comment.objects.all().select_related('author')
+        card_id = self.request.query_params.get('card_id')
+        if card_id:
+            queryset = queryset.filter(card__id=card_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        # Автоматично призначаємо автора коментаря
+        serializer.save(author=self.request.user)
