@@ -20,7 +20,11 @@ SECRET_KEY = 'django-insecure-some-secret-key' # Потрібно замінит
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+def _split_env(value: str) -> list[str]:
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+ALLOWED_HOSTS = _split_env(os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1'))
+ALLOWED_HOSTS.extend(_split_env(os.getenv('ALLOWED_HOSTS_EXTRA', '')))
 
 
 # Application definition
@@ -93,16 +97,33 @@ WSGI_APPLICATION = 'boardly_project.wsgi.application'
 # Налаштування PostgreSQL, як ми обговорили
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'boardly_db'),
-        'USER': os.getenv('POSTGRES_USER', 'wanderingonlyup'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'admin123'),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+POSTGRES_DB = os.getenv('POSTGRES_DB')
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+POSTGRES_HOST = os.getenv('POSTGRES_HOST')
+POSTGRES_PORT = os.getenv('POSTGRES_PORT')
+
+# Якщо POSTGRES env не задані, працюємо на SQLite (dev fallback).
+USE_POSTGRES = any([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT])
+
+if USE_POSTGRES:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': POSTGRES_DB or 'boardly_db',
+            'USER': POSTGRES_USER or 'wanderingonlyup',
+            'PASSWORD': POSTGRES_PASSWORD or 'admin123',
+            'HOST': POSTGRES_HOST or 'localhost',
+            'PORT': POSTGRES_PORT or '5432',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -140,6 +161,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -159,6 +182,15 @@ CORS_ALLOWED_ORIGINS = [
 extra_origins = os.getenv('CORS_EXTRA_ORIGINS')
 if extra_origins:
     CORS_ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins.split(',') if o.strip()])
+
+# CSRF trusted origins (comma-separated), e.g. https://<front-ngrok>,https://<back-ngrok>
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS')
+if extra_csrf:
+    CSRF_TRUSTED_ORIGINS.extend([o.strip() for o in extra_csrf.split(',') if o.strip()])
 
 # Дозволяємо надсилати cookies та заголовки авторизації (важливо для аутентифікації)
 CORS_ALLOW_CREDENTIALS = True 

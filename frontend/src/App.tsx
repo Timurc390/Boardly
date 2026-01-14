@@ -1,9 +1,14 @@
-import React, { useState, useEffect, createContext, useContext, ReactNode, FormEvent } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef, FormEvent } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { LegacyBoardScreen } from './screens/LegacyBoardScreen';
+import { MyCardsScreen } from './screens/MyCardsScreen';
+import { FaqScreen } from './screens/FaqScreen';
 
 // --- КОНФІГУРАЦИЯ ---
-const API_URL = 'http://localhost:8000/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 // ВАШ CLIENT ID
 const GOOGLE_CLIENT_ID = '374249918192-fq8ktn1acvuhsr3ecmfq1fd861afcj1d.apps.googleusercontent.com';
 
@@ -37,6 +42,34 @@ const globalStyles = `
     --radius-md: 12px;
     --radius-lg: 20px;
     --font-main: 'Inter', system-ui, sans-serif;
+    --border-subtle: rgba(255,255,255,0.08);
+    --ghost-hover: rgba(255,255,255,0.05);
+    --skeleton-start: #2f2f2f;
+    --skeleton-mid: #3b3b3b;
+    --board-overlay: rgba(10,12,16,0.55);
+    --toolbar-bg: rgba(30,30,30,0.85);
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --bg-main: #f5f7fb;
+    --bg-surface: #ffffff;
+    --bg-input: #eef2f6;
+    --text-primary: #1e2330;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+    --accent-link: #3b5bdb;
+    --accent-danger: #e03131;
+    --border-subtle: rgba(15,23,42,0.12);
+    --ghost-hover: rgba(15,23,42,0.06);
+    --skeleton-start: #e6e9f0;
+    --skeleton-mid: #f4f6fb;
+    --board-overlay: rgba(245,247,251,0.9);
+    --toolbar-bg: rgba(255,255,255,0.92);
   }
 
   * { box-sizing: border-box; }
@@ -79,6 +112,18 @@ const globalStyles = `
     padding-right: 0;
   }
 
+  @media (max-width: 1024px) {
+    .page {
+      grid-template-columns: 1fr;
+      padding: 32px;
+    }
+    .auth-left {
+      padding: 0;
+      max-width: 520px;
+    }
+    .auth-right { display: none; }
+  }
+
   /* Typography */
   h1 { font-size: 48px; font-weight: 700; margin: 0 0 16px 0; line-height: 1.1; }
   h2 { font-size: 32px; font-weight: 600; margin: 0 0 24px 0; }
@@ -115,64 +160,229 @@ const globalStyles = `
 
   /* --- KANBAN BOARD STYLES --- */
   .app-container {
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--bg-main);
+  }
+
+  .board-surface {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .board-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--board-overlay);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .board-surface > * {
+    position: relative;
+    z-index: 1;
   }
 
   .top-nav {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 20px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    height: 60px;
     background: var(--bg-main);
-    border-bottom: 1px solid var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
   }
-  
-  .nav-logo { font-size: 20px; font-weight: 700; color: var(--text-primary); text-decoration: none; }
-  .nav-actions { display: flex; gap: 20px; align-items: center; }
+
+  .board-surface .top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--toolbar-bg);
+    backdrop-filter: blur(8px);
+  }
+
+  .nav-logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+    max-width: 55vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .nav-actions { display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+
+  .nav-actions .link,
+  .nav-actions button.link {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .nav-actions .link:hover,
+  .nav-actions button.link:hover {
+    background: var(--ghost-hover);
+  }
+
+  .nav-menu-button {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    cursor: pointer;
+    display: none;
+  }
+
+  .nav-menu-button:hover { background: var(--ghost-hover); }
+
+  @media (max-width: 960px) {
+    .nav-menu-button { display: inline-flex; }
+    .nav-actions { display: none; position: absolute; right: 16px; top: 60px; flex-direction: column; padding: 12px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); box-shadow: 0 12px 24px rgba(0,0,0,0.35); }
+    .nav-actions.mobile-open { display: flex; }
+  }
 
   .board-layout {
     flex: 1;
     display: flex;
-    gap: 24px;
-    padding: 40px;
+    gap: 16px;
+    padding: 16px 24px 32px;
     overflow-x: auto;
     overflow-y: hidden;
+    align-items: flex-start;
   }
 
   .kanban-column {
-    width: 320px;
-    min-width: 320px;
+    width: 300px;
+    min-width: 300px;
     background: var(--bg-surface);
-    border-radius: var(--radius-md);
-    padding: 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+  }
+
+  .kanban-column.drag-over {
+    border-color: rgba(143,140,255,0.6);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+  }
+
+  .kanban-column.dragging {
+    opacity: 0.85;
+  }
+
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky;
+    top: 0;
+    background: var(--bg-surface);
+    z-index: 1;
+  }
+
+  .list-header[draggable="true"] { cursor: grab; }
+
+  .list-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .list-title span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .list-badge {
+    min-width: 24px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .column-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 16px; padding-bottom: 12px;
-    border-bottom: 1px solid var(--bg-input);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
   }
-  .column-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .count-badge { background: var(--bg-input); padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+
+  .column-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .count-badge {
+    min-width: 24px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
 
   .task-list {
-    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
-    padding-right: 4px; /* Space for scrollbar */
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-right: 4px;
+    padding-bottom: 8px; /* Space for add button */
   }
 
   .task-card {
     background: var(--bg-input);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    cursor: grab;
-    transition: transform 0.2s, box-shadow 0.2s;
-    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+    border: 1px solid var(--border-subtle);
   }
-  .task-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .task-card:hover { background: rgba(255,255,255,0.06); box-shadow: 0 6px 16px rgba(0,0,0,0.2); transform: translateY(-1px); }
+  .task-card[draggable="true"] { cursor: grab; }
+  .task-card.dragging { opacity: 0.5; cursor: grabbing; }
+  .task-card.drag-over { border-color: rgba(143,140,255,0.6); box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
   
   .task-title { font-size: 15px; font-weight: 500; margin-bottom: 8px; line-height: 1.4; }
   .task-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5; }
@@ -182,6 +392,577 @@ const globalStyles = `
   
   .move-btn { font-size: 10px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-secondary); border: none; cursor: pointer; }
   .move-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+
+  /* Legacy board UI */
+  .board-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 24px 16px;
+    background: var(--toolbar-bg);
+    border-bottom: 1px solid var(--border-subtle);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+  }
+
+  .board-surface .board-toolbar {
+    position: sticky;
+    top: 60px;
+    z-index: 15;
+    backdrop-filter: blur(8px);
+  }
+
+  .toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .toolbar-select {
+    min-width: 220px;
+    max-width: 260px;
+  }
+
+  .toolbar-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .toolbar-search .input {
+    border: none;
+    background: transparent;
+    padding: 8px 4px;
+    width: 220px;
+  }
+
+  .toolbar-search .input:focus {
+    outline: none;
+    border: none;
+    box-shadow: none;
+  }
+
+  .toolbar-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .toolbar-pill.active {
+    border-color: rgba(143,140,255,0.45);
+    background: rgba(143,140,255,0.12);
+    color: var(--text-primary);
+  }
+
+  .toolbar-pill input {
+    accent-color: var(--accent-link);
+  }
+
+  .toolbar-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .toolbar-progress {
+    height: 2px;
+    width: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--accent-link), transparent);
+    animation: shimmer 1.2s infinite;
+  }
+
+  .board-btn {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    min-height: 32px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .board-btn.primary {
+    background: var(--accent-link);
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .board-btn.secondary {
+    background: transparent;
+    border-color: var(--border-subtle);
+  }
+
+  .board-btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .board-btn.active {
+    background: var(--ghost-hover);
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+  }
+
+  .board-btn.danger {
+    background: transparent;
+    border-color: rgba(255,107,107,0.5);
+    color: var(--accent-danger);
+  }
+
+  .board-btn.small {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .board-btn.icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .board-btn:hover { background: var(--ghost-hover); }
+  .board-btn.primary:hover { filter: brightness(0.95); }
+  .board-btn.danger:hover { background: rgba(255,107,107,0.12); }
+
+  .empty-state {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.03);
+  }
+
+  .skeleton-column {
+    width: 300px;
+    min-width: 300px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .skeleton-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .skeleton-line {
+    height: 12px;
+    width: 60%;
+  }
+
+  .skeleton-badge {
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+  }
+
+  .skeleton-card {
+    height: 72px;
+    border-radius: 12px;
+  }
+
+  .kanban-column.empty-column {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .empty-state-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .empty-state-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .page-state {
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 24px;
+  }
+
+  .page-state-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .page-state-subtitle {
+    font-size: 14px;
+    max-width: 480px;
+  }
+
+  .page-state-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .list-menu,
+  .card-menu {
+    position: relative;
+  }
+
+  .list-menu-button,
+  .card-menu-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .list-menu-button:hover,
+  .card-menu-button:hover {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border-color: var(--border-subtle);
+  }
+
+  .list-menu-panel,
+  .card-menu-panel {
+    position: absolute;
+    right: 0;
+    top: 32px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 8px;
+    min-width: 220px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+    z-index: 10;
+  }
+
+  .menu-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .menu-item:hover { background: var(--bg-input); }
+  .menu-item.danger { color: var(--accent-danger); }
+  .menu-item:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .menu-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 6px 0;
+  }
+
+  .menu-label {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 6px 4px;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .card-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+  }
+
+  .card-badge.due {
+    background: rgba(255, 193, 7, 0.15);
+    color: #ffc107;
+  }
+
+  .card-badge.progress {
+    background: rgba(143,140,255,0.2);
+    color: var(--text-primary);
+  }
+
+  .card-labels {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .card-label {
+    width: 28px;
+    height: 6px;
+    border-radius: 999px;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+
+  .modal {
+    background: var(--bg-surface);
+    border-radius: 16px;
+    width: min(980px, 96vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 18px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .modal-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-input);
+  }
+
+  .modal-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .modal-main,
+  .modal-sidebar {
+    display: grid;
+    gap: 16px;
+  }
+
+  .modal-section {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255,255,255,0.03);
+  }
+
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent-link);
+  }
+
+  .progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .checklist-block {
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .checklist-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .checklist-item {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .checklist-item input {
+    accent-color: var(--accent-link);
+  }
+
+  .checklist-item span {
+    overflow-wrap: anywhere;
+  }
+
+  .label-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .label-chip {
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .label-chip.active {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
+  }
+
+  .modal-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .modal-footer {
+    padding: 14px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-subtle);
+    gap: 12px;
+  }
+
+  .modal-footer-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 900px) {
+    .modal-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+      padding: 14px 16px;
+    }
+  }
+
+  .command-backdrop {
+    background: rgba(0,0,0,0.7);
+  }
+
+  .command-modal {
+    background: var(--bg-surface);
+    border-radius: 16px;
+    width: min(520px, 90vw);
+    padding: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+
+  @media (max-width: 960px) {
+    .board-layout { padding: 12px 16px 24px; }
+    .kanban-column { width: 260px; min-width: 260px; }
+  }
 
   /* Specific accents for live board */
   .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -205,14 +986,408 @@ const globalStyles = `
   .column-preview.todo .card-preview { background-color: #ffe19a; }
   .column-preview.progress .card-preview { background-color: #e3e2ff; }
   .column-preview.done .card-preview { background-color: #dcdcdc; }
+
+  /* --- My Cards --- */
+  .mycards-page {
+    padding: 32px 40px 48px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .mycards-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .mycards-header h2 {
+    margin: 0;
+  }
+
+  .mycards-section {
+    margin-bottom: 24px;
+  }
+
+  .mycards-section-title {
+    margin: 0 0 12px 0;
+  }
+
+  .mycards-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  .mycards-info {
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .mycards-error {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .mycards-error-text {
+    color: var(--accent-danger);
+    margin: 0;
+  }
+
+  .content-page {
+    padding: 32px 40px 48px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .faq-list {
+    display: grid;
+    gap: 16px;
+  }
+
+  .faq-item {
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .faq-item strong {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .faq-item p {
+    margin: 0;
+  }
+
+  /* --- Profile Screen --- */
+  .profile-layout {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-main);
+  }
+
+  .profile-page {
+    flex: 1;
+    padding: 32px 40px 48px;
+    overflow-y: auto;
+  }
+
+  .profile-shell {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .profile-card {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: grid;
+    gap: 16px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+  }
+
+  .profile-avatar {
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    font-weight: 600;
+    overflow: hidden;
+  }
+
+  .profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-name {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .profile-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .profile-meta span {
+    word-break: break-word;
+  }
+
+  .profile-role {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    padding: 6px 10px;
+    border-radius: 999px;
+    width: fit-content;
+  }
+
+  .profile-actions {
+    display: grid;
+    gap: 10px;
+  }
+
+  .profile-actions button {
+    width: 100%;
+  }
+
+  .profile-card .btn-ghost {
+    width: 100%;
+  }
+
+  .profile-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .profile-tabs {
+    display: flex;
+    gap: 18px;
+    border-bottom: 1px solid var(--bg-input);
+  }
+
+  .profile-tab {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 0;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+
+  .profile-tab.active {
+    color: var(--text-primary);
+    border-color: var(--accent-link);
+  }
+
+  .profile-panel {
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+  }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+  }
+
+  .profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .profile-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .profile-hint {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 12px;
+  }
+
+  .profile-actions-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .btn-secondary {
+    padding: 10px 14px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .btn-secondary:hover { background: var(--bg-input); border-color: var(--text-muted); }
+  .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn-danger {
+    padding: 10px 14px;
+    background: transparent;
+    color: var(--accent-danger);
+    border: 1px solid rgba(255,107,107,0.5);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .btn-danger:hover { background: rgba(255,107,107,0.12); border-color: var(--accent-danger); }
+  .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn-ghost {
+    padding: 10px 14px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+  .btn-ghost:hover { color: var(--text-primary); background: var(--ghost-hover); }
+  .btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--accent-link);
+    outline-offset: 2px;
+  }
+
+  .activity-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .activity-item {
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .activity-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--bg-input);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .activity-title { font-weight: 600; }
+  .activity-meta { font-size: 12px; color: var(--text-muted); }
+  .activity-item > .activity-meta { justify-self: end; }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    color: var(--text-secondary);
+  }
+  .toggle input { display: none; }
+  .toggle-track {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    position: relative;
+    transition: background 0.2s ease;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+  }
+  .toggle input:checked + .toggle-track { background: var(--accent-link); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(18px); }
+
+  .toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    background: #111;
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    z-index: 20;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--skeleton-start), var(--skeleton-mid), var(--skeleton-start));
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 0% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @media (max-width: 900px) {
+    .profile-page { padding: 24px; }
+    .profile-shell { grid-template-columns: 1fr; }
+    .profile-grid { grid-template-columns: 1fr; }
+    .profile-actions-row { flex-direction: column; align-items: stretch; }
+    .activity-item { grid-template-columns: 36px 1fr; }
+    .activity-item > .activity-meta { justify-self: start; }
+    .toolbar-row { flex-direction: column; align-items: stretch; }
+    .toolbar-group { width: 100%; }
+    .toolbar-select { width: 100%; min-width: 0; }
+    .toolbar-search { width: 100%; }
+    .toolbar-search .input { width: 100%; }
+  }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 36px; }
+    .page { padding: 24px 16px; }
+    .board-toolbar { padding: 10px 16px 14px; }
+    .toolbar-search .input { width: 100%; }
+    .board-layout { padding: 12px 16px 20px; }
+    .kanban-column { width: 240px; min-width: 240px; }
+    .mycards-page { padding: 16px; }
+    .mycards-header { flex-direction: column; align-items: flex-start; }
+    .content-page { padding: 16px; }
+    .profile-page { padding: 20px 16px 32px; }
+    .profile-tabs { flex-wrap: wrap; gap: 12px; }
+    .toolbar-pill { width: 100%; justify-content: space-between; }
+    .modal-footer { flex-direction: column; align-items: flex-start; }
+    .modal-footer-actions { width: 100%; }
+  }
 `;
 
-// --- TYPES & CONTEXT ---
-export interface User {
-  id: number; username: string; email: string; first_name: string; last_name: string;
-  profile?: { organization: string; theme: 'light' | 'dark' };
-}
-
+// --- TYPES ---
 // Оновлені інтерфейси відповідно до бекенду (models.py)
 export interface Board {
   id: number;
@@ -234,85 +1409,37 @@ export interface Card {
   list: number; // ID списку
 }
 
-interface AuthContextType {
-  authToken: string | null; isAuthenticated: boolean; user: User | null;
-  login: (data: any) => Promise<void>; register: (data: any) => Promise<void>;
-  googleLogin: (token: string) => Promise<void>; logout: () => void;
-  updateProfile: (data: any) => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; resetPasswordConfirm: (data: any) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
-};
-
-const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('authToken'));
-  const [user, setUser] = useState<User | null>(null);
-  const isAuthenticated = !!authToken;
-
-  useEffect(() => { if (authToken) fetchMe(authToken); else setUser(null); }, [authToken]);
-
-  const fetchMe = async (token: string) => {
-    try {
-      const res = await axios.get(`${API_URL}/users/me/`, { headers: { Authorization: `Token ${token}` } });
-      setUser(res.data);
-    } catch { logout(); }
-  };
-
-  const login = async (data: any) => {
-    const res = await axios.post(`${API_URL}/auth/token/login/`, data);
-    setAuthToken(res.data.auth_token); localStorage.setItem('authToken', res.data.auth_token);
-  };
-  const googleLogin = async (t: string) => {
-    const res = await axios.post(`${API_URL}/auth/google/`, { access_token: t, id_token: t });
-    setAuthToken(res.data.key); localStorage.setItem('authToken', res.data.key);
-  };
-  const register = async (d: any) => {
-    await axios.post(`${API_URL}/auth/users/`, { ...d, email: d.email || `${d.username}@boardly.local` });
-    await login({ username: d.username, password: d.password });
-  };
-  const logout = () => {
-    setAuthToken(null); setUser(null); localStorage.removeItem('authToken');
-    if (authToken) axios.post(`${API_URL}/auth/token/logout/`, null, { headers: { Authorization: `Token ${authToken}` } }).catch(()=>{});
-  };
-  const updateProfile = async (d: any) => {
-    if (!authToken) return;
-    await axios.patch(`${API_URL}/users/me/`, d, { headers: { Authorization: `Token ${authToken}` } });
-    await fetchMe(authToken);
-  };
-  const resetPassword = async (e: string) => { await axios.post(`${API_URL}/auth/users/reset_password/`, { email: e }); };
-  const resetPasswordConfirm = async (d: any) => { await axios.post(`${API_URL}/auth/users/reset_password_confirm/`, d); };
-
-  return (
-    <AuthContext.Provider value={{ authToken, isAuthenticated, user, login, register, googleLogin, logout, updateProfile, resetPassword, resetPasswordConfirm }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
 // --- COMPONENT: AUTH SIDEBAR (PREVIEW) ---
 const KanbanPreview = () => (
   <div className="auth-right">
     <div className="board-wrapper">
       <div className="column-preview todo">
-        <h3>To do</h3>
-        <div className="card-preview">Design login page</div>
+        <h3>До виконання</h3>
+        <div className="card-preview">Дизайн сторінки входу</div>
       </div>
       <div className="column-preview progress">
-        <h3>In progress</h3>
-        <div className="card-preview">Implement drag & drop</div>
+        <h3>У процесі</h3>
+        <div className="card-preview">Реалізувати drag & drop</div>
       </div>
       <div className="column-preview done">
-        <h3>Done</h3>
-        <div className="card-preview">Board creation</div>
+        <h3>Готово</h3>
+        <div className="card-preview">Створення дошки</div>
       </div>
     </div>
   </div>
 );
+
+const ThemeSync: React.FC = () => {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const theme = user?.profile?.theme || 'dark';
+    document.documentElement.dataset.theme = theme;
+  }, [user?.profile?.theme]);
+
+  return null;
+};
 
 // --- COMPONENT: AUTH SCREEN ---
 const AuthScreen: React.FC = () => {
@@ -323,7 +1450,7 @@ const AuthScreen: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { if (isAuthenticated) navigate('/'); }, [isAuthenticated, navigate]);
+  useEffect(() => { if (isAuthenticated) navigate('/board', { replace: true }); }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     const handleCredentialResponse = async (response: any) => {
@@ -388,36 +1515,59 @@ const KanbanBoardScreen: React.FC = () => {
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
   const [lists, setLists] = useState<List[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [showMobileNav, setShowMobileNav] = useState(false);
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   
-  const [error, setError] = useState<string | null>(null); // NEW: State for errors
+  const [error, setError] = useState<string | null>(null);
+  const hasInitialized = useRef(false); // Флаг для запобігання подвійному завантаженню
 
   // 1. Auth check
   useEffect(() => { if (!isAuthenticated) navigate('/auth'); }, [isAuthenticated, navigate]);
 
-  // 2. Fetch Board & Lists (Init Flow)
+  // 2. Fetch Board & Lists (ONE TIME ONLY)
   useEffect(() => {
-    if (authToken && !activeBoard) {
-      // Крок 1: Отримуємо дошки
+    if (authToken && !hasInitialized.current) {
+      hasInitialized.current = true;
+      
+      // Отримуємо дошки
       axios.get(`${API_URL}/boards/`, { headers: { Authorization: `Token ${authToken}` } })
         .then(async (res) => {
           if (res.data.length > 0) {
-            setActiveBoard(res.data[0]); // Вибираємо першу дошку
-          } else {
-            // Крок 1.1: Якщо дошок немає, створюємо дефолтну
+            const board = res.data[0];
+            setActiveBoard(board);
+            
+            // Завантажуємо дані для цієї дошки
             try {
-                const newBoard = await axios.post(`${API_URL}/boards/`, { title: 'My First Board' }, { headers: { Authorization: `Token ${authToken}` } });
+              const listsRes = await axios.get(`${API_URL}/lists/?board_id=${board.id}`, { headers: { Authorization: `Token ${authToken}` } });
+              setLists(listsRes.data.sort((a: List, b: List) => a.order - b.order));
+
+              const cardsRes = await axios.get(`${API_URL}/cards/?board_id=${board.id}`, { headers: { Authorization: `Token ${authToken}` } });
+              setCards(cardsRes.data);
+            } catch (err: any) {
+              setError(`Помилка завантаження даних: ${err.message}`);
+            }
+          } else {
+            // Створюємо дефолтну дошку
+            try {
+                const newBoard = await axios.post(`${API_URL}/boards/`, { title: 'Моя перша дошка' }, { headers: { Authorization: `Token ${authToken}` } });
                 setActiveBoard(newBoard.data);
                 
-                // Крок 1.2: Створюємо дефолтні списки для цієї дошки
+                // Створюємо дефолтні списки
                 const boardId = newBoard.data.id;
                 await Promise.all([
-                  axios.post(`${API_URL}/lists/`, { title: 'To Do', board: boardId, order: 0 }, { headers: { Authorization: `Token ${authToken}` } }),
-                  axios.post(`${API_URL}/lists/`, { title: 'In Progress', board: boardId, order: 1 }, { headers: { Authorization: `Token ${authToken}` } }),
-                  axios.post(`${API_URL}/lists/`, { title: 'Done', board: boardId, order: 2 }, { headers: { Authorization: `Token ${authToken}` } })
+                  axios.post(`${API_URL}/lists/`, { title: 'До виконання', board: boardId, order: 0 }, { headers: { Authorization: `Token ${authToken}` } }),
+                  axios.post(`${API_URL}/lists/`, { title: 'У процесі', board: boardId, order: 1 }, { headers: { Authorization: `Token ${authToken}` } }),
+                  axios.post(`${API_URL}/lists/`, { title: 'Готово', board: boardId, order: 2 }, { headers: { Authorization: `Token ${authToken}` } })
                 ]);
+                
+                // Завантажуємо дані
+                const listsRes = await axios.get(`${API_URL}/lists/?board_id=${boardId}`, { headers: { Authorization: `Token ${authToken}` } });
+                setLists(listsRes.data.sort((a: List, b: List) => a.order - b.order));
+
+                const cardsRes = await axios.get(`${API_URL}/cards/?board_id=${boardId}`, { headers: { Authorization: `Token ${authToken}` } });
+                setCards(cardsRes.data);
             } catch (err: any) {
                 setError(`Помилка створення дошки: ${err.message || 'Невідома помилка'}`);
             }
@@ -427,22 +1577,7 @@ const KanbanBoardScreen: React.FC = () => {
             setError(`Помилка завантаження дошок: ${err.response?.status} ${err.response?.statusText || err.message}`);
         });
     }
-  }, [authToken, activeBoard]);
-
-  // 3. Fetch Lists & Cards when ActiveBoard is ready
-  useEffect(() => {
-    if (authToken && activeBoard) {
-      // Завантажуємо списки
-      axios.get(`${API_URL}/lists/?board_id=${activeBoard.id}`, { headers: { Authorization: `Token ${authToken}` } })
-        .then(res => setLists(res.data.sort((a: List, b: List) => a.order - b.order)))
-        .catch((err: any) => setError(`Помилка списків: ${err.message}`));
-
-      // Завантажуємо картки
-      axios.get(`${API_URL}/cards/?board_id=${activeBoard.id}`, { headers: { Authorization: `Token ${authToken}` } })
-        .then(res => setCards(res.data))
-        .catch((err: any) => setError(`Помилка карток: ${err.message}`));
-    }
-  }, [authToken, activeBoard]);
+  }, [authToken]);
 
   // Actions
   const handleAddTask = async (e: FormEvent, listId: number) => {
@@ -485,29 +1620,65 @@ const KanbanBoardScreen: React.FC = () => {
     } catch { alert('Помилка видалення'); }
   };
 
-  if (!isAuthenticated || !user) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}>Завантаження...</div>;
-  
-  if (error) return (
-      <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh', flexDirection: 'column'}}>
-          <h2 style={{color: 'var(--accent-danger)'}}>Виникла помилка</h2>
-          <p>{error}</p>
-          <button className="btn-primary" onClick={() => window.location.reload()} style={{width: 'auto'}}>Спробувати ще раз</button>
-      </div>
-  );
+  const closeMobileNav = () => setShowMobileNav(false);
 
-  if (!activeBoard) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}>Створення вашої дошки...</div>;
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="app-container">
+        <div className="page-state">
+          <div className="page-state-title">Завантаження...</div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="app-container">
+        <div className="page-state">
+          <div className="page-state-title" style={{ color: 'var(--accent-danger)' }}>Виникла помилка</div>
+          <div className="page-state-subtitle">{error}</div>
+          <div className="page-state-actions">
+            <button className="btn-primary" onClick={() => window.location.reload()} style={{ width: 'auto' }}>
+              Спробувати ще раз
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeBoard) {
+    return (
+      <div className="app-container">
+        <div className="page-state">
+          <div className="page-state-title">Створення вашої дошки...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
       {/* Top Navigation */}
       <nav className="top-nav">
-        <Link to="/" className="nav-logo">Boardly / {activeBoard.title}</Link>
-        <div className="nav-actions">
+        <Link to="/" className="nav-logo" onClick={closeMobileNav}>Boardly / {activeBoard.title}</Link>
+        <button
+          className="nav-menu-button"
+          onClick={() => setShowMobileNav(!showMobileNav)}
+          aria-label="Меню"
+        >
+          Меню
+        </button>
+        <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
           <span style={{fontSize: 14, color: 'var(--text-secondary)'}}>Привіт, {user.first_name || user.username}</span>
-          <Link to="/profile" className="link">Профіль</Link>
-          <button onClick={logout} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
+          <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
+          <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
+          <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
         </div>
       </nav>
+
 
       {/* Board Area */}
       <div className="board-layout">
@@ -562,51 +1733,80 @@ const KanbanBoardScreen: React.FC = () => {
 };
 
 // --- COMPONENT: PROFILE ---
-const ProfileScreen: React.FC = () => {
-  const { user, logout, updateProfile, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<{ first_name: string; last_name: string; organization: string; theme: 'light' | 'dark' }>({ first_name: '', last_name: '', organization: '', theme: 'light' });
-
-  useEffect(() => { if (!isAuthenticated) navigate('/auth'); }, [isAuthenticated, navigate]);
-
-  useEffect(() => {
-    if (user) setEditData({ first_name: user.first_name || '', last_name: user.last_name || '', organization: user.profile?.organization || '', theme: user.profile?.theme || 'light' });
-  }, [user]);
-
-  const handleSave = async () => {
-    try { await updateProfile({ first_name: editData.first_name, last_name: editData.last_name, profile: { organization: editData.organization, theme: editData.theme } }); setIsEditing(false); } catch { alert("Помилка збереження."); }
-  };
-
-  if (!isAuthenticated || !user) return <div style={{padding: 40}}>Завантаження...</div>;
+const ProfileLayout: React.FC = () => {
+  const { user, logout } = useAuth();
+  const displayName = user ? (user.first_name || user.username) : '';
+  const [showMobileNav, setShowMobileNav] = useState(false);
+  const closeMobileNav = () => setShowMobileNav(false);
 
   return (
-    <div className="app-container">
-        <nav className="top-nav">
-           <Link to="/" className="nav-logo">Boardly</Link>
-           <button onClick={() => navigate('/')} className="link">← Назад до дошки</button>
-        </nav>
-        <div style={{padding: 40, maxWidth: 800, margin: '0 auto'}}>
-          <div className="profile-card">
-              <h2 style={{marginTop:0, marginBottom:'32px'}}>Налаштування профілю</h2>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px'}}>
-                  <div className="form-group"><label className="label">Ім'я</label>{isEditing ? <input className="input" value={editData.first_name} onChange={e=>setEditData({...editData, first_name: e.target.value})} /> : <div style={{color:'white', padding:'14px 0'}}>{user.first_name}</div>}</div>
-                  <div className="form-group"><label className="label">Прізвище</label>{isEditing ? <input className="input" value={editData.last_name} onChange={e=>setEditData({...editData, last_name: e.target.value})} /> : <div style={{color:'white', padding:'14px 0'}}>{user.last_name}</div>}</div>
-                  <div className="form-group"><label className="label">Організація</label>{isEditing ? <input className="input" value={editData.organization} onChange={e=>setEditData({...editData, organization: e.target.value})} /> : <div style={{color:'white', padding:'14px 0'}}>{user.profile?.organization || '—'}</div>}</div>
-                  <div className="form-group"><label className="label">Тема</label>{isEditing ? (<select className="input" value={editData.theme} onChange={e=>setEditData({...editData, theme: e.target.value as 'light' | 'dark'})} ><option value="light">Світла</option><option value="dark">Темна</option></select>) : <div style={{color:'white', padding:'14px 0'}}>{user.profile?.theme}</div>}</div>
-              </div>
-              <div style={{marginTop: '32px'}}>
-                  {!isEditing ? (<button onClick={() => setIsEditing(true)} className="btn-primary" style={{width:'auto'}}>Редагувати</button>) : (<div style={{display: 'flex', gap: '16px'}}><button className="btn-primary" style={{width: 'auto'}} onClick={handleSave}>Зберегти</button><button className="link" onClick={()=>setIsEditing(false)}>Скасувати</button></div>)}
-              </div>
-          </div>
+    <div className="profile-layout">
+      <nav className="top-nav">
+        <Link to="/board" className="nav-logo" onClick={closeMobileNav}>Boardly</Link>
+        <button
+          className="nav-menu-button"
+          onClick={() => setShowMobileNav(!showMobileNav)}
+          aria-label="Меню"
+        >
+          Меню
+        </button>
+        <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
+          <Link to="/board" className="link" onClick={closeMobileNav}>Дошка</Link>
+          <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
+          <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
+          <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
+          {user && <span style={{fontSize: 14, color: 'var(--text-secondary)'}}>{displayName}</span>}
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
         </div>
+      </nav>
+      <ProfileScreen />
     </div>
   );
 };
 
 // --- PLACEHOLDER COMPONENTS ---
 const ForgotPasswordScreen = () => <div style={{padding: 64, textAlign:'center'}}><h1>Відновлення паролю</h1><Link to="/auth" className="link">Повернутися</Link></div>;
-const ResetPasswordConfirmScreen = () => <div style={{padding: 64}}>Reset Confirm logic here...</div>;
+const ResetPasswordConfirmScreen = () => (
+  <div style={{padding: 64}}>Сторінка підтвердження скидання пароля в розробці.</div>
+);
+
+// --- LEGACY BOARD LOADER (handles data fetching) ---
+const LegacyBoardLoader: React.FC = () => {
+  const { authToken, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
+  const [activeBoard, setActiveBoard] = useState<Board | null>(null);
+  const [boards, setBoards] = useState<Board[]>([]);
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+      return;
+    }
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (authToken && !hasInitialized.current) {
+      hasInitialized.current = true;
+      
+      axios.get(`${API_URL}/boards/`, { headers: { Authorization: `Token ${authToken}` } })
+        .then(async (res) => {
+          setBoards(res.data);
+          if (res.data.length > 0) {
+            const storedId = Number(localStorage.getItem('lastBoardId'));
+            const preferred = res.data.find((b: Board) => b.id === storedId) || res.data[0];
+            setActiveBoard(preferred);
+          }
+        })
+        .catch((err: any) => {
+          console.error('[LegacyBoardLoader] Error loading boards:', err.message);
+        });
+    }
+  }, [authToken]);
+
+  return <LegacyBoardScreen activeBoard={activeBoard} boards={boards} />;
+};
 
 // --- APP ROUTER ---
 export default function App() {
@@ -615,10 +1815,15 @@ export default function App() {
       <style>{globalStyles}</style>
       <BrowserRouter>
         <AuthProvider>
+          <ThemeSync />
           <Routes>
             <Route path="/auth" element={<AuthScreen />} />
-            <Route path="/" element={<KanbanBoardScreen />} />
-            <Route path="/profile" element={<ProfileScreen />} />
+            <Route path="/login" element={<AuthScreen />} />
+            <Route path="/" element={<LegacyBoardLoader />} />
+            <Route path="/board" element={<LegacyBoardLoader />} />
+            <Route path="/profile" element={<ProfileLayout />} />
+            <Route path="/my-cards" element={<MyCardsScreen />} />
+            <Route path="/faq" element={<FaqScreen />} />
             <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
             <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -19,10 +19,17 @@ class Profile(models.Model):
         ('light', 'Світла'),
         ('dark', 'Темна'),
     )
+    LANGUAGE_CHOICES = (
+        ('uk', 'Ukrainian'),
+        ('en', 'English'),
+    )
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name="Користувач")
     organization = models.CharField(max_length=255, blank=True, verbose_name="Організація")
     theme = models.CharField(max_length=50, choices=THEME_CHOICES, default='light', verbose_name="Тема інтерфейсу")
+    language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default='uk', verbose_name="Language")
+    notify_email = models.BooleanField(default=True, verbose_name="Email notifications")
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name="Avatar")
     
     class Meta:
         verbose_name = "Профіль"
@@ -289,6 +296,27 @@ class Activity(models.Model):
 
     def __str__(self):
         return f"[{self.action_type}] {self.user.username if self.user else 'Система'}: {self.action_text}"
+
+
+class ActivityLog(models.Model):
+    """
+    Таблиця: ActivityLog
+    Журнал д?й користувача для стор?нки проф?лю.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activity_logs', verbose_name="Користувач")
+    action = models.CharField(max_length=100, verbose_name="Д?я")
+    entity_type = models.CharField(max_length=50, blank=True, verbose_name="Тип сутност?")
+    entity_id = models.IntegerField(null=True, blank=True, verbose_name="ID сутност?")
+    meta = models.JSONField(default=dict, blank=True, verbose_name="Дан?")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Час д?ї")
+
+    class Meta:
+        verbose_name = "Лог д?й"
+        verbose_name_plural = "Логи д?й"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username}: {self.action}"
 
 # ----------------------------------------------------------------------
 # 6. ВКЛАДЕННЯ (Attachments)

@@ -35,7 +35,7 @@ export const AuthScreen: React.FC = () => {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       if (isRegistering) await register(formData); else await login({ username: formData.username, password: formData.password });
-    } catch (err: any) { setError(err.response?.data ? JSON.stringify(err.response.data) : 'Error'); } finally { setLoading(false); }
+    } catch (err: any) { setError(err.response?.data ? JSON.stringify(err.response.data) : 'Помилка'); } finally { setLoading(false); }
   };
 
   return (
@@ -72,7 +72,7 @@ export const ProfileScreen: React.FC = () => {
         try { await updateProfile({ first_name: editData.first_name, last_name: editData.last_name, profile: { organization: editData.organization, theme: editData.theme } }); setIsEditing(false); } catch { alert("Помилка збереження."); }
     };
 
-    if (!user) return <div>Load...</div>;
+    if (!user) return <div>Завантаження...</div>;
     return (
         <div className="app-layout">
             <div className="nav-bar">
@@ -89,4 +89,6 @@ export const ProfileScreen: React.FC = () => {
 };
 
 export const ForgotPasswordScreen = () => <div style={{padding: 64, textAlign:'center', color:'white'}}><h1>Відновлення паролю</h1><Link to="/auth" className="link">Повернутися</Link></div>;
-export const ResetPasswordConfirmScreen = () => <div style={{padding: 64, color:'white'}}>Reset Confirm logic here...</div>;
+export const ResetPasswordConfirmScreen = () => (
+  <div style={{padding: 64, color:'white'}}>Сторінка підтвердження скидання пароля в розробці.</div>
+);

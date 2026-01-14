@@ -5,7 +5,6 @@ export interface User {
   email: string;
   first_name?: string;
   last_name?: string;
-  avatar?: string;
   profile?: ProfileData;
 }
 
@@ -18,6 +17,19 @@ export interface ProfileData {
   organization?: string;
   // Changed to strict union to fix TS2322 error in AuthScreens
   theme?: 'light' | 'dark';
+  language?: 'uk' | 'en';
+  notify_email?: boolean;
+  avatar?: string | null;
+  avatar_url?: string | null;
+}
+
+export interface ActivityLog {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id?: number | null;
+  meta?: Record<string, any>;
+  created_at: string;
 }
 
 // Интерфейс Вложения
