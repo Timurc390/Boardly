@@ -71,8 +71,17 @@ export interface Board {
   id: number;
   title: string;
   description?: string;
+  background_url?: string;
+  invite_link?: string;
+  is_archived?: boolean;
+  is_favorite?: boolean;
   
   owner?: User;
+  members?: Array<{
+    id: number;
+    user: User;
+    role: 'admin' | 'member';
+  }>;
   
   lists: List[]; 
   

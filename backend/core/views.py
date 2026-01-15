@@ -2,8 +2,10 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth.models import User
 from django.db import models
+from django.shortcuts import get_object_or_404
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 from django.db.models import Q
@@ -58,6 +60,18 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().select_related('profile')
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        query = self.request.query_params.get('search') or self.request.query_params.get('q')
+        if query:
+            queryset = queryset.filter(
+                Q(username__icontains=query)
+                | Q(email__icontains=query)
+                | Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+            )
+        return queryset
 
     @action(detail=False, methods=['get', 'patch'], url_path='me')
     def me(self, request):
@@ -138,6 +152,16 @@ class BoardViewSet(viewsets.ModelViewSet):
         board.is_favorite = not board.is_favorite
         board.save()
         return Response({'status': 'success', 'is_favorite': board.is_favorite})
+
+    @action(detail=False, methods=['post'], url_path='join')
+    def join(self, request):
+        invite_link = request.data.get('invite_link')
+        if not invite_link:
+            return Response({'detail': 'invite_link_required'}, status=400)
+        board = get_object_or_404(Board, invite_link=invite_link)
+        Membership.objects.get_or_create(board=board, user=request.user, defaults={'role': 'member'})
+        serializer = self.get_serializer(board)
+        return Response(serializer.data)
 
 class FavoriteBoardViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -399,13 +423,45 @@ class BoardMemberViewSet(viewsets.ModelViewSet):
     serializer_class = MembershipSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def _can_manage_members(self, board):
+        user = self.request.user
+        if board.owner_id == user.id:
+            return True
+        return Membership.objects.filter(board=board, user=user, role='admin').exists()
+
     def get_queryset(self):
         """Фільтруємо учасників за board_id."""
+        user = self.request.user
         queryset = Membership.objects.all().select_related('user', 'board')
+        if not user.is_anonymous:
+            queryset = queryset.filter(Q(board__owner=user) | Q(board__members=user))
         board_id = self.request.query_params.get('board_id')
         if board_id:
             queryset = queryset.filter(board__id=board_id)
         return queryset
+
+    def perform_create(self, serializer):
+        board = serializer.validated_data['board']
+        if not self._can_manage_members(board):
+            raise PermissionDenied('not_allowed')
+        serializer.save()
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        board = instance.board
+        if not self._can_manage_members(board):
+            raise PermissionDenied('not_allowed')
+        if instance.user_id == board.owner_id:
+            raise PermissionDenied('owner_role_locked')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        board = instance.board
+        if not self._can_manage_members(board):
+            raise PermissionDenied('not_allowed')
+        if instance.user_id == board.owner_id:
+            raise PermissionDenied('owner_membership_locked')
+        instance.delete()
 
 class AttachmentViewSet(viewsets.ModelViewSet):
     """

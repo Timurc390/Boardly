@@ -125,7 +125,7 @@ export const MyCardsScreen: React.FC = () => {
           <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
           <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
           <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
-          {user && <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{user.first_name || user.username}</span>}
+          {user && <span className="nav-greeting">{user.first_name || user.username}</span>}
           <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{ color: 'var(--accent-danger)' }}>Вийти</button>
         </div>
       </nav>

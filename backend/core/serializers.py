@@ -66,9 +66,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 class MembershipSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='user', write_only=True)
+    board_id = serializers.PrimaryKeyRelatedField(queryset=Board.objects.all(), source='board', write_only=True)
+    board = serializers.IntegerField(source='board_id', read_only=True)
     class Meta:
         model = Membership
-        fields = ('user', 'role')
+        fields = ('id', 'user', 'user_id', 'board', 'board_id', 'role')
 
 class ChecklistItemSerializer(serializers.ModelSerializer):
     checklist = serializers.PrimaryKeyRelatedField(queryset=Checklist.objects.all(), write_only=True)

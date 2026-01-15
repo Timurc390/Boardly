@@ -6,12 +6,34 @@ import { useAuth } from '../context/AuthContext';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
+interface MemberUser {
+  id: number;
+  username: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  profile?: { avatar_url?: string | null };
+}
+
+type MemberRole = 'owner' | 'admin' | 'member';
+type AssignableRole = 'admin' | 'member';
+
+interface BoardMember {
+  id: number;
+  user: MemberUser;
+  role: MemberRole;
+  isOwner?: boolean;
+}
+
 interface Board {
   id: number;
   title: string;
   description?: string;
   background_url?: string;
   is_archived?: boolean;
+  invite_link?: string;
+  owner?: MemberUser;
+  members?: BoardMember[];
 }
 
 interface List {
@@ -41,6 +63,31 @@ interface Checklist {
   items: ChecklistItem[];
 }
 
+interface Attachment {
+  id: number;
+  card: number;
+  file: string;
+  uploaded_at: string;
+}
+
+interface CommentAuthor {
+  id: number;
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  profile?: {
+    avatar_url?: string | null;
+  };
+}
+
+interface Comment {
+  id: number;
+  card: number;
+  author?: CommentAuthor;
+  text: string;
+  created_at: string;
+}
+
 interface Card {
   id: number;
   title: string;
@@ -51,6 +98,8 @@ interface Card {
   is_archived?: boolean;
   labels?: Label[];
   checklists?: Checklist[];
+  attachments?: Attachment[];
+  comments?: Comment[];
 }
 
 type DragStartEvent =
@@ -73,8 +122,8 @@ const BACKGROUND_OPTIONS = [
 ];
 
 interface LegacyBoardScreenProps {
-  activeBoard?: { id: number; title: string; background_url?: string } | null;
-  boards?: any[];
+  activeBoard?: Board | null;
+  boards?: Board[];
 }
 
 export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoard: propActiveBoard, boards: propBoards }) => {
@@ -82,6 +131,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const navigate = useNavigate();
   const location = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
+  const dueDateRef = useRef<HTMLInputElement>(null);
+  const inviteHandledRef = useRef<string | null>(null);
+  const locationRef = useRef(location);
+  locationRef.current = location;
 
   const isDragEvent = (event: DragStartEvent): event is React.DragEvent<HTMLElement> | DragEvent => (
     'dataTransfer' in event
@@ -105,6 +158,17 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const [newLabelColor, setNewLabelColor] = useState('#2563eb');
   const [boardLabels, setBoardLabels] = useState<Label[]>([]);
   const [shareStatus, setShareStatus] = useState('');
+  const [newCommentText, setNewCommentText] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [memberQuery, setMemberQuery] = useState('');
+  const [memberResults, setMemberResults] = useState<MemberUser[]>([]);
+  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
+  const [memberActionType, setMemberActionType] = useState<'add' | 'update' | 'remove' | null>(null);
+  const [memberActionId, setMemberActionId] = useState<number | null>(null);
+  const [newMemberRole, setNewMemberRole] = useState<AssignableRole>('member');
   const [dueDateInput, setDueDateInput] = useState('');
   const [showMobileNav, setShowMobileNav] = useState(false);
 
@@ -131,6 +195,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const [isBoardLoading, setIsBoardLoading] = useState(false);
   const [openListMenuId, setOpenListMenuId] = useState<number | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<number | null>(null);
+  const [openBoardMenu, setOpenBoardMenu] = useState(false);
   const [highlightCardId, setHighlightCardId] = useState<number | null>(null);
   const [pendingListHighlightId, setPendingListHighlightId] = useState<number | null>(null);
   const [pendingCardHighlightId, setPendingCardHighlightId] = useState<number | null>(null);
@@ -148,9 +213,61 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     setShowMobileNav(false);
   };
 
+  const closeMembersModal = () => {
+    setShowMembersModal(false);
+    setMemberQuery('');
+    setMemberResults([]);
+    setIsSearchingMembers(false);
+    setMemberActionId(null);
+    setMemberActionType(null);
+    setNewMemberRole('member');
+  };
+
+  const updateBoardState = (updater: (board: Board) => Board) => {
+    if (!activeBoard) return;
+    const boardId = activeBoard.id;
+    setBoards(prev => prev.map(board => (board.id === boardId ? updater(board) : board)));
+    setActiveBoard(prev => (prev && prev.id === boardId ? updater(prev) : prev));
+  };
+
+  const openDueDatePicker = () => {
+    const input = dueDateRef.current as HTMLInputElement | null;
+    if (!input || !('showPicker' in input)) return;
+    try {
+      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+    } catch {
+      // Ignore if the browser blocks programmatic picker calls.
+    }
+  };
+
   const handleRouteNavigate = (path: string) => {
     setShowMobileNav(false);
     navigate(path);
+    const target = new URL(path, window.location.origin);
+    const expected = `${target.pathname}${target.search}`;
+    setTimeout(() => {
+      const current = `${locationRef.current.pathname}${locationRef.current.search}`;
+      const windowCurrent = `${window.location.pathname}${window.location.search}`;
+      if (current !== expected && windowCurrent === expected) {
+        window.location.assign(expected);
+      }
+    }, 150);
+  };
+
+  const handleNavLinkClick = (event: React.MouseEvent, path: string) => {
+    closeMobileNav();
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    handleRouteNavigate(path);
   };
 
   useEffect(() => {
@@ -169,13 +286,68 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   }, [toast]);
 
   useEffect(() => {
+    if (!showMembersModal) return;
+    if (!authToken) return;
+    const query = memberQuery.trim();
+    if (query.length < 2) {
+      setMemberResults([]);
+      setIsSearchingMembers(false);
+      return;
+    }
+    let isActive = true;
+    setIsSearchingMembers(true);
+    const timer = setTimeout(() => {
+      axios.get(`${API_URL}/users/?search=${encodeURIComponent(query)}`, { headers: { Authorization: `Token ${authToken}` } })
+        .then(res => {
+          if (!isActive) return;
+          setMemberResults(res.data);
+        })
+        .catch(() => {
+          if (!isActive) return;
+          setMemberResults([]);
+        })
+        .finally(() => {
+          if (!isActive) return;
+          setIsSearchingMembers(false);
+        });
+    }, 250);
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [authToken, memberQuery, showMembersModal]);
+
+  useEffect(() => {
+    if (!showMembersModal || !authToken || !activeBoard) return;
+    let isActive = true;
+    setIsMembersLoading(true);
+    axios.get(`${API_URL}/board-members/?board_id=${activeBoard.id}`, { headers: { Authorization: `Token ${authToken}` } })
+      .then(res => {
+        if (!isActive) return;
+        updateBoardState(board => ({ ...board, members: res.data }));
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setToast('Не вдалося оновити учасників.');
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setIsMembersLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [activeBoard, authToken, showMembersModal]);
+
+  useEffect(() => {
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (target.closest('.list-menu') || target.closest('.card-menu') || target.closest('.command-modal')) {
+      if (target.closest('.list-menu') || target.closest('.card-menu') || target.closest('.command-modal') || target.closest('.board-menu')) {
         return;
       }
       setOpenListMenuId(null);
       setOpenCardMenuId(null);
+      setOpenBoardMenu(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -231,6 +403,54 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   };
 
   const toApiDueDate = (value: string) => (value ? value : null);
+  const formatTimestamp = (value?: string | null) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString('uk-UA', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  const resolveAttachmentUrl = (value: string) => {
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    return value.startsWith('/') ? value : `/${value}`;
+  };
+  const getAttachmentName = (value: string) => {
+    if (!value) return 'attachment';
+    const clean = value.split('?')[0];
+    const parts = clean.split('/');
+    return parts[parts.length - 1] || value;
+  };
+  const getAuthorName = (author?: CommentAuthor) => {
+    if (!author) return 'Невідомий';
+    const fullName = [author.first_name, author.last_name].filter(Boolean).join(' ').trim();
+    return fullName || author.username || 'Невідомий';
+  };
+  const getMemberName = (member?: MemberUser) => {
+    if (!member) return 'Невідомий';
+    const fullName = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
+    return fullName || member.username || member.email || 'Невідомий';
+  };
+  const getMemberSecondary = (member?: MemberUser) => {
+    if (!member) return '';
+    return member.email || member.username || '';
+  };
+  const getAvatarUrl = (member?: MemberUser) => member?.profile?.avatar_url || null;
+  const formatMemberRole = (role: MemberRole) => {
+    if (role === 'owner') return 'Власник';
+    if (role === 'admin') return 'Адмін';
+    return 'Учасник';
+  };
+  const getInitials = (value: string) => {
+    if (!value) return '?';
+    const letters = value.trim().split(/\s+/).map(part => part[0]);
+    return letters.join('').slice(0, 2).toUpperCase();
+  };
   const sortCardsByOrder = (a: Card, b: Card) => {
     const orderDiff = Number(a.order ?? 0) - Number(b.order ?? 0);
     return orderDiff !== 0 ? orderDiff : a.id - b.id;
@@ -372,16 +592,55 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const boardId = Number(params.get('board'));
-    if (!boardId || !boards.length) return;
-    if (activeBoard?.id === boardId) return;
+    if (!boardId || !authToken) return;
+    if (activeBoard?.id === boardId && boards.length) return;
     reloadBoardData(boardId);
-  }, [boards, activeBoard?.id, location.search]);
+  }, [authToken, boards, activeBoard?.id, location.search]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    const params = new URLSearchParams(location.search);
+    const invite = params.get('invite');
+    if (!invite || inviteHandledRef.current === invite) return;
+    inviteHandledRef.current = invite;
+    axios.post(
+      `${API_URL}/boards/join/`,
+      { invite_link: invite },
+      { headers: { Authorization: `Token ${authToken}` } }
+    )
+      .then(res => {
+        const joinedBoard = res.data as Board;
+        setBoards(prev => {
+          const exists = prev.find(board => board.id === joinedBoard.id);
+          if (exists) {
+            return prev.map(board => board.id === joinedBoard.id ? joinedBoard : board);
+          }
+          return [...prev, joinedBoard];
+        });
+        setActiveBoard(joinedBoard);
+        setEditBoardTitle(joinedBoard.title);
+        setEditBoardBackground(joinedBoard.background_url || '');
+        params.delete('invite');
+        params.set('board', String(joinedBoard.id));
+        const nextSearch = params.toString();
+        navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+      })
+      .catch(() => {
+        inviteHandledRef.current = null;
+        setToast('Не вдалося приєднатися до дошки.');
+      });
+  }, [authToken, location.search, navigate]);
 
   useEffect(() => {
     if (!activeListId && lists.length > 0) {
       setActiveListId(lists[0].id);
     }
   }, [activeListId, lists]);
+
+  useEffect(() => {
+    if (!activeBoard) return;
+    closeMembersModal();
+  }, [activeBoard?.id]);
 
   useEffect(() => {
     if (!pendingListHighlightId) return;
@@ -418,6 +677,13 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     if (!cardId || selectedCardId) return;
     const card = cards.find(c => c.id === cardId);
     if (card) {
+      const cardList = lists.find(list => list.id === card.list);
+      if (cardList?.is_archived) {
+        setShowArchivedLists(true);
+      }
+      if (card.is_archived) {
+        setShowArchivedCards(true);
+      }
       setSelectedCardId(card.id);
       setCardDraft({ ...card });
       setChecklistDrafts(prev => (
@@ -427,7 +693,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         prev[card.id] ? prev : { ...prev, [card.id]: (card.labels || []).map((label: Label) => label.id) }
       ));
     }
-  }, [cards, location.search, selectedCardId]);
+  }, [cards, lists, location.search, selectedCardId]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -441,8 +707,18 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         return;
       }
 
+      if (event.key === 'Escape' && showMembersModal) {
+        closeMembersModal();
+        return;
+      }
+
       if (event.key === 'Escape' && selectedCardId) {
         closeCardDetails();
+        return;
+      }
+
+      if (event.key === 'Escape' && openBoardMenu) {
+        setOpenBoardMenu(false);
         return;
       }
 
@@ -452,8 +728,11 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      const isCommandShortcut = (event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'k' || event.key === '.');
+      if (isCommandShortcut) {
         event.preventDefault();
+        event.stopPropagation();
+        (event as KeyboardEvent & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.();
         setCommandQuery('');
         setCommandOpen(true);
         return;
@@ -469,9 +748,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeListId, commandOpen, lists, selectedCardId, showArchivedLists]);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [activeListId, commandOpen, lists, openBoardMenu, selectedCardId, showArchivedLists, showMembersModal]);
 
   const getNextTempId = () => -Math.floor(Date.now() + Math.random() * 1000);
 
@@ -480,6 +759,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     setCardDraft({ ...card });
     setDueDateInput(toDateInputValue(card.due_date));
     setShareStatus('');
+    setNewCommentText('');
     setChecklistDrafts(prev => (
       prev[card.id] ? prev : { ...prev, [card.id]: cloneChecklists(card.checklists) }
     ));
@@ -492,6 +772,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     setSelectedCardId(null);
     setCardDraft(null);
     setShareStatus('');
+    setNewCommentText('');
+    setIsAddingComment(false);
+    setIsUploadingAttachment(false);
     const params = new URLSearchParams(location.search);
     if (params.has('card')) {
       params.delete('card');
@@ -677,6 +960,191 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     } catch {
       setToast('Не вдалося створити мітку.');
     }
+  };
+
+  const updateCardState = (cardId: number, updater: (card: Card) => Card) => {
+    setCards(prev => prev.map(card => (card.id === cardId ? updater(card) : card)));
+    setCardDraft(prev => (prev && prev.id === cardId ? updater(prev) : prev));
+  };
+
+  const handleAddComment = async () => {
+    if (!cardDraft || !authToken) return;
+    const text = newCommentText.trim();
+    if (!text) return;
+    setIsAddingComment(true);
+    try {
+      const res = await axios.post(
+        `${API_URL}/comments/`,
+        { card: cardDraft.id, text },
+        { headers: { Authorization: `Token ${authToken}` } }
+      );
+      const newComment = res.data as Comment;
+      updateCardState(cardDraft.id, (card) => ({
+        ...card,
+        comments: [...(card.comments || []), newComment]
+      }));
+      setNewCommentText('');
+    } catch {
+      setToast('Не вдалося додати коментар.');
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!cardDraft || !authToken) return;
+    try {
+      await axios.delete(`${API_URL}/comments/${commentId}/`, {
+        headers: { Authorization: `Token ${authToken}` }
+      });
+      updateCardState(cardDraft.id, (card) => ({
+        ...card,
+        comments: (card.comments || []).filter(comment => comment.id !== commentId)
+      }));
+    } catch {
+      setToast('Не вдалося видалити коментар.');
+    }
+  };
+
+  const handleAddAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!cardDraft || !authToken) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAttachment(true);
+    const formData = new FormData();
+    formData.append('card', String(cardDraft.id));
+    formData.append('file', file);
+    try {
+      const res = await axios.post(`${API_URL}/attachments/`, formData, {
+        headers: { Authorization: `Token ${authToken}` }
+      });
+      const newAttachment = res.data as Attachment;
+      updateCardState(cardDraft.id, (card) => ({
+        ...card,
+        attachments: [...(card.attachments || []), newAttachment]
+      }));
+      setToast('Вкладення додано');
+    } catch {
+      setToast('Не вдалося додати вкладення.');
+    } finally {
+      setIsUploadingAttachment(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: number) => {
+    if (!cardDraft || !authToken) return;
+    try {
+      await axios.delete(`${API_URL}/attachments/${attachmentId}/`, {
+        headers: { Authorization: `Token ${authToken}` }
+      });
+      updateCardState(cardDraft.id, (card) => ({
+        ...card,
+        attachments: (card.attachments || []).filter(attachment => attachment.id !== attachmentId)
+      }));
+    } catch {
+      setToast('Не вдалося видалити вкладення.');
+    }
+  };
+
+  const startMemberAction = (type: 'add' | 'update' | 'remove', id: number) => {
+    setMemberActionType(type);
+    setMemberActionId(id);
+  };
+
+  const stopMemberAction = () => {
+    setMemberActionType(null);
+    setMemberActionId(null);
+  };
+
+  const handleAddMember = async (userId: number) => {
+    if (!authToken || !activeBoard) return;
+    if (!canManageMembers) return;
+    startMemberAction('add', userId);
+    try {
+      const res = await axios.post(
+        `${API_URL}/board-members/`,
+        { user_id: userId, board_id: activeBoard.id, role: newMemberRole },
+        { headers: { Authorization: `Token ${authToken}` } }
+      );
+      const newMember = res.data as BoardMember;
+      updateBoardState((board) => {
+        const existing = (board.members || []).filter(member => member.user.id !== newMember.user.id);
+        return { ...board, members: [...existing, newMember] };
+      });
+      setMemberQuery('');
+      setMemberResults([]);
+      setNewMemberRole('member');
+    } catch {
+      setToast('Не вдалося додати учасника.');
+    } finally {
+      stopMemberAction();
+    }
+  };
+
+  const handleUpdateMemberRole = async (member: BoardMember, nextRole: AssignableRole) => {
+    if (!authToken || !activeBoard) return;
+    if (!canManageMembers || member.isOwner) return;
+    if (member.role === nextRole) return;
+    startMemberAction('update', member.id);
+    try {
+      const res = await axios.patch(
+        `${API_URL}/board-members/${member.id}/`,
+        { role: nextRole },
+        { headers: { Authorization: `Token ${authToken}` } }
+      );
+      const updated = res.data as BoardMember;
+      updateBoardState((board) => ({
+        ...board,
+        members: (board.members || []).map(item => item.id === updated.id ? { ...item, role: updated.role } : item)
+      }));
+    } catch {
+      setToast('Не вдалося змінити роль.');
+    } finally {
+      stopMemberAction();
+    }
+  };
+
+  const handleRemoveMember = async (member: BoardMember) => {
+    if (!authToken || !activeBoard) return;
+    if (!canManageMembers || member.isOwner) return;
+    startMemberAction('remove', member.id);
+    try {
+      await axios.delete(`${API_URL}/board-members/${member.id}/`, {
+        headers: { Authorization: `Token ${authToken}` }
+      });
+      updateBoardState((board) => ({
+        ...board,
+        members: (board.members || []).filter(item => item.id !== member.id)
+      }));
+      if (member.user.id === user?.id) {
+        closeMembersModal();
+        reloadBoardData();
+      }
+    } catch {
+      setToast('Не вдалося видалити учасника.');
+    } finally {
+      stopMemberAction();
+    }
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!activeBoard?.invite_link) {
+      setToast('Посилання запрошення недоступне.');
+      return;
+    }
+    const link = `${window.location.origin}/board?invite=${activeBoard.invite_link}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast('Посилання скопійовано');
+    } catch {
+      window.prompt('Скопіюйте посилання:', link);
+    }
+  };
+
+  const handleInviteByEmail = async () => {
+    if (!memberQuery.trim()) return;
+    await handleCopyInviteLink();
   };
 
   const handleSaveCardDetails = async () => {
@@ -1019,6 +1487,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     const confirmText = nextValue ? 'Архівувати список?' : 'Відновити список?';
     if (!window.confirm(confirmText)) return;
     setLists(lists.map(l => l.id === list.id ? { ...l, is_archived: nextValue } : l));
+    if (nextValue) {
+      setShowArchivedLists(true);
+    }
     try {
       await axios.patch(
         `${API_URL}/lists/${list.id}/`,
@@ -1127,9 +1598,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       && matchesSearch(c)
     ))
     .sort(sortCardsByOrder);
-  const visibleLists = lists.filter(list => showArchivedLists || !list.is_archived);
   const hasAnyLists = lists.length > 0;
   const sortedLists = [...lists].sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+  const visibleLists = sortedLists.filter(list => showArchivedLists || !list.is_archived);
   const showBoardSkeleton = isBoardLoading && lists.length === 0;
   const skeletonColumns = Array.from({ length: 4 }, (_, index) => (
     <div key={`skeleton-${index}`} className="skeleton-column">
@@ -1219,6 +1690,28 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const checklistPercent = checklistTotal ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const activeLabelIds = cardDraft ? getCardLabelIds(cardDraft) : [];
   const activeListTitle = cardDraft ? (lists.find(list => list.id === cardDraft.list)?.title || '') : '';
+  const normalizedMembers = (activeBoard?.members || []).map(member => ({
+    ...member,
+    role: member.role as MemberRole
+  }));
+  const ownerMember = activeBoard?.owner
+    ? { id: -1, user: activeBoard.owner, role: 'owner' as MemberRole, isOwner: true }
+    : null;
+  const mergedMembers = ownerMember
+    ? [ownerMember, ...normalizedMembers.filter(member => member.user.id !== ownerMember.user.id)]
+    : normalizedMembers;
+  const existingMemberIds = new Set(mergedMembers.map(member => member.user.id));
+  const filteredMemberResults = memberResults.filter(result => !existingMemberIds.has(result.id));
+  const visibleMembers = mergedMembers.slice(0, 4);
+  const extraMembers = Math.max(0, mergedMembers.length - visibleMembers.length);
+  const currentMembership = normalizedMembers.find(member => member.user.id === user?.id);
+  const isOwner = activeBoard?.owner?.id === user?.id;
+  const canManageMembers = Boolean(isOwner || currentMembership?.role === 'admin');
+  const inviteLink = activeBoard?.invite_link
+    ? `${window.location.origin}/board?invite=${activeBoard.invite_link}`
+    : '';
+  const activeAttachments = cardDraft?.attachments || [];
+  const activeComments = cardDraft?.comments || [];
   const commandItems = [
     {
       id: 'create-card',
@@ -1246,12 +1739,12 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     {
       id: 'toggle-archived-cards',
       label: showArchivedCards ? 'Приховати архівні картки' : 'Показати архівні картки',
-      action: () => setShowArchivedCards(!showArchivedCards)
+      action: () => setShowArchivedCards(prev => !prev)
     },
     {
       id: 'toggle-archived-lists',
       label: showArchivedLists ? 'Приховати архівні списки' : 'Показати архівні списки',
-      action: () => setShowArchivedLists(!showArchivedLists)
+      action: () => setShowArchivedLists(prev => !prev)
     },
     {
       id: 'go-profile',
@@ -1297,7 +1790,34 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           <div className="page-state-title">Створіть першу дошку</div>
           <div className="page-state-subtitle">Почніть з нової дошки, щоб організувати задачі.</div>
           <div className="page-state-actions">
-            <button className="board-btn primary" onClick={() => setShowCreateBoard(true)}>+ Нова дошка</button>
+            {showCreateBoard ? (
+              <form onSubmit={handleCreateBoard} className="toolbar-panel">
+                <input
+                  className="input"
+                  style={{ maxWidth: 240 }}
+                  placeholder="Назва дошки"
+                  value={newBoardTitle}
+                  onChange={(e) => setNewBoardTitle(e.target.value)}
+                  required
+                />
+                <select
+                  className="input"
+                  style={{ maxWidth: 200 }}
+                  value={newBoardBackground}
+                  onChange={(e) => setNewBoardBackground(e.target.value)}
+                >
+                  {BACKGROUND_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <button type="submit" className="board-btn primary">Створити</button>
+                <button type="button" className="board-btn ghost" onClick={() => setShowCreateBoard(false)}>
+                  Скасувати
+                </button>
+              </form>
+            ) : (
+              <button className="board-btn primary" onClick={() => setShowCreateBoard(true)}>+ Нова дошка</button>
+            )}
           </div>
         </div>
       </div>
@@ -1318,10 +1838,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           Меню
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
-          <span style={{fontSize: 14, color: 'var(--text-secondary)'}}>Привіт, {user.first_name || user.username}</span>
-          <Link className="link" to="/my-cards" onClick={closeMobileNav}>Мої картки</Link>
-          <Link className="link" to="/profile" onClick={closeMobileNav}>Профіль</Link>
-          <Link className="link" to="/faq" onClick={closeMobileNav}>FAQ</Link>
+          <span className="nav-greeting">Привіт, {user.first_name || user.username}</span>
+          <Link className="link" to="/my-cards" onClick={(event) => handleNavLinkClick(event, '/my-cards')}>Мої картки</Link>
+          <Link className="link" to="/profile" onClick={(event) => handleNavLinkClick(event, '/profile')}>Профіль</Link>
+          <Link className="link" to="/faq" onClick={(event) => handleNavLinkClick(event, '/faq')}>FAQ</Link>
           <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
         </div>
       </nav>
@@ -1335,7 +1855,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           </div>
         )}
         <div className="toolbar-row">
-          <div className="toolbar-group">
+          <div className="toolbar-group toolbar-group-primary">
             <select
               className="input toolbar-select"
               value={activeBoard.id}
@@ -1375,33 +1895,123 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               </div>
             )}
           </div>
-          <div className="toolbar-group">
-            <button className="board-btn ghost" onClick={() => setShowCreateBoard(!showCreateBoard)}>
-              + Нова дошка
-            </button>
-            <button className="board-btn primary" onClick={() => setShowCreateList(!showCreateList)}>
+          <div className="toolbar-group toolbar-group-actions">
+            <button
+              className="board-btn primary"
+              onClick={() => {
+                setShowCreateList(!showCreateList);
+                setShowCreateBoard(false);
+                setIsEditingBoard(false);
+                setOpenBoardMenu(false);
+              }}
+            >
               + Додати список
             </button>
-            <button
-              className={`board-btn secondary${isEditingBoard ? ' active' : ''}`}
-              onClick={() => setIsEditingBoard(!isEditingBoard)}
-            >
-              {isEditingBoard ? 'Скасувати' : 'Налаштування'}
-            </button>
-            <button className="board-btn danger" onClick={handleToggleBoardArchive}>
-              {activeBoard.is_archived ? 'Відновити дошку' : 'Архівувати дошку'}
-            </button>
             <label className={`toolbar-pill${showArchivedCards ? ' active' : ''}`}>
-              <input type="checkbox" checked={showArchivedCards} onChange={() => setShowArchivedCards(!showArchivedCards)} />
+              <input type="checkbox" checked={showArchivedCards} onChange={() => setShowArchivedCards(prev => !prev)} />
               Архівні картки
             </label>
             <label className={`toolbar-pill${showArchivedLists ? ' active' : ''}`}>
-              <input type="checkbox" checked={showArchivedLists} onChange={() => setShowArchivedLists(!showArchivedLists)} />
+              <input type="checkbox" checked={showArchivedLists} onChange={() => setShowArchivedLists(prev => !prev)} />
               Архівні списки
             </label>
             <button
+              type="button"
+              className="board-btn secondary members-trigger"
+              onClick={() => {
+                setShowMembersModal(true);
+                setOpenBoardMenu(false);
+                setOpenListMenuId(null);
+                setOpenCardMenuId(null);
+              }}
+              disabled={!activeBoard}
+              aria-label="Поділитися або переглянути учасників"
+            >
+              <div className="member-avatars" aria-hidden="true">
+                {visibleMembers.map(member => {
+                  const memberName = getMemberName(member.user);
+                  const avatarUrl = getAvatarUrl(member.user);
+                  return (
+                    <span key={`${member.user.id}-${member.role}`} className="member-avatar" title={memberName}>
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={memberName} />
+                      ) : (
+                        getInitials(memberName)
+                      )}
+                    </span>
+                  );
+                })}
+                {extraMembers > 0 && (
+                  <span className="member-avatar member-avatar-more" title={`Ще ${extraMembers} учасник(ів)`}>
+                    +{extraMembers}
+                  </span>
+                )}
+              </div>
+              <span className="members-label">Поділитися</span>
+            </button>
+            <div className="toolbar-divider" aria-hidden="true" />
+            <div className="board-menu">
+              <button
+                className="board-btn secondary icon"
+                onClick={() => {
+                  setOpenBoardMenu(!openBoardMenu);
+                  setOpenListMenuId(null);
+                  setOpenCardMenuId(null);
+                }}
+                aria-label="Меню дошки"
+                title="Меню дошки"
+              >
+                ...
+              </button>
+              {openBoardMenu && (
+                <div className="board-menu-panel" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setOpenBoardMenu(false);
+                      setShowCreateBoard(true);
+                      setShowCreateList(false);
+                      setIsEditingBoard(false);
+                    }}
+                  >
+                    + Нова дошка
+                  </button>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setOpenBoardMenu(false);
+                      setIsEditingBoard(!isEditingBoard);
+                      setShowCreateBoard(false);
+                      setShowCreateList(false);
+                    }}
+                  >
+                    {isEditingBoard ? 'Скасувати' : 'Налаштування'}
+                  </button>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setOpenBoardMenu(false);
+                      setShowMembersModal(true);
+                    }}
+                  >
+                    Учасники
+                  </button>
+                  <div className="menu-divider" />
+                  <button
+                    className="menu-item danger"
+                    onClick={() => {
+                      setOpenBoardMenu(false);
+                      handleToggleBoardArchive();
+                    }}
+                  >
+                    {activeBoard.is_archived ? 'Відновити дошку' : 'Архівувати дошку'}
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
               className="board-btn ghost icon"
-              title="/ - пошук, N - нова картка, Ctrl+K - команди"
+              title="/ - пошук, N - нова картка, Ctrl+K або Ctrl+. - команди"
               aria-label="Гарячі клавіші"
               onClick={() => {
                 setCommandQuery('');
@@ -1414,7 +2024,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         </div>
 
         {showCreateBoard && (
-          <form onSubmit={handleCreateBoard} style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <form onSubmit={handleCreateBoard} className="toolbar-panel">
             <input
               className="input"
               style={{ maxWidth: 240 }}
@@ -1438,7 +2048,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         )}
 
         {showCreateList && (
-          <form onSubmit={handleCreateList} style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <form onSubmit={handleCreateList} className="toolbar-panel">
             <input
               className="input"
               style={{ maxWidth: 240 }}
@@ -1452,7 +2062,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         )}
 
         {isEditingBoard && (
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="toolbar-panel">
             <input
               className="input"
               style={{ maxWidth: 240 }}
@@ -1550,15 +2160,16 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       <span>{list.title}{list.is_archived ? ' (архів)' : ''}</span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="list-actions">
                     <div className="list-badge">{listCards.length}</div>
                     <div className="list-menu">
                       <button
                         className="list-menu-button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setOpenListMenuId(openListMenuId === list.id ? null : list.id);
-                          setOpenCardMenuId(null);
+                                setOpenListMenuId(openListMenuId === list.id ? null : list.id);
+                                setOpenCardMenuId(null);
+                                setOpenBoardMenu(false);
                         }}
                         onMouseDown={(event) => event.stopPropagation()}
                         aria-label="Меню списку"
@@ -1694,6 +2305,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 event.stopPropagation();
                                 setOpenCardMenuId(openCardMenuId === card.id ? null : card.id);
                                 setOpenListMenuId(null);
+                                setOpenBoardMenu(false);
                               }}
                               onMouseDown={(event) => event.stopPropagation()}
                               aria-label="Меню картки"
@@ -1899,6 +2511,111 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       Чек-лист зберігається одразу після додавання пунктів.
                     </div>
                   </div>
+
+                  <div className="modal-section">
+                    <div className="section-title">Вкладення</div>
+                    {activeAttachments.length === 0 ? (
+                      <div className="modal-hint">Поки немає вкладень.</div>
+                    ) : (
+                      <div className="attachment-list">
+                        {activeAttachments.map((attachment) => {
+                          const attachmentUrl = resolveAttachmentUrl(attachment.file);
+                          const attachmentName = getAttachmentName(attachment.file);
+                          return (
+                            <div key={attachment.id} className="attachment-item">
+                              <div className="attachment-info">
+                                <a
+                                  className="attachment-link"
+                                  href={attachmentUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {attachmentName}
+                                </a>
+                                <span className="attachment-meta">{formatTimestamp(attachment.uploaded_at)}</span>
+                              </div>
+                              <button
+                                className="link danger"
+                                onClick={() => handleDeleteAttachment(attachment.id)}
+                              >
+                                Видалити
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="attachment-actions">
+                      <input
+                        id={`attachment-${cardDraft.id}`}
+                        type="file"
+                        className="file-input"
+                        onChange={handleAddAttachment}
+                        disabled={isUploadingAttachment}
+                      />
+                      <label
+                        htmlFor={`attachment-${cardDraft.id}`}
+                        className={`board-btn ghost small${isUploadingAttachment ? ' disabled' : ''}`}
+                        aria-disabled={isUploadingAttachment}
+                      >
+                        {isUploadingAttachment ? 'Завантаження...' : 'Додати файл'}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="modal-section">
+                    <div className="section-title">Коментарі</div>
+                    {activeComments.length === 0 ? (
+                      <div className="modal-hint">Поки що немає коментарів.</div>// ам ам ма нету
+                    ) : (
+                      <div className="comment-list">
+                        {activeComments.map((comment) => {
+                          const authorName = getAuthorName(comment.author);
+                          return (
+                            <div key={comment.id} className="comment-item">
+                              <div className="comment-header">
+                                <div className="comment-author">
+                                  <span className="comment-avatar">{getInitials(authorName)}</span>
+                                  <span>{authorName}</span>
+                                </div>
+                                <div className="comment-actions">
+                                  <span className="comment-meta">{formatTimestamp(comment.created_at)}</span>
+                                  {comment.author?.id === user?.id && (
+                                    <button
+                                      className="link danger"
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                    >
+                                      Видалити
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="comment-body">{comment.text}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="comment-form">
+                      <textarea
+                        className="input"
+                        value={newCommentText}
+                        onChange={(event) => setNewCommentText(event.target.value)}
+                        placeholder="Додайте коментар..."
+                        rows={3}
+                        disabled={isAddingComment}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          className="board-btn primary small"
+                          onClick={handleAddComment}
+                          disabled={isAddingComment || !newCommentText.trim()}
+                        >
+                          {isAddingComment ? 'Збереження...' : 'Додати коментар'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="modal-sidebar">
@@ -1907,7 +2624,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     <input
                       type="date"
                       className="input"
+                      ref={dueDateRef}
                       value={dueDateInput}
+                      onClick={openDueDatePicker}
                       onChange={(e) => {
                         setDueDateInput(e.target.value);
                         setCardDraft({ ...cardDraft, due_date: e.target.value });
@@ -1977,6 +2696,189 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       </AnimatePresence>
 
       <AnimatePresence>
+        {showMembersModal && (
+          <motion.div
+            className="modal-backdrop"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                closeMembersModal();
+              }
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="modal members-modal"
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => event.stopPropagation()}
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            >
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">Учасники дошки</h3>
+                  <div className="modal-subtitle">{activeBoard?.title}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-icon modal-close"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeMembersModal();
+                  }}
+                  aria-label="Закрити"
+                >
+                  x
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="modal-section">
+                  <div className="section-title">Запросити</div>
+                  <div className="member-search">
+                    <input
+                      className="input"
+                      placeholder="Ім'я, нік або e-mail"
+                      value={memberQuery}
+                      onChange={(event) => setMemberQuery(event.target.value)}
+                      autoFocus
+                    />
+                    <select
+                      className="input"
+                      value={newMemberRole}
+                      onChange={(event) => setNewMemberRole(event.target.value as AssignableRole)}
+                      disabled={!canManageMembers}
+                    >
+                      <option value="member">Учасник</option>
+                      <option value="admin">Адмін</option>
+                    </select>
+                  </div>
+                  {inviteLink && (
+                    <div className="member-invite">
+                      <input className="input" value={inviteLink} readOnly />
+                      <button className="board-btn ghost small" onClick={handleCopyInviteLink}>
+                        Скопіювати посилання
+                      </button>
+                    </div>
+                  )}
+                  {isMembersLoading && <div className="modal-hint">Оновлюємо список учасників...</div>}
+                  {isSearchingMembers && <div className="modal-hint">Пошук користувачів...</div>}
+                  {!canManageMembers && (
+                    <div className="modal-hint">Додавати учасників можуть лише власник або адмін.</div>
+                  )}
+                  {!isSearchingMembers && memberQuery.trim().length >= 2 && filteredMemberResults.length === 0 && (
+                    <div className="member-empty">
+                      <div className="modal-hint">Користувачів не знайдено.</div>
+                      {memberQuery.includes('@') && (
+                        <button
+                          className="board-btn secondary small"
+                          onClick={handleInviteByEmail}
+                          disabled={!canManageMembers}
+                        >
+                          Запросити за e-mail
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {filteredMemberResults.length > 0 && (
+                    <div className="member-results">
+                      {filteredMemberResults.slice(0, 6).map(result => {
+                        const memberName = getMemberName(result);
+                        const avatarUrl = getAvatarUrl(result);
+                        const isAdding = memberActionType === 'add' && memberActionId === result.id;
+                        return (
+                          <div key={result.id} className="member-result-item">
+                            <div className="member-info">
+                              <span className="member-avatar">
+                                {avatarUrl ? (
+                                  <img src={avatarUrl} alt={memberName} />
+                                ) : (
+                                  getInitials(memberName)
+                                )}
+                              </span>
+                              <div>
+                                <div className="member-name">{memberName}</div>
+                                <div className="member-meta">{getMemberSecondary(result)}</div>
+                              </div>
+                            </div>
+                            <button
+                              className="board-btn primary small"
+                              onClick={() => handleAddMember(result.id)}
+                              disabled={!canManageMembers || isAdding}
+                            >
+                              {isAdding ? 'Додаємо...' : 'Додати'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="modal-section">
+                  <div className="section-title">Учасники ({mergedMembers.length})</div>
+                  <div className="member-list">
+                    {mergedMembers.map(member => {
+                      const memberName = getMemberName(member.user);
+                      const memberMeta = getMemberSecondary(member.user);
+                      const avatarUrl = getAvatarUrl(member.user);
+                      const isUpdating = memberActionType === 'update' && memberActionId === member.id;
+                      const isRemoving = memberActionType === 'remove' && memberActionId === member.id;
+                      return (
+                        <div key={`${member.user.id}-${member.role}`} className="member-row">
+                          <div className="member-info">
+                            <span className="member-avatar">
+                              {avatarUrl ? (
+                                <img src={avatarUrl} alt={memberName} />
+                              ) : (
+                                getInitials(memberName)
+                              )}
+                            </span>
+                            <div>
+                              <div className="member-name">{memberName}</div>
+                              <div className="member-meta">{memberMeta}</div>
+                            </div>
+                          </div>
+                          <div className="member-role">
+                            {member.isOwner ? (
+                              <span className="member-badge">{formatMemberRole(member.role)}</span>
+                            ) : canManageMembers ? (
+                              <select
+                                className="input"
+                                value={member.role}
+                                onChange={(event) => handleUpdateMemberRole(member, event.target.value as AssignableRole)}
+                                disabled={isUpdating}
+                              >
+                                <option value="member">Учасник</option>
+                                <option value="admin">Адмін</option>
+                              </select>
+                            ) : (
+                              <span className="member-badge">{formatMemberRole(member.role)}</span>
+                            )}
+                          </div>
+                          <div className="member-actions">
+                            {!member.isOwner && canManageMembers && (
+                              <button
+                                className="link danger"
+                                onClick={() => handleRemoveMember(member)}
+                                disabled={isRemoving}
+                              >
+                                {isRemoving ? 'Видалення...' : 'Видалити'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {commandOpen && (
           <motion.div
             className="modal-backdrop command-backdrop"
@@ -1994,7 +2896,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Команди</h3>
-                <span className="toolbar-meta">Ctrl+K</span>
+                <span className="toolbar-meta">Ctrl+K / Ctrl+.</span>
               </div>
               <input
                 className="input"
