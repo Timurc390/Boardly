@@ -17,7 +17,7 @@ export interface ProfileData {
   organization?: string;
   // Changed to strict union to fix TS2322 error in AuthScreens
   theme?: 'light' | 'dark';
-  language?: 'uk' | 'en';
+  language?: 'uk' | 'en' | 'pl' | 'de' | 'fr' | 'es';
   notify_email?: boolean;
   avatar?: string | null;
   avatar_url?: string | null;

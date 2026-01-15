@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useI18n } from '../context/I18nContext';
+import { LanguageSelect } from '../components/LanguageSelect';
 
 export const FaqScreen: React.FC = () => {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [showMobileNav, setShowMobileNav] = useState(false);
   const closeMobileNav = () => setShowMobileNav(false);
 
@@ -14,47 +17,48 @@ export const FaqScreen: React.FC = () => {
         <button
           className="nav-menu-button"
           onClick={() => setShowMobileNav(!showMobileNav)}
-          aria-label="Меню"
+          aria-label={t('nav.menu')}
         >
-          Меню
+          {t('nav.menu')}
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
           {user ? (
             <>
-              <Link to="/board" className="link" onClick={closeMobileNav}>Дошка</Link>
-              <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
-              <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
-              <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
+              <Link to="/board" className="link" onClick={closeMobileNav}>{t('nav.board')}</Link>
+              <Link to="/my-cards" className="link" onClick={closeMobileNav}>{t('nav.myCards')}</Link>
+              <Link to="/profile" className="link" onClick={closeMobileNav}>{t('nav.profile')}</Link>
+              <Link to="/faq" className="link" onClick={closeMobileNav}>{t('nav.faq')}</Link>
+              <LanguageSelect compact />
               <span className="nav-greeting">
-                {user.first_name || user.username}
+                {t('nav.greeting', { name: user.first_name || user.username })}
               </span>
               <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{ color: 'var(--accent-danger)' }}>
-                Вийти
+                {t('nav.logout')}
               </button>
             </>
           ) : (
-            <Link to="/auth" className="link" onClick={closeMobileNav}>Увійти</Link>
+            <Link to="/auth" className="link" onClick={closeMobileNav}>{t('auth.signIn')}</Link>
           )}
         </div>
       </nav>
       <div className="content-page">
-        <h2>FAQ</h2>
+        <h2>{t('faq.title')}</h2>
         <div className="faq-list">
           <div className="faq-item">
-            <strong>Як створити дошку?</strong>
-            <p>На сторінці дошки натисніть “Нова дошка” і введіть назву.</p>
+            <strong>{t('faq.q1')}</strong>
+            <p>{t('faq.a1')}</p>
           </div>
           <div className="faq-item">
-            <strong>Як змінити тему?</strong>
-            <p>Перейдіть у профіль та виберіть світлу або темну тему.</p>
+            <strong>{t('faq.q2')}</strong>
+            <p>{t('faq.a2')}</p>
           </div>
           <div className="faq-item">
-            <strong>Як архівувати картку?</strong>
-            <p>Відкрийте дошку та натисніть кнопку архівації на картці.</p>
+            <strong>{t('faq.q3')}</strong>
+            <p>{t('faq.a3')}</p>
           </div>
           <div className="faq-item">
-            <strong>Гарячі клавіші</strong>
-            <p>N — нова картка у поточному списку, / — фокус на пошук, Esc — закрити модалку картки.</p>
+            <strong>{t('faq.q4')}</strong>
+            <p>{t('faq.a4')}</p>
           </div>
         </div>
       </div>

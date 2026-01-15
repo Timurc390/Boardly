@@ -22,6 +22,10 @@ class Profile(models.Model):
     LANGUAGE_CHOICES = (
         ('uk', 'Ukrainian'),
         ('en', 'English'),
+        ('pl', 'Polish'),
+        ('de', 'German'),
+        ('fr', 'French'),
+        ('es', 'Spanish'),
     )
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name="Користувач")

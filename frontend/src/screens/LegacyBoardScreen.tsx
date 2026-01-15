@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useI18n } from '../context/I18nContext';
+import { LanguageSelect } from '../components/LanguageSelect';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -128,6 +130,7 @@ interface LegacyBoardScreenProps {
 
 export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoard: propActiveBoard, boards: propBoards }) => {
   const { authToken, user, logout, isAuthenticated, boardCache, setBoardCache, cardsCache, setCardsCacheForBoard } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -328,7 +331,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       })
       .catch(() => {
         if (!isActive) return;
-        setToast('Не вдалося оновити учасників.');
+        setToast(t('toast.membersUpdateFailed'));
       })
       .finally(() => {
         if (!isActive) return;
@@ -427,14 +430,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     return parts[parts.length - 1] || value;
   };
   const getAuthorName = (author?: CommentAuthor) => {
-    if (!author) return 'Невідомий';
+    if (!author) return t('common.unknown');
     const fullName = [author.first_name, author.last_name].filter(Boolean).join(' ').trim();
-    return fullName || author.username || 'Невідомий';
+    return fullName || author.username || t('common.unknown');
   };
   const getMemberName = (member?: MemberUser) => {
-    if (!member) return 'Невідомий';
+    if (!member) return t('common.unknown');
     const fullName = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
-    return fullName || member.username || member.email || 'Невідомий';
+    return fullName || member.username || member.email || t('common.unknown');
   };
   const getMemberSecondary = (member?: MemberUser) => {
     if (!member) return '';
@@ -442,9 +445,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   };
   const getAvatarUrl = (member?: MemberUser) => member?.profile?.avatar_url || null;
   const formatMemberRole = (role: MemberRole) => {
-    if (role === 'owner') return 'Власник';
-    if (role === 'admin') return 'Адмін';
-    return 'Учасник';
+    if (role === 'owner') return t('members.roleOwner');
+    if (role === 'admin') return t('members.roleAdmin');
+    return t('members.roleMember');
   };
   const getInitials = (value: string) => {
     if (!value) return '?';
@@ -513,7 +516,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setCards(cardsRes.data);
       setCardsCacheForBoard(nextBoard.id, cardsRes.data);
     } catch (err: any) {
-      setError(`Помилка оновлення дошки: ${err.message || 'невідомо'}`);
+      const message = err?.message || t('common.unknown');
+      setError(t('errors.boardUpdate', { message }));
     } finally {
       setIsReloading(false);
       setIsBoardLoading(false);
@@ -527,7 +531,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setCards(res.data);
       setCardsCacheForBoard(boardId, res.data);
     } catch {
-      setToast('Не вдалося оновити картки.');
+      setToast(t('toast.cardsReloadFailed'));
     }
   };
 
@@ -558,7 +562,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       })
       .catch((err: any) => {
         if (!isActive) return;
-        setError(`Помилка списків: ${err.message}`);
+        const message = err?.message || t('common.unknown');
+        setError(t('errors.listsLoad', { message }));
       });
 
     const cachedCards = cardsCache[activeBoard.id];
@@ -575,7 +580,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         })
         .catch((err: any) => {
           if (!isActive) return;
-          setError(`Помилка карток: ${err.message}`);
+          const message = err?.message || t('common.unknown');
+          setError(t('errors.cardsLoad', { message }));
         });
 
     Promise.all([listPromise, cardsPromise]).finally(() => {
@@ -627,7 +633,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       })
       .catch(() => {
         inviteHandledRef.current = null;
-        setToast('Не вдалося приєднатися до дошки.');
+        setToast(t('toast.joinFailed'));
       });
   }, [authToken, location.search, navigate]);
 
@@ -846,7 +852,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         checklists.map(checklist => checklist.id === tempId ? { ...checklist, id: res.data.id } : checklist)
       ));
     } catch {
-      setToast('Не вдалося зберегти чеклист.');
+      setToast(t('toast.checklistSaveFailed'));
       updateChecklistDraft(cardDraft.id, (checklists) => checklists.filter(checklist => checklist.id !== tempId));
     }
   };
@@ -857,7 +863,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     try {
       await axios.delete(`${API_URL}/checklists/${checklistId}/`, { headers: { Authorization: `Token ${authToken}` } });
     } catch {
-      setToast('Не вдалося видалити чеклист.');
+      setToast(t('toast.checklistDeleteFailed'));
     }
   };
 
@@ -902,7 +908,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           return { ...checklist, items: checklist.items.filter(item => item.id !== tempId) };
         })
       ));
-      setToast('Не вдалося додати пункт чеклисту.');
+      setToast(t('toast.checklistItemAddFailed'));
     }
   };
 
@@ -958,7 +964,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       }));
       setNewLabelName('');
     } catch {
-      setToast('Не вдалося створити мітку.');
+      setToast(t('toast.labelCreateFailed'));
     }
   };
 
@@ -985,7 +991,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       }));
       setNewCommentText('');
     } catch {
-      setToast('Не вдалося додати коментар.');
+      setToast(t('toast.commentAddFailed'));
     } finally {
       setIsAddingComment(false);
     }
@@ -1002,7 +1008,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         comments: (card.comments || []).filter(comment => comment.id !== commentId)
       }));
     } catch {
-      setToast('Не вдалося видалити коментар.');
+      setToast(t('toast.commentDeleteFailed'));
     }
   };
 
@@ -1023,9 +1029,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         ...card,
         attachments: [...(card.attachments || []), newAttachment]
       }));
-      setToast('Вкладення додано');
+      setToast(t('toast.attachmentAdded'));
     } catch {
-      setToast('Не вдалося додати вкладення.');
+      setToast(t('toast.attachmentAddFailed'));
     } finally {
       setIsUploadingAttachment(false);
       event.target.value = '';
@@ -1043,7 +1049,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         attachments: (card.attachments || []).filter(attachment => attachment.id !== attachmentId)
       }));
     } catch {
-      setToast('Не вдалося видалити вкладення.');
+      setToast(t('toast.attachmentDeleteFailed'));
     }
   };
 
@@ -1076,7 +1082,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setMemberResults([]);
       setNewMemberRole('member');
     } catch {
-      setToast('Не вдалося додати учасника.');
+      setToast(t('toast.memberAddFailed'));
     } finally {
       stopMemberAction();
     }
@@ -1099,7 +1105,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         members: (board.members || []).map(item => item.id === updated.id ? { ...item, role: updated.role } : item)
       }));
     } catch {
-      setToast('Не вдалося змінити роль.');
+      setToast(t('toast.memberRoleFailed'));
     } finally {
       stopMemberAction();
     }
@@ -1122,7 +1128,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         reloadBoardData();
       }
     } catch {
-      setToast('Не вдалося видалити учасника.');
+      setToast(t('toast.memberRemoveFailed'));
     } finally {
       stopMemberAction();
     }
@@ -1130,15 +1136,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
 
   const handleCopyInviteLink = async () => {
     if (!activeBoard?.invite_link) {
-      setToast('Посилання запрошення недоступне.');
+      setToast(t('toast.inviteUnavailable'));
       return;
     }
     const link = `${window.location.origin}/board?invite=${activeBoard.invite_link}`;
     try {
       await navigator.clipboard.writeText(link);
-      setToast('Посилання скопійовано');
+      setToast(t('common.linkCopied'));
     } catch {
-      window.prompt('Скопіюйте посилання:', link);
+      window.prompt(t('prompt.copyLink'), link);
     }
   };
 
@@ -1162,7 +1168,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setCards(cards.map(c => c.id === cardDraft.id ? res.data : c));
       setCardDraft(res.data);
     } catch {
-      setToast('Не вдалося зберегти картку.');
+      setToast(t('toast.cardSaveFailed'));
     }
   };
 
@@ -1171,10 +1177,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     const link = `${window.location.origin}/board?board=${activeBoard.id}&card=${card.id}`;
     try {
       await navigator.clipboard.writeText(link);
-      setShareStatus('Посилання скопійовано');
-      setToast('Посилання скопійовано');
+      setShareStatus(t('common.linkCopied'));
+      setToast(t('common.linkCopied'));
     } catch {
-      window.prompt('Скопіюйте посилання:', link);
+      window.prompt(t('prompt.copyLink'), link);
     }
   };
 
@@ -1187,7 +1193,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       const res = await axios.post(
         `${API_URL}/cards/`,
         {
-          title: `${card.title} (копія)`,
+          title: `${card.title}${t('common.copySuffix')}`,
           description: card.description || '',
           list: card.list,
           order: maxOrder + 1,
@@ -1216,9 +1222,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           }
         }
       }
-      setToast('Картку скопійовано');
+      setToast(t('toast.cardCopied'));
     } catch {
-      setToast('Не вдалося скопіювати картку.');
+      setToast(t('toast.cardCopyFailed'));
     }
   };
 
@@ -1228,7 +1234,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     try {
       const res = await axios.post(
         `${API_URL}/lists/`,
-        { title: `${list.title} (копія)`, board: activeBoard.id, order: maxOrder + 1 },
+        { title: `${list.title}${t('common.copySuffix')}`, board: activeBoard.id, order: maxOrder + 1 },
         { headers: { Authorization: `Token ${authToken}` } }
       );
       const newList = res.data as List;
@@ -1274,9 +1280,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         }
         setCards(prev => [...prev, ...createdCards]);
       }
-      setToast('Список скопійовано');
+      setToast(t('toast.listCopied'));
     } catch {
-      setToast('Не вдалося скопіювати список.');
+      setToast(t('toast.listCopyFailed'));
     }
   };
 
@@ -1303,7 +1309,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       ]);
     } catch {
       setLists(sorted);
-      setToast('Не вдалося перемістити список.');
+      setToast(t('toast.listMoveFailed'));
     }
   };
 
@@ -1324,7 +1330,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setNewTaskTitle('');
       setAddingToListId(null);
     } catch {
-      setToast('Не вдалося створити задачу.');
+      setToast(t('toast.cardCreateFailed'));
     }
   };
 
@@ -1378,7 +1384,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       );
     } catch {
       setCards(previousCards);
-      setToast('Не вдалося перемістити картку.');
+      setToast(t('toast.cardMoveFailed'));
       if (activeBoard) {
         reloadCardsOnly(activeBoard.id);
       }
@@ -1390,7 +1396,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       const targetCards = getActiveListCards(targetListId);
       await moveCardToPosition(card.id, targetListId, targetCards.length);
     } catch {
-      setToast('Не вдалося перемістити картку.');
+      setToast(t('toast.cardMoveFailed'));
       if (activeBoard) {
         reloadCardsOnly(activeBoard.id);
       }
@@ -1398,14 +1404,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Видалити задачу?')) return;
+    if (!window.confirm(t('confirm.deleteCard'))) return;
     const previousCards = cards;
     try {
       setCards(cards.filter(c => c.id !== id));
       await axios.delete(`${API_URL}/cards/${id}/`, { headers: { Authorization: `Token ${authToken}` } });
     } catch {
       setCards(previousCards);
-      setToast('Не вдалося видалити картку.');
+      setToast(t('toast.cardDeleteFailed'));
     }
   };
 
@@ -1420,7 +1426,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       );
     } catch {
       setCards(cards.map(c => c.id === card.id ? { ...c, is_archived: card.is_archived } : c));
-      setToast('Не вдалося змінити статус архіву картки.');
+      setToast(t('toast.cardArchiveFailed'));
     }
   };
 
@@ -1442,7 +1448,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setShowCreateBoard(false);
       await reloadBoardData(res.data.id);
     } catch {
-      setToast('Не вдалося створити дошку.');
+      setToast(t('toast.boardCreateFailed'));
     }
   };
 
@@ -1459,14 +1465,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setIsEditingBoard(false);
       await reloadBoardData(activeBoard.id);
     } catch {
-      setToast('Не вдалося оновити дошку.');
+      setToast(t('toast.boardUpdateFailed'));
     }
   };
 
   const handleToggleBoardArchive = async () => {
     if (!activeBoard || !authToken) return;
     const nextValue = !activeBoard.is_archived;
-    const confirmText = nextValue ? 'Архівувати дошку?' : 'Відновити дошку?';
+    const confirmText = nextValue ? t('board.archiveConfirm') : t('board.unarchiveConfirm');
     if (!window.confirm(confirmText)) return;
     try {
       const res = await axios.patch(
@@ -1477,14 +1483,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setActiveBoard(res.data);
       setBoards(boards.map(b => b.id === activeBoard.id ? res.data : b));
     } catch {
-      setToast('Не вдалося змінити статус архіву дошки.');
+      setToast(t('toast.boardArchiveFailed'));
     }
   };
 
   const handleToggleListArchive = async (list: List) => {
     if (!authToken) return;
     const nextValue = !list.is_archived;
-    const confirmText = nextValue ? 'Архівувати список?' : 'Відновити список?';
+    const confirmText = nextValue ? t('list.archiveConfirm') : t('list.unarchiveConfirm');
     if (!window.confirm(confirmText)) return;
     setLists(lists.map(l => l.id === list.id ? { ...l, is_archived: nextValue } : l));
     if (nextValue) {
@@ -1498,7 +1504,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       );
     } catch {
       setLists(lists.map(l => l.id === list.id ? { ...l, is_archived: list.is_archived } : l));
-      setToast('Не вдалося змінити статус архіву списку.');
+      setToast(t('toast.listArchiveFailed'));
     }
   };
 
@@ -1517,7 +1523,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setNewListTitle('');
       setShowCreateList(false);
     } catch {
-      setToast('Не вдалося створити список.');
+      setToast(t('toast.listCreateFailed'));
     }
   };
 
@@ -1544,7 +1550,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       await axios.patch(`${API_URL}/lists/${listId}/`, { order: nextOrder }, { headers: { Authorization: `Token ${authToken}` } });
     } catch {
       setLists(sorted);
-      setToast('Не вдалося перемістити список.');
+      setToast(t('toast.listMoveFailed'));
     }
   };
 
@@ -1565,7 +1571,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       setEditingListId(null);
       setEditListTitle('');
     } catch {
-      setToast('Не вдалося перейменувати список.');
+      setToast(t('toast.listRenameFailed'));
     }
   };
 
@@ -1589,7 +1595,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     ? cards.filter(card => matchesSearch(card) && (showArchivedCards || !card.is_archived)).length
     : 0;
   const hasSearch = normalizedSearch.length > 0;
-  const emptyListMessage = hasSearch ? 'Немає збігів.' : 'Немає карток - додайте першу.';
+  const emptyListMessage = hasSearch ? t('toolbar.noMatches') : t('card.empty');
 
   const cardsForList = (listId: number) => cards
     .filter(c => (
@@ -1715,7 +1721,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const commandItems = [
     {
       id: 'create-card',
-      label: 'Створити картку',
+      label: t('command.createCard'),
       shortcut: 'N',
       action: () => {
         const fallbackList = lists.find(list => showArchivedLists || !list.is_archived);
@@ -1728,37 +1734,37 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     },
     {
       id: 'create-list',
-      label: 'Створити список',
+      label: t('command.createList'),
       action: () => setShowCreateList(true)
     },
     {
       id: 'create-board',
-      label: 'Створити дошку',
+      label: t('command.createBoard'),
       action: () => setShowCreateBoard(true)
     },
     {
       id: 'toggle-archived-cards',
-      label: showArchivedCards ? 'Приховати архівні картки' : 'Показати архівні картки',
+      label: showArchivedCards ? t('archive.hideCards') : t('archive.showCards'),
       action: () => setShowArchivedCards(prev => !prev)
     },
     {
       id: 'toggle-archived-lists',
-      label: showArchivedLists ? 'Приховати архівні списки' : 'Показати архівні списки',
+      label: showArchivedLists ? t('archive.hideLists') : t('archive.showLists'),
       action: () => setShowArchivedLists(prev => !prev)
     },
     {
       id: 'go-profile',
-      label: 'Перейти до профілю',
+      label: t('command.goProfile'),
       action: () => handleRouteNavigate('/profile')
     },
     {
       id: 'go-my-cards',
-      label: 'Перейти до моїх карток',
+      label: t('command.goMyCards'),
       action: () => handleRouteNavigate('/my-cards')
     },
     {
       id: 'go-faq',
-      label: 'Перейти до FAQ',
+      label: t('command.goFaq'),
       action: () => handleRouteNavigate('/faq')
     }
   ];
@@ -1777,7 +1783,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     return (
       <div className="app-container">
         <div className="page-state">
-          <div className="page-state-title">Завантаження...</div>
+          <div className="page-state-title">{t('common.loading')}</div>
         </div>
       </div>
     );
@@ -1787,15 +1793,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     return (
       <div className="app-container">
         <div className="page-state">
-          <div className="page-state-title">Створіть першу дошку</div>
-          <div className="page-state-subtitle">Почніть з нової дошки, щоб організувати задачі.</div>
+          <div className="page-state-title">{t('board.empty.title')}</div>
+          <div className="page-state-subtitle">{t('board.empty.subtitle')}</div>
           <div className="page-state-actions">
             {showCreateBoard ? (
               <form onSubmit={handleCreateBoard} className="toolbar-panel">
                 <input
                   className="input"
                   style={{ maxWidth: 240 }}
-                  placeholder="Назва дошки"
+                  placeholder={t('board.create.titlePlaceholder')}
                   value={newBoardTitle}
                   onChange={(e) => setNewBoardTitle(e.target.value)}
                   required
@@ -1810,13 +1816,13 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                <button type="submit" className="board-btn primary">Створити</button>
+                <button type="submit" className="board-btn primary">{t('common.create')}</button>
                 <button type="button" className="board-btn ghost" onClick={() => setShowCreateBoard(false)}>
-                  Скасувати
+                  {t('common.cancel')}
                 </button>
               </form>
             ) : (
-              <button className="board-btn primary" onClick={() => setShowCreateBoard(true)}>+ Нова дошка</button>
+              <button className="board-btn primary" onClick={() => setShowCreateBoard(true)}>{t('board.create.newButton')}</button>
             )}
           </div>
         </div>
@@ -1833,16 +1839,17 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         <button
           className="nav-menu-button"
           onClick={() => setShowMobileNav(!showMobileNav)}
-          aria-label="Меню"
+          aria-label={t('nav.menu')}
         >
-          Меню
+          {t('nav.menu')}
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
-          <span className="nav-greeting">Привіт, {user.first_name || user.username}</span>
-          <Link className="link" to="/my-cards" onClick={(event) => handleNavLinkClick(event, '/my-cards')}>Мої картки</Link>
-          <Link className="link" to="/profile" onClick={(event) => handleNavLinkClick(event, '/profile')}>Профіль</Link>
-          <Link className="link" to="/faq" onClick={(event) => handleNavLinkClick(event, '/faq')}>FAQ</Link>
-          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
+          <span className="nav-greeting">{t('nav.greeting', { name: user.first_name || user.username })}</span>
+          <Link className="link" to="/my-cards" onClick={(event) => handleNavLinkClick(event, '/my-cards')}>{t('nav.myCards')}</Link>
+          <Link className="link" to="/profile" onClick={(event) => handleNavLinkClick(event, '/profile')}>{t('nav.profile')}</Link>
+          <Link className="link" to="/faq" onClick={(event) => handleNavLinkClick(event, '/faq')}>{t('nav.faq')}</Link>
+          <LanguageSelect compact />
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>{t('nav.logout')}</button>
         </div>
       </nav>
 
@@ -1850,8 +1857,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         {isReloading && <div className="toolbar-progress" />}
         {error && (
           <div className="toolbar-pill" style={{ color: 'var(--accent-danger)' }}>
-            Немає з'єднання.{' '}
-            <button className="link" onClick={() => reloadBoardData(activeBoard?.id)}>Повторити</button>
+            {t('common.noConnection')}{' '}
+            <button className="link" onClick={() => reloadBoardData(activeBoard?.id)}>{t('common.retry')}</button>
           </div>
         )}
         <div className="toolbar-row">
@@ -1871,7 +1878,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             >
               {boards.map(board => (
                 <option key={board.id} value={board.id}>
-                  {board.title}{board.is_archived ? ' (архів)' : ''}
+                  {board.title}{board.is_archived ? ` ${t('board.archivedSuffix')}` : ''}
                 </option>
               ))}
             </select>
@@ -1879,19 +1886,19 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               <input
                 ref={searchRef}
                 className="input"
-                placeholder="Пошук (/)"
+                placeholder={t('toolbar.searchPlaceholder')}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
               />
               {normalizedSearch && (
                 <button className="board-btn ghost small" onClick={() => { setSearchInput(''); setSearchQuery(''); }}>
-                  Очистити
+                  {t('common.clear')}
                 </button>
               )}
             </div>
             {normalizedSearch && (
               <div className="toolbar-meta">
-                {searchResults} збігів
+                {searchResults} {t('toolbar.matches')}
               </div>
             )}
           </div>
@@ -1905,15 +1912,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                 setOpenBoardMenu(false);
               }}
             >
-              + Додати список
+              {t('list.addButton')}
             </button>
             <label className={`toolbar-pill${showArchivedCards ? ' active' : ''}`}>
               <input type="checkbox" checked={showArchivedCards} onChange={() => setShowArchivedCards(prev => !prev)} />
-              Архівні картки
+              {t('archive.cards')}
             </label>
             <label className={`toolbar-pill${showArchivedLists ? ' active' : ''}`}>
               <input type="checkbox" checked={showArchivedLists} onChange={() => setShowArchivedLists(prev => !prev)} />
-              Архівні списки
+              {t('archive.lists')}
             </label>
             <button
               type="button"
@@ -1925,7 +1932,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                 setOpenCardMenuId(null);
               }}
               disabled={!activeBoard}
-              aria-label="Поділитися або переглянути учасників"
+              aria-label={t('members.shareAria')}
             >
               <div className="member-avatars" aria-hidden="true">
                 {visibleMembers.map(member => {
@@ -1942,12 +1949,12 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   );
                 })}
                 {extraMembers > 0 && (
-                  <span className="member-avatar member-avatar-more" title={`Ще ${extraMembers} учасник(ів)`}>
+                  <span className="member-avatar member-avatar-more" title={t('members.more', { count: extraMembers })}>
                     +{extraMembers}
                   </span>
                 )}
               </div>
-              <span className="members-label">Поділитися</span>
+              <span className="members-label">{t('common.share')}</span>
             </button>
             <div className="toolbar-divider" aria-hidden="true" />
             <div className="board-menu">
@@ -1958,8 +1965,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   setOpenListMenuId(null);
                   setOpenCardMenuId(null);
                 }}
-                aria-label="Меню дошки"
-                title="Меню дошки"
+                aria-label={t('board.menu')}
+                title={t('board.menu')}
               >
                 ...
               </button>
@@ -1974,7 +1981,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       setIsEditingBoard(false);
                     }}
                   >
-                    + Нова дошка
+                    {t('board.create.newButton')}
                   </button>
                   <button
                     className="menu-item"
@@ -1985,7 +1992,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       setShowCreateList(false);
                     }}
                   >
-                    {isEditingBoard ? 'Скасувати' : 'Налаштування'}
+                    {isEditingBoard ? t('common.cancel') : t('board.settings')}
                   </button>
                   <button
                     className="menu-item"
@@ -1994,7 +2001,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       setShowMembersModal(true);
                     }}
                   >
-                    Учасники
+                    {t('members.title')}
                   </button>
                   <div className="menu-divider" />
                   <button
@@ -2004,15 +2011,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       handleToggleBoardArchive();
                     }}
                   >
-                    {activeBoard.is_archived ? 'Відновити дошку' : 'Архівувати дошку'}
+                    {activeBoard.is_archived ? t('board.unarchive') : t('board.archive')}
                   </button>
                 </div>
               )}
             </div>
             <button
               className="board-btn ghost icon"
-              title="/ - пошук, N - нова картка, Ctrl+K або Ctrl+. - команди"
-              aria-label="Гарячі клавіші"
+              title={t('hotkeys.hint')}
+              aria-label={t('hotkeys.aria')}
               onClick={() => {
                 setCommandQuery('');
                 setCommandOpen(true);
@@ -2028,7 +2035,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             <input
               className="input"
               style={{ maxWidth: 240 }}
-              placeholder="Назва дошки"
+              placeholder={t('board.create.titlePlaceholder')}
               value={newBoardTitle}
               onChange={(e) => setNewBoardTitle(e.target.value)}
               required
@@ -2043,7 +2050,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <button type="submit" className="board-btn primary">Створити</button>
+            <button type="submit" className="board-btn primary">{t('common.create')}</button>
           </form>
         )}
 
@@ -2052,12 +2059,12 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             <input
               className="input"
               style={{ maxWidth: 240 }}
-              placeholder="Назва списку"
+              placeholder={t('list.create.placeholder')}
               value={newListTitle}
               onChange={(e) => setNewListTitle(e.target.value)}
               required
             />
-            <button type="submit" className="board-btn primary">Створити список</button>
+            <button type="submit" className="board-btn primary">{t('list.create.submit')}</button>
           </form>
         )}
 
@@ -2079,7 +2086,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <button className="board-btn primary" onClick={handleSaveBoard}>Зберегти</button>
+            <button className="board-btn primary" onClick={handleSaveBoard}>{t('common.save')}</button>
           </div>
         )}
       </div>
@@ -2090,10 +2097,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         ) : visibleLists.length === 0 ? (
           <div className="kanban-column empty-column">
             <div className="empty-state-title">
-              {hasAnyLists ? 'Усі списки архівовані' : 'Немає списків'}
+              {hasAnyLists ? t('list.empty.archivedTitle') : t('list.empty.noneTitle')}
             </div>
             <div className="empty-state-subtitle">
-              {hasAnyLists ? 'Увімкніть архівні списки, щоб переглянути їх.' : 'Створіть перший список на дошці.'}
+              {hasAnyLists ? t('list.empty.archivedSubtitle') : t('list.empty.noneSubtitle')}
             </div>
             <button
               className="board-btn primary small"
@@ -2105,7 +2112,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                 }
               }}
             >
-              {hasAnyLists ? 'Показати архівні' : '+ Додати список'}
+              {hasAnyLists ? t('list.empty.showArchived') : t('list.addButton')}
             </button>
           </div>
         ) : (
@@ -2157,7 +2164,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         }}
                       />
                     ) : (
-                      <span>{list.title}{list.is_archived ? ' (архів)' : ''}</span>
+                      <span>{list.title}{list.is_archived ? ` ${t('board.archivedSuffix')}` : ''}</span>
                     )}
                   </div>
                   <div className="list-actions">
@@ -2172,8 +2179,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 setOpenBoardMenu(false);
                         }}
                         onMouseDown={(event) => event.stopPropagation()}
-                        aria-label="Меню списку"
-                        title="Меню списку"
+                        aria-label={t('list.menu')}
+                        title={t('list.menu')}
                       >
                         ...
                       </button>
@@ -2186,7 +2193,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               handleStartRenameList(list);
                             }}
                           >
-                            Перейменувати
+                            {t('list.rename')}
                           </button>
                           <button
                             className="menu-item"
@@ -2195,7 +2202,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               handleCopyList(list);
                             }}
                           >
-                            Копіювати список
+                            {t('list.copy')}
                           </button>
                           <button
                             className="menu-item"
@@ -2204,7 +2211,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               handleToggleListArchive(list);
                             }}
                           >
-                            {list.is_archived ? 'Відновити список' : 'Архівувати список'}
+                            {list.is_archived ? t('list.unarchive') : t('list.archive')}
                           </button>
                           <div className="menu-divider" />
                           <button
@@ -2215,7 +2222,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               handleMoveList(list.id, -1);
                             }}
                           >
-                            Перемістити ліворуч
+                            {t('list.moveLeft')}
                           </button>
                           <button
                             className="menu-item"
@@ -2225,10 +2232,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               handleMoveList(list.id, 1);
                             }}
                           >
-                            Перемістити праворуч
+                            {t('list.moveRight')}
                           </button>
                           <label className="menu-label">
-                            Позиція
+                            {t('list.position')}
                             <select
                               className="input"
                               value={currentListIndex}
@@ -2281,7 +2288,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         ref={(node) => { cardRefs.current[card.id] = node; }}
                       >
                         <div className="card-meta">
-                          {card.is_archived && <span className="card-badge">Архів</span>}
+                          {card.is_archived && <span className="card-badge">{t('archive.badge')}</span>}
                           {dueLabel && <span className="card-badge due">{dueLabel}</span>}
                           {cardChecklistTotal > 0 && (
                             <span className="card-badge progress">{cardChecklistDone}/{cardChecklistTotal}</span>
@@ -2308,15 +2315,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 setOpenBoardMenu(false);
                               }}
                               onMouseDown={(event) => event.stopPropagation()}
-                              aria-label="Меню картки"
-                              title="Меню картки"
+                              aria-label={t('card.menu')}
+                              title={t('card.menu')}
                             >
                               ...
                             </button>
                             {openCardMenuId === card.id && (
                               <div className="card-menu-panel" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                                 <label className="menu-label">
-                                  Перемістити в список
+                                  {t('card.moveToList')}
                                   <select
                                     className="input"
                                     value={card.list}
@@ -2330,7 +2337,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                   >
                                     {sortedLists.map(targetList => (
                                       <option key={targetList.id} value={targetList.id}>
-                                        {targetList.title}{targetList.is_archived ? ' (архів)' : ''}
+                                        {targetList.title}{targetList.is_archived ? ` ${t('board.archivedSuffix')}` : ''}
                                       </option>
                                     ))}
                                   </select>
@@ -2342,7 +2349,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                     handleCopyCard(card);
                                   }}
                                 >
-                                  Копіювати картку
+                                  {t('card.copy')}
                                 </button>
                                 <button
                                   className="menu-item"
@@ -2351,7 +2358,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                     handleShareCard(card);
                                   }}
                                 >
-                                  Поділитися
+                                  {t('common.share')}
                                 </button>
                                 <button
                                   className="menu-item"
@@ -2360,7 +2367,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                     handleToggleCardArchive(card);
                                   }}
                                 >
-                                  {card.is_archived ? 'Відновити' : 'Архівувати'}
+                                  {card.is_archived ? t('card.unarchive') : t('card.archive')}
                                 </button>
                                 <button
                                   className="menu-item danger"
@@ -2369,7 +2376,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                     handleDelete(card.id);
                                   }}
                                 >
-                                  Видалити
+                                  {t('common.delete')}
                                 </button>
                               </div>
                             )}
@@ -2381,14 +2388,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
 
                   {addingToListId === list.id ? (
                     <form onSubmit={(e) => handleAddTask(e, list.id)} style={{ marginTop: 12 }}>
-                      <input autoFocus className="input" style={{ marginBottom: 8 }} placeholder="Назва задачі..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} />
+                      <input autoFocus className="input" style={{ marginBottom: 8 }} placeholder={t('card.create.placeholder')} value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} />
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="submit" className="board-btn primary small">Додати</button>
-                        <button type="button" onClick={() => { setAddingToListId(null); setNewTaskTitle(''); }} className="board-btn ghost small">Скасувати</button>
+                        <button type="submit" className="board-btn primary small">{t('common.add')}</button>
+                        <button type="button" onClick={() => { setAddingToListId(null); setNewTaskTitle(''); }} className="board-btn ghost small">{t('common.cancel')}</button>
                       </div>
                     </form>
                   ) : (
-                    <button onClick={() => { setActiveListId(list.id); setAddingToListId(list.id); setNewTaskTitle(''); }} className="board-btn ghost small">+ Нова задача</button>
+                    <button onClick={() => { setActiveListId(list.id); setAddingToListId(list.id); setNewTaskTitle(''); }} className="board-btn ghost small">{t('card.create.newButton')}</button>
                   )}
                 </div>
               </motion.div>
@@ -2432,7 +2439,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     event.stopPropagation();
                     closeCardDetails();
                   }}
-                  aria-label="Закрити"
+                  aria-label={t('common.close')}
                 >
                   x
                 </button>
@@ -2441,18 +2448,18 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               <div className="modal-body">
                 <div className="modal-main">
                   <div className="modal-section">
-                    <div className="section-title">Опис</div>
+                    <div className="section-title">{t('card.descriptionTitle')}</div>
                     <textarea
                       className="input"
                       style={{ minHeight: 100 }}
                       value={cardDraft.description || ''}
                       onChange={(e) => setCardDraft({ ...cardDraft, description: e.target.value })}
-                      placeholder="Додайте опис..."
+                      placeholder={t('card.descriptionPlaceholder')}
                     />
                   </div>
 
                   <div className="modal-section">
-                    <div className="section-title">Чек-лист</div>
+                    <div className="section-title">{t('checklist.title')}</div>
                     <div className="progress-row">
                       <div className="progress-bar">
                         <div className="progress-fill" style={{ width: `${checklistPercent}%` }}></div>
@@ -2463,7 +2470,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       <div key={checklist.id} className="checklist-block">
                         <div className="checklist-header">
                           <strong>{checklist.title}</strong>
-                          <button className="link" onClick={() => handleRemoveChecklist(cardDraft.id, checklist.id)}>Видалити</button>
+                          <button className="link" onClick={() => handleRemoveChecklist(cardDraft.id, checklist.id)}>
+                            {t('common.delete')}
+                          </button>
                         </div>
                         <div style={{ display: 'grid', gap: 8 }}>
                           {checklist.items.map(item => (
@@ -2486,12 +2495,12 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                           <input
                             className="input"
-                            placeholder="Новий пункт..."
+                            placeholder={t('checklist.itemPlaceholder')}
                             value={newChecklistItemText[checklist.id] || ''}
                             onChange={(e) => setNewChecklistItemText(prev => ({ ...prev, [checklist.id]: e.target.value }))}
                           />
                           <button className="board-btn primary small" onClick={() => handleAddChecklistItem(cardDraft.id, checklist.id)}>
-                            Додати
+                            {t('common.add')}
                           </button>
                         </div>
                       </div>
@@ -2499,23 +2508,21 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       <input
                         className="input"
-                        placeholder="Назва чек-листа"
+                        placeholder={t('checklist.titlePlaceholder')}
                         value={newChecklistTitle}
                         onChange={(e) => setNewChecklistTitle(e.target.value)}
                       />
                       <button className="board-btn primary small" onClick={handleAddChecklist}>
-                        Додати чек-лист
+                        {t('checklist.add')}
                       </button>
                     </div>
-                    <div className="modal-hint">
-                      Чек-лист зберігається одразу після додавання пунктів.
-                    </div>
+                    <div className="modal-hint">{t('checklist.hint')}</div>
                   </div>
 
                   <div className="modal-section">
-                    <div className="section-title">Вкладення</div>
+                    <div className="section-title">{t('attachments.title')}</div>
                     {activeAttachments.length === 0 ? (
-                      <div className="modal-hint">Поки немає вкладень.</div>
+                      <div className="modal-hint">{t('attachments.empty')}</div>
                     ) : (
                       <div className="attachment-list">
                         {activeAttachments.map((attachment) => {
@@ -2538,7 +2545,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 className="link danger"
                                 onClick={() => handleDeleteAttachment(attachment.id)}
                               >
-                                Видалити
+                                {t('common.delete')}
                               </button>
                             </div>
                           );
@@ -2558,15 +2565,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         className={`board-btn ghost small${isUploadingAttachment ? ' disabled' : ''}`}
                         aria-disabled={isUploadingAttachment}
                       >
-                        {isUploadingAttachment ? 'Завантаження...' : 'Додати файл'}
+                        {isUploadingAttachment ? t('common.loading') : t('attachments.add')}
                       </label>
                     </div>
                   </div>
 
                   <div className="modal-section">
-                    <div className="section-title">Коментарі</div>
+                    <div className="section-title">{t('comments.title')}</div>
                     {activeComments.length === 0 ? (
-                      <div className="modal-hint">Поки що немає коментарів.</div>// ам ам ма нету
+                      <div className="modal-hint">{t('comments.empty')}</div>
                     ) : (
                       <div className="comment-list">
                         {activeComments.map((comment) => {
@@ -2585,7 +2592,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                       className="link danger"
                                       onClick={() => handleDeleteComment(comment.id)}
                                     >
-                                      Видалити
+                                      {t('common.delete')}
                                     </button>
                                   )}
                                 </div>
@@ -2601,7 +2608,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         className="input"
                         value={newCommentText}
                         onChange={(event) => setNewCommentText(event.target.value)}
-                        placeholder="Додайте коментар..."
+                        placeholder={t('comment.placeholder')}
                         rows={3}
                         disabled={isAddingComment}
                       />
@@ -2611,7 +2618,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                           onClick={handleAddComment}
                           disabled={isAddingComment || !newCommentText.trim()}
                         >
-                          {isAddingComment ? 'Збереження...' : 'Додати коментар'}
+                          {isAddingComment ? t('common.saving') : t('comments.add')}
                         </button>
                       </div>
                     </div>
@@ -2620,7 +2627,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
 
                 <div className="modal-sidebar">
                   <div className="modal-section">
-                    <div className="section-title">Дедлайн</div>
+                    <div className="section-title">{t('card.dueDate')}</div>
                     <input
                       type="date"
                       className="input"
@@ -2635,9 +2642,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   </div>
 
                   <div className="modal-section">
-                    <div className="section-title">Мітки</div>
+                    <div className="section-title">{t('labels.title')}</div>
                     <div className="label-list">
-                      {boardLabels.length === 0 && <div className="modal-hint">Ще немає міток.</div>}
+                      {boardLabels.length === 0 && <div className="modal-hint">{t('labels.empty')}</div>}
                       {boardLabels.map((label: Label) => {
                         const isActive = activeLabelIds.includes(label.id);
                         return (
@@ -2655,7 +2662,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                       <input
                         className="input"
-                        placeholder="Нова мітка"
+                        placeholder={t('labels.newPlaceholder')}
                         value={newLabelName}
                         onChange={(e) => setNewLabelName(e.target.value)}
                       />
@@ -2666,12 +2673,10 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         style={{ width: 44, height: 44, padding: 0, border: 'none', background: 'transparent' }}
                       />
                       <button className="board-btn primary small" onClick={handleAddLabel}>
-                        Додати мітку
+                        {t('labels.add')}
                       </button>
                     </div>
-                    <div className="modal-hint">
-                      Мітки зберігаються після натискання кнопки Зберегти.
-                    </div>
+                    <div className="modal-hint">{t('labels.hint', { action: t('common.save') })}</div>
                   </div>
                 </div>
               </div>
@@ -2679,13 +2684,13 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               <div className="modal-footer">
                 <div className="modal-footer-actions">
                   <button className="board-btn primary" onClick={handleSaveCardDetails}>
-                    Зберегти
+                    {t('common.save')}
                   </button>
                   <button className="board-btn secondary" onClick={() => handleCopyCard(cardDraft)}>
-                    Копіювати картку
+                    {t('card.copy')}
                   </button>
                   <button className="board-btn ghost" onClick={() => handleShareCard(cardDraft)}>
-                    Поділитися
+                    {t('common.share')}
                   </button>
                 </div>
                 {shareStatus && <span className="modal-hint">{shareStatus}</span>}
@@ -2718,7 +2723,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             >
               <div className="modal-header">
                 <div>
-                  <h3 className="modal-title">Учасники дошки</h3>
+                  <h3 className="modal-title">{t('members.modalTitle')}</h3>
                   <div className="modal-subtitle">{activeBoard?.title}</div>
                 </div>
                 <button
@@ -2728,18 +2733,18 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     event.stopPropagation();
                     closeMembersModal();
                   }}
-                  aria-label="Закрити"
+                  aria-label={t('common.close')}
                 >
                   x
                 </button>
               </div>
               <div className="modal-body">
                 <div className="modal-section">
-                  <div className="section-title">Запросити</div>
+                  <div className="section-title">{t('members.inviteTitle')}</div>
                   <div className="member-search">
                     <input
                       className="input"
-                      placeholder="Ім'я, нік або e-mail"
+                      placeholder={t('members.searchPlaceholder')}
                       value={memberQuery}
                       onChange={(event) => setMemberQuery(event.target.value)}
                       autoFocus
@@ -2750,33 +2755,33 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       onChange={(event) => setNewMemberRole(event.target.value as AssignableRole)}
                       disabled={!canManageMembers}
                     >
-                      <option value="member">Учасник</option>
-                      <option value="admin">Адмін</option>
+                      <option value="member">{t('members.roleMember')}</option>
+                      <option value="admin">{t('members.roleAdmin')}</option>
                     </select>
                   </div>
                   {inviteLink && (
                     <div className="member-invite">
                       <input className="input" value={inviteLink} readOnly />
                       <button className="board-btn ghost small" onClick={handleCopyInviteLink}>
-                        Скопіювати посилання
+                        {t('common.copyLink')}
                       </button>
                     </div>
                   )}
-                  {isMembersLoading && <div className="modal-hint">Оновлюємо список учасників...</div>}
-                  {isSearchingMembers && <div className="modal-hint">Пошук користувачів...</div>}
+                  {isMembersLoading && <div className="modal-hint">{t('members.refreshing')}</div>}
+                  {isSearchingMembers && <div className="modal-hint">{t('members.searching')}</div>}
                   {!canManageMembers && (
-                    <div className="modal-hint">Додавати учасників можуть лише власник або адмін.</div>
+                    <div className="modal-hint">{t('members.permissionsHint')}</div>
                   )}
                   {!isSearchingMembers && memberQuery.trim().length >= 2 && filteredMemberResults.length === 0 && (
                     <div className="member-empty">
-                      <div className="modal-hint">Користувачів не знайдено.</div>
+                      <div className="modal-hint">{t('members.empty')}</div>
                       {memberQuery.includes('@') && (
                         <button
                           className="board-btn secondary small"
                           onClick={handleInviteByEmail}
                           disabled={!canManageMembers}
                         >
-                          Запросити за e-mail
+                          {t('members.inviteEmail')}
                         </button>
                       )}
                     </div>
@@ -2807,7 +2812,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                               onClick={() => handleAddMember(result.id)}
                               disabled={!canManageMembers || isAdding}
                             >
-                              {isAdding ? 'Додаємо...' : 'Додати'}
+                              {isAdding ? t('members.adding') : t('common.add')}
                             </button>
                           </div>
                         );
@@ -2816,7 +2821,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   )}
                 </div>
                 <div className="modal-section">
-                  <div className="section-title">Учасники ({mergedMembers.length})</div>
+                  <div className="section-title">{t('members.title')} ({mergedMembers.length})</div>
                   <div className="member-list">
                     {mergedMembers.map(member => {
                       const memberName = getMemberName(member.user);
@@ -2849,8 +2854,8 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 onChange={(event) => handleUpdateMemberRole(member, event.target.value as AssignableRole)}
                                 disabled={isUpdating}
                               >
-                                <option value="member">Учасник</option>
-                                <option value="admin">Адмін</option>
+                                <option value="member">{t('members.roleMember')}</option>
+                                <option value="admin">{t('members.roleAdmin')}</option>
                               </select>
                             ) : (
                               <span className="member-badge">{formatMemberRole(member.role)}</span>
@@ -2863,7 +2868,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                                 onClick={() => handleRemoveMember(member)}
                                 disabled={isRemoving}
                               >
-                                {isRemoving ? 'Видалення...' : 'Видалити'}
+                                {isRemoving ? t('members.removing') : t('common.delete')}
                               </button>
                             )}
                           </div>
@@ -2895,19 +2900,19 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Команди</h3>
+                <h3 style={{ margin: 0 }}>{t('command.title')}</h3>
                 <span className="toolbar-meta">Ctrl+K / Ctrl+.</span>
               </div>
               <input
                 className="input"
-                placeholder="Почніть вводити..."
+                placeholder={t('command.placeholder')}
                 value={commandQuery}
                 onChange={(event) => setCommandQuery(event.target.value)}
                 autoFocus
               />
               <div className="command-list">
                 {filteredCommands.length === 0 ? (
-                  <div className="empty-state">Команд не знайдено.</div>
+                  <div className="empty-state">{t('command.empty')}</div>
                 ) : (
                   filteredCommands.map(item => (
                     <button

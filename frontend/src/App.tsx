@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, FormEvent } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { I18nProvider, useI18n } from './context/I18nContext';
+import { LanguageSelect } from './components/LanguageSelect';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { LegacyBoardScreen } from './screens/LegacyBoardScreen';
 import { MyCardsScreen } from './screens/MyCardsScreen';
@@ -251,6 +253,24 @@ const globalStyles = `
   .nav-actions .link:hover,
   .nav-actions button.link:hover {
     background: var(--ghost-hover);
+  }
+
+  .language-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .language-label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .language-select .input {
+    height: 32px;
+    padding: 6px 10px;
+    min-width: 120px;
+    font-size: 12px;
   }
 
   .nav-menu-button {
@@ -1851,24 +1871,28 @@ export interface Card {
 }
 
 // --- COMPONENT: AUTH SIDEBAR (PREVIEW) ---
-const KanbanPreview = () => (
-  <div className="auth-right">
-    <div className="board-wrapper">
-      <div className="column-preview todo">
-        <h3>До виконання</h3>
-        <div className="card-preview">Дизайн сторінки входу</div>
-      </div>
-      <div className="column-preview progress">
-        <h3>У процесі</h3>
-        <div className="card-preview">Реалізувати drag & drop</div>
-      </div>
-      <div className="column-preview done">
-        <h3>Готово</h3>
-        <div className="card-preview">Створення дошки</div>
+const KanbanPreview: React.FC = () => {
+  const { t } = useI18n();
+
+  return (
+    <div className="auth-right">
+      <div className="board-wrapper">
+        <div className="column-preview todo">
+          <h3>{t('auth.preview.todoTitle')}</h3>
+          <div className="card-preview">{t('auth.preview.todoCard')}</div>
+        </div>
+        <div className="column-preview progress">
+          <h3>{t('auth.preview.progressTitle')}</h3>
+          <div className="card-preview">{t('auth.preview.progressCard')}</div>
+        </div>
+        <div className="column-preview done">
+          <h3>{t('auth.preview.doneTitle')}</h3>
+          <div className="card-preview">{t('auth.preview.doneCard')}</div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ThemeSync: React.FC = () => {
   const { user } = useAuth();
@@ -1885,6 +1909,7 @@ const ThemeSync: React.FC = () => {
 // --- COMPONENT: AUTH SCREEN ---
 const AuthScreen: React.FC = () => {
   const { login, register, googleLogin, isAuthenticated } = useAuth();
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '' });
@@ -1894,21 +1919,39 @@ const AuthScreen: React.FC = () => {
   useEffect(() => { if (isAuthenticated) navigate('/board', { replace: true }); }, [isAuthenticated, navigate]);
 
   useEffect(() => {
+    const googleLocale = ['uk', 'en', 'de', 'pl', 'fr', 'es'].includes(locale) ? locale : 'en';
     const handleCredentialResponse = async (response: any) => {
       try { await googleLogin(response.credential); } 
-      catch (err) { setError('Не вдалося увійти через Google.'); }
+      catch (err) { setError(t('auth.googleError')); }
     };
     const initBtn = () => {
       if (window.google) {
-        window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+        window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse, locale: googleLocale });
         const p = document.getElementById("googleSignInDiv");
-        if (p) window.google.accounts.id.renderButton(p, { theme: "filled_blue", size: "large", width: "400", shape: "rectangular" });
+        if (p) {
+          p.innerHTML = '';
+          window.google.accounts.id.renderButton(p, { theme: "filled_blue", size: "large", width: "400", shape: "rectangular", locale: googleLocale });
+        }
       }
     };
-    if (!document.getElementById('google-client-script')) {
-      const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.id = 'google-client-script'; s.async = true; s.defer = true; s.onload = initBtn; document.body.appendChild(s);
-    } else initBtn();
-  }, [googleLogin, isRegistering]);
+    const scriptId = 'google-client-script';
+    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existing && existing.dataset.locale !== googleLocale) {
+      existing.remove();
+    }
+    if (!document.getElementById(scriptId)) {
+      const s = document.createElement('script');
+      s.src = `https://accounts.google.com/gsi/client?hl=${googleLocale}`;
+      s.id = scriptId;
+      s.async = true;
+      s.defer = true;
+      s.dataset.locale = googleLocale;
+      s.onload = initBtn;
+      document.body.appendChild(s);
+    } else {
+      initBtn();
+    }
+  }, [googleLogin, isRegistering, locale, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true);
@@ -1918,29 +1961,29 @@ const AuthScreen: React.FC = () => {
     } catch (err: any) {
       if (err.response?.data) {
          const d = err.response.data; const k = Object.keys(d)[0]; setError(`${k}: ${d[k]}`);
-      } else setError('Помилка авторизації.');
+      } else setError(t('auth.loginError'));
     } finally { setLoading(false); }
   };
 
   return (
     <div className="page">
       <div className="auth-left">
-        <h1>{isRegistering ? 'Створити акаунт' : 'Ласкаво просимо'}</h1>
-        <p>{isRegistering ? 'Приєднуйтесь до Boardly та керуйте завданнями ефективно.' : 'Введіть свої дані, щоб увійти в систему.'}</p>
+        <h1>{isRegistering ? t('auth.createAccount') : t('auth.welcome')}</h1>
+        <p>{isRegistering ? t('auth.joinBoardly') : t('auth.enterDetails')}</p>
         {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleSubmit}>
           {isRegistering && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div className="form-group"><label className="label">Ім'я</label><input className="input" type="text" placeholder="Іван" value={formData.first_name} onChange={e => setFormData({...formData, first_name: e.target.value})} required={isRegistering} /></div>
-              <div className="form-group"><label className="label">Прізвище</label><input className="input" type="text" placeholder="Петренко" value={formData.last_name} onChange={e => setFormData({...formData, last_name: e.target.value})} required={isRegistering} /></div>
+              <div className="form-group"><label className="label">{t('auth.firstName')}</label><input className="input" type="text" placeholder={t('auth.placeholderFirstName')} value={formData.first_name} onChange={e => setFormData({...formData, first_name: e.target.value})} required={isRegistering} /></div>
+              <div className="form-group"><label className="label">{t('auth.lastName')}</label><input className="input" type="text" placeholder={t('auth.placeholderLastName')} value={formData.last_name} onChange={e => setFormData({...formData, last_name: e.target.value})} required={isRegistering} /></div>
             </div>
           )}
-          <div className="form-group"><label className="label">Логін</label><input className="input" type="text" placeholder="Ваш логін" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required /></div>
-          <div className="form-group"><label className="label">Пароль</label><input className="input" type="password" placeholder="••••••••" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required /></div>
-          {!isRegistering && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}><Link to="/forgot-password" className="link">Забули пароль?</Link></div>}
-          <button type="submit" disabled={loading} className="btn-primary">{loading ? 'Обробка...' : (isRegistering ? 'Зареєструватися' : 'Увійти')}</button>
+          <div className="form-group"><label className="label">{t('auth.username')}</label><input className="input" type="text" placeholder={t('auth.placeholderUsername')} value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required /></div>
+          <div className="form-group"><label className="label">{t('auth.password')}</label><input className="input" type="password" placeholder={t('auth.placeholderPassword')} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required /></div>
+          {!isRegistering && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}><Link to="/forgot-password" className="link">{t('auth.forgotPassword')}</Link></div>}
+          <button type="submit" disabled={loading} className="btn-primary">{loading ? t('auth.processing') : (isRegistering ? t('auth.signUp') : t('auth.signIn'))}</button>
         </form>
-        <div className="auth-footer"><span>{isRegistering ? 'Вже є акаунт? ' : 'Немає акаунту? '}</span><button className="link" onClick={() => { setIsRegistering(!isRegistering); setError(''); }}>{isRegistering ? 'Увійти' : 'Створити акаунт'}</button></div>
+        <div className="auth-footer"><span>{isRegistering ? `${t('auth.hasAccount')} ` : `${t('auth.noAccount')} `}</span><button className="link" onClick={() => { setIsRegistering(!isRegistering); setError(''); }}>{isRegistering ? t('auth.signIn') : t('auth.createAccount')}</button></div>
         <div className="google-wrapper"><div id="googleSignInDiv" style={{ height: '44px' }}></div></div>
       </div>
       <KanbanPreview />
@@ -1951,6 +1994,7 @@ const AuthScreen: React.FC = () => {
 // --- COMPONENT: MAIN KANBAN BOARD (FIXED) ---
 const KanbanBoardScreen: React.FC = () => {
   const { authToken, user, logout, isAuthenticated } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
@@ -2107,16 +2151,16 @@ const KanbanBoardScreen: React.FC = () => {
         <button
           className="nav-menu-button"
           onClick={() => setShowMobileNav(!showMobileNav)}
-          aria-label="Меню"
+          aria-label={t('nav.menu')}
         >
-          Меню
+          {t('nav.menu')}
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
           <span className="nav-greeting">Привіт, {user.first_name || user.username}</span>
-          <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
-          <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
-          <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
-          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
+          <Link to="/my-cards" className="link" onClick={closeMobileNav}>{t('nav.myCards')}</Link>
+          <Link to="/profile" className="link" onClick={closeMobileNav}>{t('nav.profile')}</Link>
+          <Link to="/faq" className="link" onClick={closeMobileNav}>{t('nav.faq')}</Link>
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>{t('nav.logout')}</button>
         </div>
       </nav>
 
@@ -2176,6 +2220,7 @@ const KanbanBoardScreen: React.FC = () => {
 // --- COMPONENT: PROFILE ---
 const ProfileLayout: React.FC = () => {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const displayName = user ? (user.first_name || user.username) : '';
   const [showMobileNav, setShowMobileNav] = useState(false);
   const closeMobileNav = () => setShowMobileNav(false);
@@ -2187,17 +2232,17 @@ const ProfileLayout: React.FC = () => {
         <button
           className="nav-menu-button"
           onClick={() => setShowMobileNav(!showMobileNav)}
-          aria-label="Меню"
+          aria-label={t('nav.menu')}
         >
-          Меню
+          {t('nav.menu')}
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
-          <Link to="/board" className="link" onClick={closeMobileNav}>Дошка</Link>
-          <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
-          <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
-          <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
-          {user && <span className="nav-greeting">{displayName}</span>}
-          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>Вийти</button>
+          <Link to="/board" className="link" onClick={closeMobileNav}>{t('nav.board')}</Link>
+          <Link to="/my-cards" className="link" onClick={closeMobileNav}>{t('nav.myCards')}</Link>
+          <Link to="/profile" className="link" onClick={closeMobileNav}>{t('nav.profile')}</Link>
+          <Link to="/faq" className="link" onClick={closeMobileNav}>{t('nav.faq')}</Link>
+          {user && <span className="nav-greeting">{t('nav.greeting', { name: displayName })}</span>}
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{color: 'var(--accent-danger)'}}>{t('nav.logout')}</button>
         </div>
       </nav>
       <ProfileScreen />
@@ -2205,11 +2250,167 @@ const ProfileLayout: React.FC = () => {
   );
 };
 
-// --- PLACEHOLDER COMPONENTS ---
-const ForgotPasswordScreen = () => <div style={{padding: 64, textAlign:'center'}}><h1>Відновлення паролю</h1><Link to="/auth" className="link">Повернутися</Link></div>;
-const ResetPasswordConfirmScreen = () => (
-  <div style={{padding: 64}}>Сторінка підтвердження скидання пароля в розробці.</div>
-);
+// --- PASSWORD RESET ---
+const ForgotPasswordScreen: React.FC = () => {
+  const { resetPassword } = useAuth();
+  const { t, locale } = useI18n();
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setStatus('loading');
+    setErrorMsg('');
+    try {
+      await resetPassword(email);
+      setStatus('success');
+    } catch (error) {
+      setStatus('error');
+      setErrorMsg(t('passwordReset.error'));
+    }
+  };
+
+  return (
+    <div className="page">
+      <div className="auth-left">
+        <h1>{t('passwordReset.title')}</h1>
+        {status === 'success' ? (
+          <>
+            <h2 style={{ marginTop: 0 }}>{t('passwordReset.successTitle')}</h2>
+            <p>{t('passwordReset.successHint')}</p>
+            <Link
+              to="/auth"
+              className="btn-primary"
+              style={{ display: 'inline-block', textDecoration: 'none', width: 'auto', padding: '12px 20px' }}
+            >
+              {t('passwordReset.backToLogin')}
+            </Link>
+          </>
+        ) : (
+          <>
+            <p>{t('passwordReset.description')}</p>
+            {status === 'error' && <div className="error-message">{errorMsg}</div>}
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label className="label">{t('passwordReset.emailLabel')}</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  placeholder={t('passwordReset.emailPlaceholder')}
+                />
+              </div>
+              <button type="submit" className="btn-primary" disabled={status === 'loading'}>
+                {status === 'loading' ? t('passwordReset.sending') : t('passwordReset.submit')}
+              </button>
+            </form>
+            <Link to="/auth" className="link" style={{ display: 'inline-block', marginTop: '16px' }}>
+              {t('passwordReset.remembered')}
+            </Link>
+          </>
+        )}
+      </div>
+      <KanbanPreview />
+    </div>
+  );
+};
+
+const ResetPasswordConfirmScreen: React.FC = () => {
+  const { uid, token } = useParams<{ uid: string; token: string }>();
+  const navigate = useNavigate();
+  const { resetPasswordConfirm } = useAuth();
+  const { t, locale } = useI18n();
+  const [newPassword, setNewPassword] = useState('');
+  const [reNewPassword, setReNewPassword] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setErrorMessage('');
+
+    if (newPassword !== reNewPassword) {
+      setErrorMessage(t('resetConfirm.errorMismatch'));
+      return;
+    }
+
+    setStatus('loading');
+    try {
+      await resetPasswordConfirm({
+        uid,
+        token,
+        new_password: newPassword,
+        re_new_password: reNewPassword,
+      });
+      setStatus('success');
+      setTimeout(() => navigate('/auth'), 3000);
+    } catch (error: any) {
+      setStatus('error');
+      if (error.response && error.response.data) {
+        const data = error.response.data;
+        const firstKey = Object.keys(data)[0];
+        const errorText = Array.isArray(data[firstKey]) ? data[firstKey][0] : data[firstKey];
+        if (firstKey === 'new_password' || firstKey === 're_new_password') {
+          setErrorMessage(t('resetConfirm.errorPassword', { message: errorText }));
+        } else if (firstKey === 'token') {
+          setErrorMessage(t('resetConfirm.errorInvalidLink'));
+        } else {
+          setErrorMessage(`${firstKey}: ${errorText}`);
+        }
+      } else {
+        setErrorMessage(t('resetConfirm.errorUnknown'));
+      }
+    }
+  };
+
+  return (
+    <div className="page">
+      <div className="auth-left">
+        <h1>{t('resetConfirm.title')}</h1>
+        {status === 'success' ? (
+          <>
+            <h2 style={{ marginTop: 0 }}>{t('resetConfirm.successTitle')}</h2>
+            <p>{t('resetConfirm.successHint')}</p>
+          </>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            {errorMessage && <div className="error-message">{errorMessage}</div>}
+            <div className="form-group">
+              <label className="label">{t('resetConfirm.newPasswordLabel')}</label>
+              <input
+                className="input"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                minLength={8}
+                placeholder={t('resetConfirm.newPasswordPlaceholder')}
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">{t('resetConfirm.confirmPasswordLabel')}</label>
+              <input
+                className="input"
+                type="password"
+                value={reNewPassword}
+                onChange={(event) => setReNewPassword(event.target.value)}
+                required
+                placeholder={t('resetConfirm.confirmPasswordPlaceholder')}
+              />
+            </div>
+            <button type="submit" className="btn-primary" disabled={status === 'loading'}>
+              {status === 'loading' ? t('resetConfirm.saving') : t('resetConfirm.submit')}
+            </button>
+          </form>
+        )}
+      </div>
+      <KanbanPreview />
+    </div>
+  );
+};
 
 // --- LEGACY BOARD LOADER (handles data fetching) ---
 const LegacyBoardLoader: React.FC = () => {
@@ -2272,19 +2473,21 @@ export default function App() {
       <style>{globalStyles}</style>
       <BrowserRouter>
         <AuthProvider>
-          <ThemeSync />
-          <Routes>
-            <Route path="/auth" element={<AuthScreen />} />
-            <Route path="/login" element={<AuthScreen />} />
-            <Route path="/" element={<Navigate to="/board" replace />} />
-            <Route path="/board" element={<LegacyBoardLoader />} />
-            <Route path="/profile" element={<ProfileLayout />} />
-            <Route path="/my-cards" element={<MyCardsScreen />} />
-            <Route path="/faq" element={<FaqScreen />} />
-            <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
-            <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <I18nProvider>
+            <ThemeSync />
+            <Routes>
+              <Route path="/auth" element={<AuthScreen />} />
+              <Route path="/login" element={<AuthScreen />} />
+              <Route path="/" element={<Navigate to="/board" replace />} />
+              <Route path="/board" element={<LegacyBoardLoader />} />
+              <Route path="/profile" element={<ProfileLayout />} />
+              <Route path="/my-cards" element={<MyCardsScreen />} />
+              <Route path="/faq" element={<FaqScreen />} />
+              <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+              <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </I18nProvider>
         </AuthProvider>
       </BrowserRouter>
     </>

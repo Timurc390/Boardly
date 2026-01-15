@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useI18n } from '../context/I18nContext';
+import { LanguageSelect } from '../components/LanguageSelect';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -34,6 +36,7 @@ interface MyCard extends Card {
 
 export const MyCardsScreen: React.FC = () => {
   const { authToken, user, isAuthenticated, boardCache, logout } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [cards, setCards] = useState<MyCard[]>([]);
@@ -50,17 +53,17 @@ export const MyCardsScreen: React.FC = () => {
       const assigned = (res.data as Card[]).map(card => ({
         ...card,
         boardId: card.board?.id || 0,
-        boardTitle: card.board?.title || 'Дошка'
+        boardTitle: card.board?.title || t('myCards.boardFallback')
       }));
 
       setCards(assigned);
       if (assigned.length === 0) {
-        setInfo('Поки що немає карток, де ви призначені.');
+        setInfo(t('myCards.emptyAssigned'));
       } else {
         setInfo(null);
       }
     } catch {
-      setError('Не вдалося завантажити картки. Спробуйте ще раз.');
+      setError(t('myCards.loadError'));
     } finally {
       setLoading(false);
     }
@@ -91,7 +94,7 @@ export const MyCardsScreen: React.FC = () => {
     return (
       <div className="app-container">
         <div className="page-state">
-          <div className="page-state-title">Завантаження...</div>
+          <div className="page-state-title">{t('common.loading')}</div>
         </div>
       </div>
     );
@@ -101,7 +104,7 @@ export const MyCardsScreen: React.FC = () => {
     return (
       <div className="app-container">
         <div className="page-state">
-          <div className="page-state-title">Завантаження карток...</div>
+          <div className="page-state-title">{t('myCards.loading')}</div>
         </div>
       </div>
     );
@@ -116,28 +119,29 @@ export const MyCardsScreen: React.FC = () => {
         <button
           className="nav-menu-button"
           onClick={() => setShowMobileNav(!showMobileNav)}
-          aria-label="Меню"
+          aria-label={t('nav.menu')}
         >
-          Меню
+          {t('nav.menu')}
         </button>
         <div className={`nav-actions ${showMobileNav ? 'mobile-open' : ''}`}>
-          <Link to="/board" className="link" onClick={closeMobileNav}>Дошка</Link>
-          <Link to="/my-cards" className="link" onClick={closeMobileNav}>Мої картки</Link>
-          <Link to="/profile" className="link" onClick={closeMobileNav}>Профіль</Link>
-          <Link to="/faq" className="link" onClick={closeMobileNav}>FAQ</Link>
-          {user && <span className="nav-greeting">{user.first_name || user.username}</span>}
-          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{ color: 'var(--accent-danger)' }}>Вийти</button>
+          <Link to="/board" className="link" onClick={closeMobileNav}>{t('nav.board')}</Link>
+          <Link to="/my-cards" className="link" onClick={closeMobileNav}>{t('nav.myCards')}</Link>
+          <Link to="/profile" className="link" onClick={closeMobileNav}>{t('nav.profile')}</Link>
+          <Link to="/faq" className="link" onClick={closeMobileNav}>{t('nav.faq')}</Link>
+          <LanguageSelect compact />
+          {user && <span className="nav-greeting">{t('nav.greeting', { name: user.first_name || user.username })}</span>}
+          <button onClick={() => { closeMobileNav(); logout(); }} className="link" style={{ color: 'var(--accent-danger)' }}>{t('nav.logout')}</button>
         </div>
       </nav>
       <div className="mycards-page">
         <div className="mycards-header">
-          <h2>Мої картки</h2>
+          <h2>{t('myCards.title')}</h2>
         </div>
         {info && <p className="mycards-info">{info}</p>}
         {error && (
           <div className="mycards-error">
             <p className="mycards-error-text">{error}</p>
-            <button className="board-btn primary" onClick={loadCards}>Повторити</button>
+            <button className="board-btn primary" onClick={loadCards}>{t('common.retry')}</button>
           </div>
         )}
         {grouped.map(group => (
@@ -151,11 +155,11 @@ export const MyCardsScreen: React.FC = () => {
                   style={{ cursor: 'pointer' }}
                   onClick={() => {
                     if (!card.board?.id || card.board?.is_archived) {
-                      setInfo('Дошка недоступна.');
+                      setInfo(t('myCards.boardUnavailable'));
                       return;
                     }
                     if (boardCache && !boardCache.some(board => board.id === card.board.id)) {
-                      setInfo('Дошка недоступна.');
+                      setInfo(t('myCards.boardUnavailable'));
                       return;
                     }
                     navigate(`/board?board=${card.boardId}&card=${card.id}`);
@@ -164,7 +168,7 @@ export const MyCardsScreen: React.FC = () => {
                   <div className="task-title">{card.title}</div>
                   {card.description && <div className="task-desc">{card.description}</div>}
                   {card.board?.is_archived && (
-                    <div className="toolbar-meta">Дошка в архіві</div>
+                    <div className="toolbar-meta">{t('myCards.boardArchived')}</div>
                   )}
                 </div>
               ))}
@@ -172,7 +176,7 @@ export const MyCardsScreen: React.FC = () => {
           </div>
         ))}
         {grouped.length === 0 && !info && !error && (
-          <p className="mycards-info">Поки що немає карток у списку.</p>
+          <p className="mycards-info">{t('myCards.emptyList')}</p>
         )}
       </div>
     </div>

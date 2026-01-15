@@ -3,70 +3,53 @@ import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { ActivityLog } from '../types';
+import { useI18n } from '../context/I18nContext';
+import { type Locale } from '../i18n/translations';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 type TabKey = 'profile' | 'activity' | 'settings';
 
-const TAB_LABELS: Record<TabKey, string> = {
-  profile: 'Профіль і доступ',
-  activity: 'Активність',
-  settings: 'Налаштування',
+const TAB_LABEL_KEYS: Record<TabKey, string> = {
+  profile: 'profile.tabs.profile',
+  activity: 'profile.tabs.activity',
+  settings: 'profile.tabs.settings',
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  create_board: 'Створено дошку',
-  rename_board: 'Перейменовано дошку',
-  update_board: 'Оновлено дошку',
-  archive_board: 'Архівовано дошку',
-  unarchive_board: 'Відновлено дошку',
-  create_list: 'Створено список',
-  rename_list: 'Перейменовано список',
-  move_list: 'Переміщено список',
-  archive_list: 'Архівовано список',
-  unarchive_list: 'Відновлено список',
-  create_card: 'Створено картку',
-  move_card: 'Переміщено картку',
-  archive_card: 'Архівовано картку',
-  unarchive_card: 'Відновлено картку',
-  update_card: 'Оновлено картку',
-  update_card_description: 'Оновлено опис картки',
-  update_card_due_date: 'Оновлено дедлайн',
-  toggle_checklist_item: 'Змінено пункт чеклисту',
-  update_profile: 'Оновлено профіль',
-  update_avatar: 'Оновлено аватар',
-  remove_avatar: 'Видалено аватар',
-};
-
-const formatRelative = (iso: string) => {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const diff = Math.max(Date.now() - t, 0);
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'щойно';
-  if (m < 60) return `${m} хв тому`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} год тому`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d} дн тому`;
-  return new Date(iso).toLocaleDateString('uk-UA');
-};
-
-const getActivityTitle = (entry: ActivityLog) => {
-  const label = ACTION_LABELS[entry.action] || 'Подія';
-  const title = entry.meta?.title ? ` "${entry.meta.title}"` : '';
-  return `${label}${title}`;
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  create_board: 'activity.createBoard',
+  rename_board: 'activity.renameBoard',
+  update_board: 'activity.updateBoard',
+  archive_board: 'activity.archiveBoard',
+  unarchive_board: 'activity.unarchiveBoard',
+  create_list: 'activity.createList',
+  rename_list: 'activity.renameList',
+  move_list: 'activity.moveList',
+  archive_list: 'activity.archiveList',
+  unarchive_list: 'activity.unarchiveList',
+  create_card: 'activity.createCard',
+  move_card: 'activity.moveCard',
+  archive_card: 'activity.archiveCard',
+  unarchive_card: 'activity.unarchiveCard',
+  update_card: 'activity.updateCard',
+  update_card_description: 'activity.updateCardDescription',
+  update_card_due_date: 'activity.updateCardDueDate',
+  toggle_checklist_item: 'activity.toggleChecklistItem',
+  update_profile: 'activity.updateProfile',
+  update_avatar: 'activity.updateAvatar',
+  remove_avatar: 'activity.removeAvatar',
 };
 
 export const ProfileScreen: React.FC = () => {
   const { user, isAuthenticated, authToken, logout, updateProfile, uploadAvatar, removeAvatar } = useAuth();
+  const { t, locale, setLocale, supportedLocales } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
     organization: '',
     theme: 'dark' as 'light' | 'dark',
-    language: 'uk' as 'uk' | 'en',
+    language: 'uk' as Locale,
     notify_email: true,
   });
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -91,7 +74,7 @@ export const ProfileScreen: React.FC = () => {
         last_name: user.last_name || '',
         organization: user.profile?.organization || '',
         theme: (user.profile?.theme as 'light' | 'dark') || 'dark',
-        language: (user.profile?.language as 'uk' | 'en') || 'uk',
+        language: (user.profile?.language as Locale) || 'uk',
         notify_email: user.profile?.notify_email ?? true,
       });
       setLoadingProfile(false);
@@ -126,11 +109,48 @@ export const ProfileScreen: React.FC = () => {
     const full = `${user.first_name || ''} ${user.last_name || ''}`.trim();
     return full || user.username;
   }, [user]);
+  const dateLocale = useMemo(() => {
+    switch (locale) {
+      case 'uk':
+        return 'uk-UA';
+      case 'pl':
+        return 'pl-PL';
+      case 'de':
+        return 'de-DE';
+      case 'fr':
+        return 'fr-FR';
+      case 'es':
+        return 'es-ES';
+      default:
+        return 'en-US';
+    }
+  }, [locale]);
+
+  const formatRelative = (iso: string) => {
+    const timestamp = new Date(iso).getTime();
+    if (Number.isNaN(timestamp)) return '';
+    const diff = Math.max(Date.now() - timestamp, 0);
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return t('profile.time.justNow');
+    if (minutes < 60) return t('profile.time.minutesAgo', { count: minutes });
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t('profile.time.hoursAgo', { count: hours });
+    const days = Math.floor(hours / 24);
+    if (days < 7) return t('profile.time.daysAgo', { count: days });
+    return new Date(iso).toLocaleDateString(dateLocale);
+  };
+
+  const getActivityTitle = (entry: ActivityLog) => {
+    const labelKey = ACTION_LABEL_KEYS[entry.action] || 'activity.event';
+    const label = t(labelKey);
+    const title = entry.meta?.title ? ` "${entry.meta.title}"` : '';
+    return `${label}${title}`;
+  };
 
   const handleSave = async () => {
     if (!user) return;
     if (!form.first_name.trim() || !form.last_name.trim()) {
-      setProfileError('Ім’я та прізвище обов’язкові');
+      setProfileError(t('profile.errors.requiredName'));
       return;
     }
     setProfileError(null);
@@ -146,10 +166,10 @@ export const ProfileScreen: React.FC = () => {
           notify_email: form.notify_email,
         },
       });
-      setToast('Збережено');
+      setToast(t('profile.toast.saved'));
     } catch (err) {
       console.error(err);
-      setProfileError('Не вдалося зберегти');
+      setProfileError(t('profile.errors.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -161,7 +181,7 @@ export const ProfileScreen: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setProfileError('Доступні лише зображення');
+      setProfileError(t('profile.errors.imageOnly'));
       return;
     }
     const preview = URL.createObjectURL(file);
@@ -169,10 +189,10 @@ export const ProfileScreen: React.FC = () => {
     setAvatarUploading(true);
     try {
       await uploadAvatar(file);
-      setToast('Фото оновлено');
+      setToast(t('profile.toast.avatarUpdated'));
     } catch (err) {
       console.error(err);
-      setProfileError('Не вдалося завантажити фото');
+      setProfileError(t('profile.errors.avatarUploadFailed'));
       setAvatarPreview(null);
     } finally {
       setAvatarUploading(false);
@@ -185,10 +205,10 @@ export const ProfileScreen: React.FC = () => {
     try {
       await removeAvatar();
       setAvatarPreview(null);
-      setToast('Фото видалено');
+      setToast(t('profile.toast.avatarRemoved'));
     } catch (err) {
       console.error(err);
-      setProfileError('Не вдалося видалити фото');
+      setProfileError(t('profile.errors.avatarRemoveFailed'));
     } finally {
       setAvatarUploading(false);
     }
@@ -210,7 +230,7 @@ export const ProfileScreen: React.FC = () => {
       setActivityLoaded(true);
     } catch (err) {
       console.error(err);
-      setActivityError('Не вдалося завантажити активність');
+      setActivityError(t('profile.errors.activityLoad'));
     } finally {
       setActivityLoading(false);
     }
@@ -252,8 +272,8 @@ export const ProfileScreen: React.FC = () => {
       <div className="profile-page">
         <div className="profile-shell">
           <div className="profile-panel">
-            <h3>Потрібна авторизація</h3>
-            <p className="profile-hint">Увійдіть у систему, щоб переглянути профіль.</p>
+            <h3>{t('profile.authRequiredTitle')}</h3>
+            <p className="profile-hint">{t('profile.authRequiredHint')}</p>
           </div>
         </div>
       </div>
@@ -270,7 +290,7 @@ export const ProfileScreen: React.FC = () => {
           transition={{ duration: 0.25 }}
         >
           <motion.div className="profile-avatar" whileHover={{ scale: 1.03 }}>
-            {avatarUrl ? <img src={avatarUrl} alt="Avatar" /> : initials}
+            {avatarUrl ? <img src={avatarUrl} alt={t('profile.avatarAlt')} /> : initials}
           </motion.div>
           <div>
             <div className="profile-name">{displayName}</div>
@@ -284,18 +304,18 @@ export const ProfileScreen: React.FC = () => {
               className="btn-secondary focus-ring"
               onClick={handleAvatarClick}
               disabled={avatarUploading}
-              aria-label="Змінити фото"
+              aria-label={t('profile.avatar.change')}
             >
-              {avatarUploading ? 'Завантаження...' : 'Змінити фото'}
+              {avatarUploading ? t('common.loading') : t('profile.avatar.change')}
             </button>
             {(user.profile?.avatar_url || user.profile?.avatar || avatarPreview) && (
               <button
                 className="btn-danger focus-ring"
                 onClick={handleRemoveAvatar}
                 disabled={avatarUploading}
-                aria-label="Видалити фото"
+                aria-label={t('profile.avatar.remove')}
               >
-                Видалити фото
+                {t('profile.avatar.remove')}
               </button>
             )}
           </div>
@@ -306,12 +326,12 @@ export const ProfileScreen: React.FC = () => {
             style={{ display: 'none' }}
             onChange={handleAvatarChange}
           />
-          <button className="btn-ghost focus-ring" onClick={logout}>Вийти</button>
+          <button className="btn-ghost focus-ring" onClick={logout}>{t('nav.logout')}</button>
         </motion.aside>
 
         <section className="profile-content">
-          <div className="profile-tabs" role="tablist" aria-label="Profile tabs">
-            {(Object.keys(TAB_LABELS) as TabKey[]).map((tab) => (
+          <div className="profile-tabs" role="tablist" aria-label={t('profile.tabsLabel')}>
+            {(Object.keys(TAB_LABEL_KEYS) as TabKey[]).map((tab) => (
               <button
                 key={tab}
                 role="tab"
@@ -321,7 +341,7 @@ export const ProfileScreen: React.FC = () => {
                 className={`profile-tab ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab)}
               >
-                {TAB_LABELS[tab]}
+                {t(TAB_LABEL_KEYS[tab])}
               </button>
             ))}
           </div>
@@ -339,41 +359,41 @@ export const ProfileScreen: React.FC = () => {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3>Профіль і доступ</h3>
+                <h3>{t('profile.sections.profile')}</h3>
                 <div className="profile-grid">
                   <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-first-name">Ім'я</label>
+                    <label className="profile-label" htmlFor="profile-first-name">{t('profile.fields.firstName')}</label>
                     <input
                       id="profile-first-name"
                       className="input focus-ring"
                       value={form.first_name}
                       onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                      aria-label="Ім'я"
+                      aria-label={t('profile.fields.firstName')}
                     />
                   </div>
                   <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-last-name">Прізвище</label>
+                    <label className="profile-label" htmlFor="profile-last-name">{t('profile.fields.lastName')}</label>
                     <input
                       id="profile-last-name"
                       className="input focus-ring"
                       value={form.last_name}
                       onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                      aria-label="Прізвище"
+                      aria-label={t('profile.fields.lastName')}
                     />
                   </div>
                   <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-org">Організація</label>
+                    <label className="profile-label" htmlFor="profile-org">{t('profile.fields.organization')}</label>
                     <input
                       id="profile-org"
                       className="input focus-ring"
                       value={form.organization}
                       onChange={(e) => setForm({ ...form, organization: e.target.value })}
-                      aria-label="Організація"
+                      aria-label={t('profile.fields.organization')}
                     />
                   </div>
                   <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-username">Нікнейм</label>
-                    <input id="profile-username" className="input" value={user.username} readOnly aria-label="Нікнейм" />
+                    <label className="profile-label" htmlFor="profile-username">{t('profile.fields.nickname')}</label>
+                    <input id="profile-username" className="input" value={user.username} readOnly aria-label={t('profile.fields.nickname')} />
                   </div>
                   <div className="profile-field">
                     <label className="profile-label" htmlFor="profile-email">Email</label>
@@ -383,7 +403,7 @@ export const ProfileScreen: React.FC = () => {
                 {profileError && <div className="profile-hint">{profileError}</div>}
                 <div className="profile-actions-row">
                   <button className="btn-secondary focus-ring" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Збереження...' : 'Зберегти'}
+                    {saving ? t('profile.saving') : t('common.save')}
                   </button>
                   <button
                     className="btn-ghost focus-ring"
@@ -392,12 +412,12 @@ export const ProfileScreen: React.FC = () => {
                       last_name: user.last_name || '',
                       organization: user.profile?.organization || '',
                       theme: (user.profile?.theme as 'light' | 'dark') || 'dark',
-                      language: (user.profile?.language as 'uk' | 'en') || 'uk',
+                      language: (user.profile?.language as Locale) || 'uk',
                       notify_email: user.profile?.notify_email ?? true,
                     })}
                     disabled={saving}
                   >
-                    Скасувати
+                    {t('common.cancel')}
                   </button>
                 </div>
               </motion.div>
@@ -415,7 +435,7 @@ export const ProfileScreen: React.FC = () => {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3>Активність</h3>
+                <h3>{t('profile.sections.activity')}</h3>
                 <div className="activity-list">
                   {activityLoading && activity.length === 0 && (
                     <>
@@ -425,7 +445,7 @@ export const ProfileScreen: React.FC = () => {
                     </>
                   )}
                   {!activityLoading && activity.length === 0 && !activityError && (
-                    <div className="profile-hint">Ще немає активності.</div>
+                    <div className="profile-hint">{t('profile.activity.empty')}</div>
                   )}
                   {activityError && <div className="profile-hint">{activityError}</div>}
                   {activity.map((entry) => (
@@ -434,7 +454,8 @@ export const ProfileScreen: React.FC = () => {
                       <div>
                         <div className="activity-title">{getActivityTitle(entry)}</div>
                         <div className="activity-meta">
-                          {entry.entity_type && `Тип: ${entry.entity_type}`} {entry.entity_id ? `#${entry.entity_id}` : ''}
+                          {entry.entity_type && t('profile.activity.type', { type: entry.entity_type })}{' '}
+                          {entry.entity_id ? `#${entry.entity_id}` : ''}
                         </div>
                       </div>
                       <div className="activity-meta">{formatRelative(entry.created_at)}</div>
@@ -448,7 +469,7 @@ export const ProfileScreen: React.FC = () => {
                       onClick={() => loadActivity(activityOffset, true)}
                       disabled={activityLoading}
                     >
-                      {activityLoading ? 'Завантаження...' : 'Завантажити ще'}
+                      {activityLoading ? t('common.loading') : t('profile.activity.loadMore')}
                     </button>
                   </div>
                 )}
@@ -467,53 +488,58 @@ export const ProfileScreen: React.FC = () => {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3>Налаштування</h3>
+                <h3>{t('profile.sections.settings')}</h3>
                 <div className="profile-grid">
                   <div className="profile-field">
-                    <label className="profile-label">Тема</label>
+                    <label className="profile-label">{t('profile.fields.theme')}</label>
                     <label className="toggle">
                       <input
                         type="checkbox"
                         checked={form.theme === 'dark'}
                         onChange={(e) => setForm({ ...form, theme: e.target.checked ? 'dark' : 'light' })}
-                        aria-label="Перемикач теми"
+                        aria-label={t('profile.fields.themeToggle')}
                       />
                       <span className="toggle-track" />
-                      <span>{form.theme === 'dark' ? 'Темна' : 'Світла'}</span>
+                      <span>{form.theme === 'dark' ? t('profile.theme.dark') : t('profile.theme.light')}</span>
                     </label>
                   </div>
                   <div className="profile-field">
-                    <label className="profile-label">Мова</label>
+                    <label className="profile-label">{t('profile.fields.language')}</label>
                     <select
                       className="input focus-ring"
                       value={form.language}
-                      onChange={(e) => setForm({ ...form, language: e.target.value as 'uk' | 'en' })}
+                      onChange={(e) => {
+                        const next = e.target.value as Locale;
+                        setForm({ ...form, language: next });
+                        setLocale(next);
+                      }}
                     >
-                      <option value="uk">Українська</option>
-                      <option value="en">English</option>
+                      {supportedLocales.map(code => (
+                        <option key={code} value={code}>{t(`lang.${code}`)}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="profile-field">
-                    <label className="profile-label">Email повідомлення</label>
+                    <label className="profile-label">{t('profile.fields.emailNotifications')}</label>
                     <label className="toggle">
                       <input
                         type="checkbox"
                         checked={form.notify_email}
                         onChange={(e) => setForm({ ...form, notify_email: e.target.checked })}
-                        aria-label="Email повідомлення"
+                        aria-label={t('profile.fields.emailNotifications')}
                       />
                       <span className="toggle-track" />
-                      <span>{form.notify_email ? 'Увімкнено' : 'Вимкнено'}</span>
+                      <span>{form.notify_email ? t('profile.notifications.on') : t('profile.notifications.off')}</span>
                     </label>
                   </div>
                 </div>
                 {profileError && <div className="profile-hint">{profileError}</div>}
                 <div className="profile-actions-row">
                   <button className="btn-secondary focus-ring" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Збереження...' : 'Зберегти налаштування'}
+                    {saving ? t('profile.saving') : t('profile.saveSettings')}
                   </button>
-                  <button className="btn-danger focus-ring" disabled title="Потрібен бекенд endpoint">
-                    Вийти з усіх пристроїв
+                  <button className="btn-danger focus-ring" disabled title={t('profile.logoutAllHint')}>
+                    {t('profile.logoutAll')}
                   </button>
                 </div>
               </motion.div>
