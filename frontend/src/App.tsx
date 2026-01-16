@@ -694,6 +694,19 @@ const globalStyles = `
     color: var(--text-secondary);
   }
 
+  .background-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .background-section-title {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
   .background-swatches {
     display: flex;
     flex-wrap: wrap;

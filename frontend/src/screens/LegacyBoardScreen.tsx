@@ -137,6 +137,15 @@ const CARD_COLOR_PRESETS = [
   { key: 'card.color.slate', value: '#94a3b8' },
 ];
 
+const BACKGROUND_GRADIENTS = [
+  { key: 'board.background.gradient.sunset', value: 'linear-gradient(135deg, #f97316 0%, #ef4444 45%, #7c3aed 100%)' },
+  { key: 'board.background.gradient.ocean', value: 'linear-gradient(135deg, #0ea5e9 0%, #22d3ee 50%, #38bdf8 100%)' },
+  { key: 'board.background.gradient.forest', value: 'linear-gradient(135deg, #064e3b 0%, #10b981 55%, #84cc16 100%)' },
+  { key: 'board.background.gradient.blush', value: 'linear-gradient(135deg, #fda4af 0%, #f472b6 50%, #c084fc 100%)' },
+  { key: 'board.background.gradient.night', value: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%)' },
+  { key: 'board.background.gradient.dawn', value: 'linear-gradient(135deg, #fde68a 0%, #f59e0b 50%, #fb7185 100%)' },
+];
+
 interface LegacyBoardScreenProps {
   activeBoard?: Board | null;
   boards?: Board[];
@@ -157,15 +166,25 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     'dataTransfer' in event
   );
 
-  const isBackgroundColor = (value: string) => value.trim().startsWith('#');
+  const isBackgroundColor = (value: string) => {
+    const normalized = value.trim();
+    return normalized.startsWith('#') || normalized.startsWith('rgb') || normalized.startsWith('hsl');
+  };
 
-  const getBackgroundPreviewStyle = (value: string) => {
+  const isGradientBackground = (value: string) => /gradient\(/i.test(value.trim());
+
+  const getBackgroundDisplayStyle = (value: string) => {
     if (!value) return {};
     if (isBackgroundColor(value)) {
       return { backgroundColor: value };
     }
+    if (isGradientBackground(value)) {
+      return { backgroundImage: value, backgroundSize: 'cover', backgroundPosition: 'center' };
+    }
     return { backgroundImage: `url(${value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
   };
+
+  const getBackgroundPreviewStyle = (value: string) => getBackgroundDisplayStyle(value);
 
   const getErrorDetails = (error: any) => {
     const responseData = error?.response?.data;
@@ -277,30 +296,60 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   ) => {
     const previewStyle = getBackgroundPreviewStyle(value);
     const previewLabel = value
-      ? (isBackgroundColor(value) ? t('board.background.colorSelected') : t('board.background.imageSelected'))
+      ? (
+        isBackgroundColor(value)
+          ? t('board.background.colorSelected')
+          : isGradientBackground(value)
+            ? t('board.background.gradientSelected')
+            : t('board.background.imageSelected')
+      )
       : '';
 
     return (
       <div className="background-picker">
         <div className="background-title">{t('board.background.title')}</div>
-        <div className="background-swatches">
-          {BACKGROUND_PRESETS.map(option => {
-            const isActive = option.value === value;
-            const isDefault = option.value === '';
-            return (
-              <button
-                type="button"
-                key={option.value || 'default'}
-                className={`background-swatch${isActive ? ' active' : ''}${isDefault ? ' default' : ''}`}
-                style={!isDefault ? { backgroundColor: option.value } : undefined}
-                title={t(option.key)}
-                aria-label={t(option.key)}
-                onClick={() => onChange(option.value)}
-              >
-                {isActive && <span className="swatch-check">✓</span>}
-              </button>
-            );
-          })}
+        <div className="background-section">
+          <div className="background-section-title">{t('board.background.colors')}</div>
+          <div className="background-swatches">
+            {BACKGROUND_PRESETS.map(option => {
+              const isActive = option.value === value;
+              const isDefault = option.value === '';
+              return (
+                <button
+                  type="button"
+                  key={option.value || 'default'}
+                  className={`background-swatch${isActive ? ' active' : ''}${isDefault ? ' default' : ''}`}
+                  style={!isDefault ? { backgroundColor: option.value } : undefined}
+                  title={t(option.key)}
+                  aria-label={t(option.key)}
+                  onClick={() => onChange(option.value)}
+                >
+                  {isActive && <span className="swatch-check">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="background-section">
+          <div className="background-section-title">{t('board.background.gradients')}</div>
+          <div className="background-swatches">
+            {BACKGROUND_GRADIENTS.map(option => {
+              const isActive = option.value === value;
+              return (
+                <button
+                  type="button"
+                  key={option.value}
+                  className={`background-swatch${isActive ? ' active' : ''}`}
+                  style={{ backgroundImage: option.value }}
+                  title={t(option.key)}
+                  aria-label={t(option.key)}
+                  onClick={() => onChange(option.value)}
+                >
+                  {isActive && <span className="swatch-check">✓</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="background-actions">
           <label className="board-btn secondary small background-upload" htmlFor={inputId}>
@@ -522,11 +571,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     if (!activeBoard?.background_url) {
       return {};
     }
-    const value = activeBoard.background_url.trim();
-    if (value.startsWith('#') || value.startsWith('rgb')) {
-      return { backgroundColor: value };
-    }
-    return { backgroundImage: `url(${value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    return getBackgroundDisplayStyle(activeBoard.background_url.trim());
   }, [activeBoard?.background_url]);
 
   const highlightElement = (element: HTMLElement | null, className: string) => {
