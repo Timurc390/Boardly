@@ -458,6 +458,12 @@ const globalStyles = `
   .task-card.drag-over { border-color: rgba(143,140,255,0.6); box-shadow: 0 12px 20px rgba(15,23,42,0.25); }
   .task-card.highlight { border-color: rgba(143,140,255,0.8); box-shadow: 0 0 0 2px rgba(143,140,255,0.25); }
 
+  .card-color-bar {
+    height: 6px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+  }
+
   .list-highlight {
     border-color: rgba(143,140,255,0.8);
     box-shadow: 0 0 0 2px rgba(143,140,255,0.25);
@@ -763,6 +769,57 @@ const globalStyles = `
     font-size: 11px;
     color: #fff;
     z-index: 1;
+  }
+
+  .card-color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .card-color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid rgba(148,163,184,0.35);
+    cursor: pointer;
+    position: relative;
+  }
+
+  .card-color-swatch.default {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(148,163,184,0.3) 0,
+      rgba(148,163,184,0.3) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+  }
+
+  .card-color-swatch.active {
+    outline: 2px solid var(--accent-link);
+    outline-offset: 2px;
+  }
+
+  .card-color-swatch .swatch-check {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+
+  .card-color-reset {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(226,232,240,0.9);
+    font-size: 14px;
   }
 
   .board-btn {

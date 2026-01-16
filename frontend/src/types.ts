@@ -47,6 +47,7 @@ export interface Card {
   description: string;
   order: number; 
   priority: 'low' | 'medium' | 'high';
+  card_color?: string;
   
   list: number; 
   

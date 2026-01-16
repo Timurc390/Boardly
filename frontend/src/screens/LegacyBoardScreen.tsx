@@ -94,6 +94,7 @@ interface Card {
   id: number;
   title: string;
   description?: string;
+  card_color?: string;
   list: number;
   order?: number;
   due_date?: string | null;
@@ -125,6 +126,17 @@ const BACKGROUND_PRESETS = [
 const BACKGROUND_MAX_SIZE_MB = 2;
 const BACKGROUND_MAX_SIZE_BYTES = BACKGROUND_MAX_SIZE_MB * 1024 * 1024;
 
+const CARD_COLOR_PRESETS = [
+  { key: 'card.color.none', value: '' },
+  { key: 'card.color.sun', value: '#fbbf24' },
+  { key: 'card.color.rose', value: '#fb7185' },
+  { key: 'card.color.sky', value: '#38bdf8' },
+  { key: 'card.color.violet', value: '#a78bfa' },
+  { key: 'card.color.emerald', value: '#34d399' },
+  { key: 'card.color.teal', value: '#2dd4bf' },
+  { key: 'card.color.slate', value: '#94a3b8' },
+];
+
 interface LegacyBoardScreenProps {
   activeBoard?: Board | null;
   boards?: Board[];
@@ -153,6 +165,19 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       return { backgroundColor: value };
     }
     return { backgroundImage: `url(${value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  };
+
+  const getErrorDetails = (error: any) => {
+    const responseData = error?.response?.data;
+    if (!responseData) return error?.message || '';
+    if (typeof responseData === 'string') return responseData;
+    if (typeof responseData?.detail === 'string') return responseData.detail;
+    if (typeof responseData?.error === 'string') return responseData.error;
+    try {
+      return JSON.stringify(responseData);
+    } catch {
+      return '';
+    }
   };
 
   const [boards, setBoards] = useState<Board[]>([]);
@@ -307,6 +332,35 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             <span className="background-preview-label">{previewLabel}</span>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderCardColorPicker = (
+    value: string | undefined,
+    onChange: (next: string) => void
+  ) => {
+    const selected = value || '';
+    return (
+      <div className="card-color-picker">
+        {CARD_COLOR_PRESETS.map(option => {
+          const isActive = option.value === selected;
+          const isDefault = option.value === '';
+          return (
+            <button
+              type="button"
+              key={option.value || 'default'}
+              className={`card-color-swatch${isActive ? ' active' : ''}${isDefault ? ' default' : ''}`}
+              style={!isDefault ? { backgroundColor: option.value } : undefined}
+              title={t(option.key)}
+              aria-label={t(option.key)}
+              onClick={() => onChange(option.value)}
+            >
+              {isDefault && <span className="card-color-reset">×</span>}
+              {isActive && !isDefault && <span className="swatch-check">✓</span>}
+            </button>
+          );
+        })}
       </div>
     );
   };
@@ -1262,6 +1316,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         `${API_URL}/cards/${cardDraft.id}/`,
         {
           description: cardDraft.description || '',
+          card_color: cardDraft.card_color || '',
           due_date: toApiDueDate(dueDateInput),
           label_ids: getCardLabelIds(cardDraft)
         },
@@ -1297,6 +1352,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         {
           title: `${card.title}${t('common.copySuffix')}`,
           description: card.description || '',
+          card_color: card.card_color || '',
           list: card.list,
           order: maxOrder + 1,
           due_date: dueDateValue,
@@ -1331,9 +1387,13 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   };
 
   const handleCopyList = async (list: List) => {
-    if (!authToken || !activeBoard) return;
+    if (!authToken || !activeBoard) {
+      setToast(t('toast.listCopyFailed'));
+      return;
+    }
     const maxOrder = lists.reduce((acc, l) => Math.max(acc, Number(l.order ?? 0)), 0);
     try {
+      setToast(t('toast.listCopying'));
       const res = await axios.post(
         `${API_URL}/lists/`,
         { title: `${list.title}${t('common.copySuffix')}`, board: activeBoard.id, order: maxOrder + 1 },
@@ -1341,6 +1401,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       );
       const newList = res.data as List;
       setLists(prev => [...prev, newList].sort((a, b) => Number(a.order) - Number(b.order)));
+      setPendingListHighlightId(newList.id);
 
       const sourceCards = cards.filter(card => card.list === list.id);
       if (sourceCards.length > 0) {
@@ -1352,6 +1413,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             {
               title: card.title,
               description: card.description || '',
+              card_color: card.card_color || '',
               list: newList.id,
               order: Number(card.order ?? index),
               due_date: card.due_date ? toApiDueDate(toDateInputValue(card.due_date)) : null,
@@ -1382,9 +1444,11 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         }
         setCards(prev => [...prev, ...createdCards]);
       }
+      await reloadBoardData(activeBoard.id);
       setToast(t('toast.listCopied'));
-    } catch {
-      setToast(t('toast.listCopyFailed'));
+    } catch (error: any) {
+      const details = getErrorDetails(error);
+      setToast(details ? `${t('toast.listCopyFailed')}: ${details}` : t('toast.listCopyFailed'));
     }
   };
 
@@ -2362,6 +2426,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                         onDrop={(event) => handleCardDropOnCard(event, card)}
                         ref={(node) => { cardRefs.current[card.id] = node; }}
                       >
+                        {card.card_color && <div className="card-color-bar" style={{ backgroundColor: card.card_color }} />}
                         <div className="card-meta">
                           {card.is_archived && <span className="card-badge">{t('archive.badge')}</span>}
                           {dueLabel && <span className="card-badge due">{dueLabel}</span>}
@@ -2752,6 +2817,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       </button>
                     </div>
                     <div className="modal-hint">{t('labels.hint', { action: t('common.save') })}</div>
+                  </div>
+
+                  <div className="modal-section">
+                    <div className="section-title">{t('card.colorTitle')}</div>
+                    {renderCardColorPicker(cardDraft.card_color, (value) => (
+                      setCardDraft({ ...cardDraft, card_color: value })
+                    ))}
+                    <div className="modal-hint">{t('card.colorHint')}</div>
                   </div>
                 </div>
               </div>
