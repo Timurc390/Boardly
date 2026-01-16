@@ -114,14 +114,16 @@ type DragStartEvent =
   | TouchEvent
   | PointerEvent;
 
-const BACKGROUND_OPTIONS = [
-  { label: 'Default', value: '' },
-  { label: 'Slate', value: '#0f172a' },
-  { label: 'Charcoal', value: '#1f1f1f' },
-  { label: 'Indigo', value: '#1e1b4b' },
-  { label: 'Emerald', value: '#064e3b' },
-  { label: 'Warm Light', value: '#fff4e6' },
+const BACKGROUND_PRESETS = [
+  { key: 'board.background.default', value: '' },
+  { key: 'board.background.slate', value: '#0f172a' },
+  { key: 'board.background.charcoal', value: '#1f1f1f' },
+  { key: 'board.background.indigo', value: '#1e1b4b' },
+  { key: 'board.background.emerald', value: '#064e3b' },
+  { key: 'board.background.warmLight', value: '#fff4e6' },
 ];
+const BACKGROUND_MAX_SIZE_MB = 2;
+const BACKGROUND_MAX_SIZE_BYTES = BACKGROUND_MAX_SIZE_MB * 1024 * 1024;
 
 interface LegacyBoardScreenProps {
   activeBoard?: Board | null;
@@ -142,6 +144,16 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const isDragEvent = (event: DragStartEvent): event is React.DragEvent<HTMLElement> | DragEvent => (
     'dataTransfer' in event
   );
+
+  const isBackgroundColor = (value: string) => value.trim().startsWith('#');
+
+  const getBackgroundPreviewStyle = (value: string) => {
+    if (!value) return {};
+    if (isBackgroundColor(value)) {
+      return { backgroundColor: value };
+    }
+    return { backgroundImage: `url(${value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  };
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
@@ -208,6 +220,96 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const [dragOverListId, setDragOverListId] = useState<number | null>(null);
   const [draggingCardId, setDraggingCardId] = useState<number | null>(null);
   const [dragOverCardId, setDragOverCardId] = useState<number | null>(null);
+
+  const handleBackgroundFile = (file: File, onChange: (value: string) => void) => {
+    if (!file.type.startsWith('image/')) {
+      setToast(t('board.background.invalidFile'));
+      return;
+    }
+    if (file.size > BACKGROUND_MAX_SIZE_BYTES) {
+      setToast(t('board.background.tooLarge', { size: BACKGROUND_MAX_SIZE_MB }));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) {
+        setToast(t('board.background.invalidFile'));
+        return;
+      }
+      onChange(result);
+    };
+    reader.onerror = () => {
+      setToast(t('board.background.invalidFile'));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const renderBackgroundPicker = (
+    value: string,
+    onChange: (next: string) => void,
+    inputId: string
+  ) => {
+    const previewStyle = getBackgroundPreviewStyle(value);
+    const previewLabel = value
+      ? (isBackgroundColor(value) ? t('board.background.colorSelected') : t('board.background.imageSelected'))
+      : '';
+
+    return (
+      <div className="background-picker">
+        <div className="background-title">{t('board.background.title')}</div>
+        <div className="background-swatches">
+          {BACKGROUND_PRESETS.map(option => {
+            const isActive = option.value === value;
+            const isDefault = option.value === '';
+            return (
+              <button
+                type="button"
+                key={option.value || 'default'}
+                className={`background-swatch${isActive ? ' active' : ''}${isDefault ? ' default' : ''}`}
+                style={!isDefault ? { backgroundColor: option.value } : undefined}
+                title={t(option.key)}
+                aria-label={t(option.key)}
+                onClick={() => onChange(option.value)}
+              >
+                {isActive && <span className="swatch-check">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="background-actions">
+          <label className="board-btn secondary small background-upload" htmlFor={inputId}>
+            {t('board.background.upload')}
+            <input
+              id={inputId}
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  handleBackgroundFile(file, onChange);
+                }
+                event.currentTarget.value = '';
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="board-btn ghost small"
+            onClick={() => onChange('')}
+            disabled={!value}
+          >
+            {t('board.background.reset')}
+          </button>
+        </div>
+        {value && (
+          <div className="background-preview" style={previewStyle}>
+            <span className="background-preview-label">{previewLabel}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const listRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -1806,16 +1908,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   onChange={(e) => setNewBoardTitle(e.target.value)}
                   required
                 />
-                <select
-                  className="input"
-                  style={{ maxWidth: 200 }}
-                  value={newBoardBackground}
-                  onChange={(e) => setNewBoardBackground(e.target.value)}
-                >
-                  {BACKGROUND_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                {renderBackgroundPicker(newBoardBackground, setNewBoardBackground, 'empty-board-background')}
                 <button type="submit" className="board-btn primary">{t('common.create')}</button>
                 <button type="button" className="board-btn ghost" onClick={() => setShowCreateBoard(false)}>
                   {t('common.cancel')}
@@ -2040,16 +2133,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               onChange={(e) => setNewBoardTitle(e.target.value)}
               required
             />
-            <select
-              className="input"
-              style={{ maxWidth: 200 }}
-              value={newBoardBackground}
-              onChange={(e) => setNewBoardBackground(e.target.value)}
-            >
-              {BACKGROUND_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+            {renderBackgroundPicker(newBoardBackground, setNewBoardBackground, 'new-board-background')}
             <button type="submit" className="board-btn primary">{t('common.create')}</button>
           </form>
         )}
@@ -2076,16 +2160,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
               value={editBoardTitle}
               onChange={(e) => setEditBoardTitle(e.target.value)}
             />
-            <select
-              className="input"
-              style={{ maxWidth: 200 }}
-              value={editBoardBackground}
-              onChange={(e) => setEditBoardBackground(e.target.value)}
-            >
-              {BACKGROUND_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+            {renderBackgroundPicker(editBoardBackground, setEditBoardBackground, 'edit-board-background')}
             <button className="board-btn primary" onClick={handleSaveBoard}>{t('common.save')}</button>
           </div>
         )}

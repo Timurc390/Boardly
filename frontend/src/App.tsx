@@ -676,6 +676,95 @@ const globalStyles = `
     height: 36px;
   }
 
+  .background-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 200px;
+  }
+
+  .background-title {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .background-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .background-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(148,163,184,0.35);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .background-swatch.default {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(148,163,184,0.3) 0,
+      rgba(148,163,184,0.3) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+  }
+
+  .background-swatch.active {
+    outline: 2px solid var(--accent-link);
+    outline-offset: 2px;
+  }
+
+  .background-swatch .swatch-check {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+
+  .background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .background-upload input {
+    display: none;
+  }
+
+  .background-preview {
+    width: 140px;
+    height: 48px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .background-preview::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.45) 100%);
+  }
+
+  .background-preview-label {
+    position: absolute;
+    bottom: 6px;
+    left: 8px;
+    font-size: 11px;
+    color: #fff;
+    z-index: 1;
+  }
+
   .board-btn {
     padding: 8px 12px;
     border-radius: var(--radius-sm);

@@ -71,8 +71,8 @@ class Board(models.Model):
     """
     title = models.CharField(max_length=255, verbose_name="Назва Дошки")
     description = models.TextField(blank=True, verbose_name="Опис Дошки")
-    # background_url може зберігати URL зображення або HEX-код кольору
-    background_url = models.CharField(max_length=255, blank=True, verbose_name="Фон Дошки")
+    # background_url може зберігати URL зображення, data URL або HEX-код кольору
+    background_url = models.TextField(blank=True, verbose_name="Фон Дошки")
     is_archived = models.BooleanField(default=False, verbose_name="Архівувати Дошку")
     is_favorite = models.BooleanField(default=False, verbose_name="Обрана Дошка")
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_boards', verbose_name="Власник")
