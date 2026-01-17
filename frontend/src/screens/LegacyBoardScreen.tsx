@@ -238,6 +238,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const [newBoardBackground, setNewBoardBackground] = useState('');
   const [showCreateList, setShowCreateList] = useState(false);
+  const [showBoardPicker, setShowBoardPicker] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [editingListId, setEditingListId] = useState<number | null>(null);
   const [editListTitle, setEditListTitle] = useState('');
@@ -436,6 +437,15 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     const boardId = activeBoard.id;
     setBoards(prev => prev.map(board => (board.id === boardId ? updater(board) : board)));
     setActiveBoard(prev => (prev && prev.id === boardId ? updater(prev) : prev));
+  };
+
+  const handleSelectBoard = (nextBoard: Board | null) => {
+    setActiveBoard(nextBoard);
+    if (nextBoard) {
+      setEditBoardTitle(nextBoard.title);
+      setEditBoardBackground(nextBoard.background_url || '');
+    }
+    setShowBoardPicker(false);
   };
 
   const openDueDatePicker = () => {
@@ -919,6 +929,11 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         return;
       }
 
+      if (event.key === 'Escape' && showBoardPicker) {
+        setShowBoardPicker(false);
+        return;
+      }
+
       if (event.key === 'Escape' && selectedCardId) {
         closeCardDetails();
         return;
@@ -957,7 +972,7 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
 
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [activeListId, commandOpen, lists, openBoardMenu, selectedCardId, showArchivedLists, showMembersModal]);
+  }, [activeListId, commandOpen, lists, openBoardMenu, selectedCardId, showArchivedLists, showBoardPicker, showMembersModal]);
 
   const getNextTempId = () => -Math.floor(Date.now() + Math.random() * 1000);
 
@@ -2065,17 +2080,22 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         )}
         <div className="toolbar-row">
           <div className="toolbar-group toolbar-group-primary">
+            <button
+              type="button"
+              className="board-selector-button"
+              onClick={() => setShowBoardPicker(true)}
+              aria-label={t('board.select.title')}
+            >
+              <span className="board-selector-title">{activeBoard.title}</span>
+              <span className="board-selector-caret" aria-hidden="true">v</span>
+            </button>
             <select
               className="input toolbar-select"
               value={activeBoard.id}
               onChange={(e) => {
                 const id = Number(e.target.value);
                 const nextBoard = boards.find(b => b.id === id) || null;
-                setActiveBoard(nextBoard);
-                if (nextBoard) {
-                  setEditBoardTitle(nextBoard.title);
-                  setEditBoardBackground(nextBoard.background_url || '');
-                }
+                handleSelectBoard(nextBoard);
               }}
             >
               {boards.map(board => (
@@ -2589,6 +2609,182 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           </AnimatePresence>
         )}
       </div>
+
+      <div className="mobile-action-bar" role="toolbar" aria-label={t('toolbar.actions')}>
+        <div className="mobile-action-row">
+          <button
+            type="button"
+            className="mobile-action-btn primary"
+            onClick={() => {
+              setShowCreateList(!showCreateList);
+              setShowCreateBoard(false);
+              setIsEditingBoard(false);
+              setOpenBoardMenu(false);
+            }}
+            aria-label={t('list.addButton')}
+            title={t('list.addButton')}
+          >
+            <span className="mobile-action-icon">+</span>
+            <span className="mobile-action-text">{t('list.addButton')}</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-action-btn${showArchivedCards ? ' active' : ''}`}
+            onClick={() => setShowArchivedCards(prev => !prev)}
+            aria-label={t('archive.cards')}
+            title={t('archive.cards')}
+          >
+            <span className="mobile-action-icon">AC</span>
+            <span className="mobile-action-text">{t('archive.cards')}</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-action-btn${showArchivedLists ? ' active' : ''}`}
+            onClick={() => setShowArchivedLists(prev => !prev)}
+            aria-label={t('archive.lists')}
+            title={t('archive.lists')}
+          >
+            <span className="mobile-action-icon">AL</span>
+            <span className="mobile-action-text">{t('archive.lists')}</span>
+          </button>
+          <button
+            type="button"
+            className="mobile-action-btn"
+            onClick={() => {
+              setShowMembersModal(true);
+              setOpenBoardMenu(false);
+              setOpenListMenuId(null);
+              setOpenCardMenuId(null);
+            }}
+            aria-label={t('members.shareAria')}
+            title={t('common.share')}
+          >
+            <span className="mobile-action-icon">SH</span>
+            <span className="mobile-action-text">{t('common.share')}</span>
+          </button>
+          <div className="board-menu">
+            <button
+              className="mobile-action-btn"
+              onClick={() => {
+                setOpenBoardMenu(!openBoardMenu);
+                setOpenListMenuId(null);
+                setOpenCardMenuId(null);
+              }}
+              aria-label={t('board.menu')}
+              title={t('board.menu')}
+            >
+              <span className="mobile-action-icon">...</span>
+              <span className="mobile-action-text">{t('board.menu')}</span>
+            </button>
+            {openBoardMenu && (
+              <div className="board-menu-panel" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setOpenBoardMenu(false);
+                    setShowCreateBoard(true);
+                    setShowCreateList(false);
+                    setIsEditingBoard(false);
+                  }}
+                >
+                  {t('board.create.newButton')}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setOpenBoardMenu(false);
+                    setIsEditingBoard(!isEditingBoard);
+                    setShowCreateBoard(false);
+                    setShowCreateList(false);
+                  }}
+                >
+                  {isEditingBoard ? t('common.cancel') : t('board.settings')}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setOpenBoardMenu(false);
+                    setShowMembersModal(true);
+                  }}
+                >
+                  {t('members.title')}
+                </button>
+                <div className="menu-divider" />
+                <button
+                  className="menu-item danger"
+                  onClick={() => {
+                    setOpenBoardMenu(false);
+                    handleToggleBoardArchive();
+                  }}
+                >
+                  {activeBoard.is_archived ? t('board.unarchive') : t('board.archive')}
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="mobile-action-btn"
+            onClick={() => {
+              setCommandQuery('');
+              setCommandOpen(true);
+            }}
+            aria-label={t('hotkeys.aria')}
+            title={t('hotkeys.hint')}
+          >
+            <span className="mobile-action-icon">?</span>
+            <span className="mobile-action-text">{t('hotkeys.hint')}</span>
+          </button>
+        </div>
+      </div>
+
+      {showBoardPicker && (
+        <div
+          className="modal-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowBoardPicker(false);
+            }
+          }}
+        >
+          <div
+            className="modal board-picker-modal"
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">{t('board.select.title')}</h3>
+                <div className="modal-subtitle">{activeBoard.title}</div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon modal-close"
+                onClick={() => setShowBoardPicker(false)}
+                aria-label={t('common.close')}
+              >
+                x
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="board-picker-list">
+                {boards.map(board => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    className={`board-picker-item${board.id === activeBoard.id ? ' active' : ''}`}
+                    onClick={() => handleSelectBoard(board)}
+                  >
+                    <span className="board-picker-title">
+                      {board.title}{board.is_archived ? ` ${t('board.archivedSuffix')}` : ''}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       <AnimatePresence>

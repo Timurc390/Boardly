@@ -26,10 +26,17 @@
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "browserstack-node-sdk": "^1.49.2"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:mobile": "playwright test",
+    "test:mobile:report": "playwright show-report",
+    "test:mobile:bs": "browserstack-node-sdk playwright test --config=playwright.config.ts",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
