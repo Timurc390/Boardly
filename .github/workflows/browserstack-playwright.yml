@@ -14,7 +14,11 @@ on:
       checklist_mode:
         description: 'Run BrowserStack checklist warmup (1) or full tests (0)'
         required: false
-        default: '1'
+        default: '0'
+      checklist_variant:
+        description: 'Checklist run variant: combos or parallels'
+        required: false
+        default: 'combos'
   push:
     branches:
       - broadly
@@ -36,8 +40,9 @@ jobs:
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
       TEST_BOARD_ID: ${{ inputs.test_board_id || secrets.TEST_BOARD_ID }}
       BROWSERSTACK_CI: 'true'
-      BROWSERSTACK_PARALLEL_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.checklist_mode || '1' }}
-      BROWSERSTACK_PARALLEL_WORKERS: ${{ github.event_name == 'workflow_dispatch' && (inputs.checklist_mode == '1' && '5' || '1') || '5' }}
+      BROWSERSTACK_PARALLEL_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.checklist_mode || '0' }}
+      BROWSERSTACK_PARALLEL_WORKERS: '1'
+      CI: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,6 +54,58 @@ jobs:
         run: |
           echo "BROWSERSTACK_LOG_DIR=$RUNNER_TEMP/bs-logs" >> $GITHUB_ENV
           echo "BROWSERSTACK_INTERNAL_LOG_DIR=$RUNNER_TEMP/bs-logs-internal" >> $GITHUB_ENV
+      - name: Prepare BrowserStack checklist config
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.checklist_mode == '1' }}
+        run: |
+          if [ "${{ inputs.checklist_variant }}" = "parallels" ]; then
+            cat > frontend/browserstack.yml <<'YAML'
+          userName: ${BROWSERSTACK_USERNAME}
+          accessKey: ${BROWSERSTACK_ACCESS_KEY}
+          framework: playwright
+          platforms:
+            - os: Windows
+              osVersion: 11
+              browserName: chrome
+              browserVersion: latest
+          parallelsPerPlatform: 5
+          browserstackLocal: false
+          buildName: boardly-parallels
+          projectName: boardly
+          debug: true
+          consoleLogs: info
+          YAML
+          else
+            cat > frontend/browserstack.yml <<'YAML'
+          userName: ${BROWSERSTACK_USERNAME}
+          accessKey: ${BROWSERSTACK_ACCESS_KEY}
+          framework: playwright
+          platforms:
+            - os: Windows
+              osVersion: 11
+              browserName: chrome
+              browserVersion: latest
+            - os: Windows
+              osVersion: 11
+              browserName: edge
+              browserVersion: latest
+            - os: Windows
+              osVersion: 11
+              browserName: playwright-firefox
+            - os: OS X
+              osVersion: Monterey
+              browserName: chrome
+              browserVersion: latest
+            - os: OS X
+              osVersion: Monterey
+              browserName: playwright-webkit
+          parallelsPerPlatform: 1
+          browserstackLocal: false
+          buildName: boardly-combos
+          projectName: boardly
+          debug: true
+          consoleLogs: info
+          YAML
+          fi
       - name: Install dependencies
         run: npm ci
         working-directory: frontend
