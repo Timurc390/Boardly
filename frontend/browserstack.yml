@@ -12,7 +12,7 @@ platforms:
   - browserName: chrome
     osVersion: 13.0
     deviceName: Samsung Galaxy S22
-parallelsPerPlatform: 2
+parallelsPerPlatform: 5
 browserstackLocal: true
 buildName: boardly-mobile
 projectName: boardly

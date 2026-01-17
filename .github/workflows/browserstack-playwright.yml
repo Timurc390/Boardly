@@ -23,6 +23,7 @@ jobs:
       TEST_USERNAME: ${{ secrets.TEST_USERNAME }}
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
       TEST_BOARD_ID: ${{ inputs.test_board_id || secrets.TEST_BOARD_ID }}
+      BROWSERSTACK_CI: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
