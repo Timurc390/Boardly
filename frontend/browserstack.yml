@@ -2,14 +2,18 @@ userName: ${BROWSERSTACK_USERNAME}
 accessKey: ${BROWSERSTACK_ACCESS_KEY}
 framework: playwright
 platforms:
+  - os: Windows
+    osVersion: 11
+    browserName: chrome
+    browserVersion: latest
   - browserName: safari
     osVersion: 17
     deviceName: iPhone 15
   - browserName: chrome
     osVersion: 13.0
     deviceName: Samsung Galaxy S22
-parallelsPerPlatform: 1
-browserstackLocal: false
+parallelsPerPlatform: 2
+browserstackLocal: true
 buildName: boardly-mobile
 projectName: boardly
 debug: true
