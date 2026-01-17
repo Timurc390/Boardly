@@ -2118,12 +2118,16 @@ const globalStyles = `
   @media (max-width: 640px) {
     h1 { font-size: 36px; }
     .page { padding: 24px 16px; }
-    .top-nav { padding: 0 16px; }
+    .top-nav { height: 56px; padding: 0 14px; }
+    .board-surface .board-toolbar { top: 56px; }
     .nav-logo { font-size: 16px; max-width: 60vw; }
     .nav-greeting { display: none; }
     .board-toolbar { padding: 10px 16px 14px; }
+    .toolbar-group-primary { display: grid; gap: 6px; }
+    .toolbar-select { display: none; }
+    .board-selector-button { display: flex; }
     .toolbar-search .input { width: 100%; }
-    .board-layout { padding: 12px 16px calc(20px + env(safe-area-inset-bottom)); gap: 12px; }
+    .board-layout { padding: 8px 12px calc(16px + env(safe-area-inset-bottom)); gap: 12px; }
     .kanban-column { flex: 0 0 240px; width: 240px; min-width: 240px; }
     .members-label { display: none; }
     .member-avatar { width: 26px; height: 26px; font-size: 10px; }
@@ -2165,7 +2169,9 @@ const globalStyles = `
     }
     .modal-title { font-size: 16px; }
     .modal-subtitle { font-size: 11px; }
-    .board-toolbar { padding: 8px 12px 10px; gap: 6px; }
+    .top-nav { height: 52px; padding: 0 12px; }
+    .board-surface .board-toolbar { top: 52px; }
+    .board-toolbar { padding: 6px 10px 8px; gap: 4px; }
     .mycards-grid { grid-template-columns: 1fr; }
     .profile-shell { gap: 20px; }
     .profile-card { padding: 18px; gap: 12px; }
@@ -2175,22 +2181,27 @@ const globalStyles = `
     .profile-grid { gap: 12px; }
     .profile-hint { font-size: 12px; }
     .faq-item { padding: 14px; }
-    .toolbar-row { flex-direction: column; align-items: stretch; gap: 6px; }
-    .toolbar-group { gap: 6px; }
+    .toolbar-row { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; }
+    .toolbar-group { gap: 4px; }
     .toolbar-group-primary { flex: 1 1 100%; display: grid; gap: 4px; }
     .toolbar-group-actions,
     .toolbar-divider { display: none; }
     .toolbar-select { display: none; }
-    .board-selector-button { display: flex; }
-    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 6px; }
-    .toolbar-search .input { min-width: 0; width: 100%; padding: 6px 2px; }
+    .board-selector-button {
+      display: flex;
+      height: 34px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 8px; }
+    .toolbar-search .input { min-width: 0; width: 100%; padding: 4px 2px; }
     .toolbar-pill { padding: 4px 8px; font-size: 11px; }
     .toolbar-meta { font-size: 11px; }
     .toolbar-panel { padding: 8px 10px; gap: 8px; }
     .members-trigger { padding: 4px 8px; }
     .board-btn { padding: 6px 10px; font-size: 12px; min-height: 30px; }
     .board-btn.icon { width: 30px; height: 30px; }
-    .board-layout { padding-bottom: calc(20px + 64px + env(safe-area-inset-bottom)); }
+    .board-layout { padding-bottom: calc(16px + 64px + env(safe-area-inset-bottom)); }
     .mobile-action-bar {
       position: fixed;
       left: 0;
@@ -2205,6 +2216,8 @@ const globalStyles = `
       border-top: 1px solid var(--border-subtle);
       box-shadow: 0 -12px 28px rgba(0,0,0,0.3);
     }
+    .board-picker-modal { width: calc(100vw - 24px); }
+    .board-picker-list { max-height: 45vh; }
     .mobile-action-bar .board-menu-panel {
       top: auto;
       bottom: 44px;
