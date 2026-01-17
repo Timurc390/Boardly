@@ -2,10 +2,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.BASE_URL || 'http://localhost:3000';
+const isBrowserStack = Boolean(process.env.BROWSERSTACK_USERNAME);
 
 export default defineConfig({
   testDir: './tests',
-  timeout: 60000,
+  timeout: isBrowserStack ? 120000 : 60000,
+  workers: isBrowserStack ? 1 : undefined,
   expect: { timeout: 10000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
