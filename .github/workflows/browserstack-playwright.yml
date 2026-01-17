@@ -11,6 +11,18 @@ on:
         description: 'Optional board id for /board?board=...'
         required: false
         default: ''
+      checklist_mode:
+        description: 'Run BrowserStack checklist warmup (1) or full tests (0)'
+        required: false
+        default: '1'
+  push:
+    branches:
+      - broadly
+    paths:
+      - .github/workflows/browserstack-playwright.yml
+      - frontend/browserstack.yml
+      - frontend/playwright.config.ts
+      - frontend/tests/bs-parallel.spec.ts
 
 jobs:
   browserstack:
@@ -24,8 +36,8 @@ jobs:
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
       TEST_BOARD_ID: ${{ inputs.test_board_id || secrets.TEST_BOARD_ID }}
       BROWSERSTACK_CI: 'true'
-      BROWSERSTACK_PARALLEL_RUN: '1'
-      BROWSERSTACK_PARALLEL_WORKERS: '5'
+      BROWSERSTACK_PARALLEL_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.checklist_mode || '1' }}
+      BROWSERSTACK_PARALLEL_WORKERS: ${{ github.event_name == 'workflow_dispatch' && (inputs.checklist_mode == '1' && '5' || '1') || '5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
