@@ -58,9 +58,9 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.checklist_mode == '1' }}
         run: |
           if [ "${{ inputs.checklist_variant }}" = "parallels" ]; then
-            cat > frontend/browserstack.yml <<'YAML'
-          userName: ${BROWSERSTACK_USERNAME}
-          accessKey: ${BROWSERSTACK_ACCESS_KEY}
+            cat > frontend/browserstack.yml <<YAML
+          userName: $BROWSERSTACK_USERNAME
+          accessKey: $BROWSERSTACK_ACCESS_KEY
           framework: playwright
           platforms:
             - os: Windows
@@ -75,9 +75,9 @@ jobs:
           consoleLogs: info
           YAML
           else
-            cat > frontend/browserstack.yml <<'YAML'
-          userName: ${BROWSERSTACK_USERNAME}
-          accessKey: ${BROWSERSTACK_ACCESS_KEY}
+            cat > frontend/browserstack.yml <<YAML
+          userName: $BROWSERSTACK_USERNAME
+          accessKey: $BROWSERSTACK_ACCESS_KEY
           framework: playwright
           platforms:
             - os: Windows
