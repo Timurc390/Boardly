@@ -2108,6 +2108,7 @@ const globalStyles = `
     .activity-item > .activity-meta { justify-self: start; }
     .toolbar-row { flex-direction: column; align-items: stretch; }
     .toolbar-group { width: 100%; }
+    .toolbar-group-primary { flex: 1 1 auto; }
     .toolbar-select { width: 100%; min-width: 0; }
     .toolbar-search { width: 100%; }
     .toolbar-search .input { width: 100%; }
@@ -2123,7 +2124,7 @@ const globalStyles = `
     .nav-logo { font-size: 16px; max-width: 60vw; }
     .nav-greeting { display: none; }
     .board-toolbar { padding: 10px 16px 14px; }
-    .toolbar-group-primary { display: grid; gap: 6px; }
+    .toolbar-group-primary { display: grid; gap: 6px; flex: 1 1 auto; align-content: start; }
     .toolbar-select { display: none; }
     .board-selector-button { display: flex; }
     .toolbar-search .input { width: 100%; }
@@ -2183,18 +2184,18 @@ const globalStyles = `
     .faq-item { padding: 14px; }
     .toolbar-row { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; }
     .toolbar-group { gap: 4px; }
-    .toolbar-group-primary { flex: 1 1 100%; display: grid; gap: 4px; }
+    .toolbar-group-primary { flex: 1 1 auto; display: grid; gap: 2px; align-content: start; }
     .toolbar-group-actions,
     .toolbar-divider { display: none; }
     .toolbar-select { display: none; }
     .board-selector-button {
       display: flex;
-      height: 34px;
-      padding: 6px 10px;
+      height: 32px;
+      padding: 4px 8px;
       font-size: 12px;
     }
-    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 8px; }
-    .toolbar-search .input { min-width: 0; width: 100%; padding: 4px 2px; }
+    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 6px; min-height: 32px; }
+    .toolbar-search .input { min-width: 0; width: 100%; padding: 2px 0; height: 28px; }
     .toolbar-pill { padding: 4px 8px; font-size: 11px; }
     .toolbar-meta { font-size: 11px; }
     .toolbar-panel { padding: 8px 10px; gap: 8px; }
@@ -2216,8 +2217,10 @@ const globalStyles = `
       border-top: 1px solid var(--border-subtle);
       box-shadow: 0 -12px 28px rgba(0,0,0,0.3);
     }
-    .board-picker-modal { width: calc(100vw - 24px); }
-    .board-picker-list { max-height: 45vh; }
+    .board-picker-modal { width: calc(100vw - 20px); }
+    .board-picker-list { max-height: 38vh; }
+    .board-picker-item { padding: 8px 10px; }
+    .board-picker-title { font-size: 12px; }
     .mobile-action-bar .board-menu-panel {
       top: auto;
       bottom: 44px;
