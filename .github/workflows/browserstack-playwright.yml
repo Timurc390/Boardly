@@ -25,7 +25,7 @@ jobs:
       TEST_BOARD_ID: ${{ inputs.test_board_id || secrets.TEST_BOARD_ID }}
       BROWSERSTACK_CI: 'true'
       BROWSERSTACK_PARALLEL_RUN: '1'
-      BROWSERSTACK_PARALLEL_WORKERS: '1'
+      BROWSERSTACK_PARALLEL_WORKERS: '5'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

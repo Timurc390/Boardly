@@ -10,6 +10,12 @@ const browserStackWorkers = process.env.BROWSERSTACK_PARALLEL_RUN ? bsWorkers : 
 const testMatch = process.env.BROWSERSTACK_PARALLEL_RUN
   ? ['**/bs-parallel.spec.ts']
   : undefined;
+const projects = process.env.BROWSERSTACK_PARALLEL_RUN
+  ? [{ name: 'browserstack' }]
+  : [
+      { name: 'iPhone 13', use: { ...devices['iPhone 13'] } },
+      { name: 'Pixel 5', use: { ...devices['Pixel 5'] } }
+    ];
 
 export default defineConfig({
   testDir: './tests',
@@ -25,8 +31,5 @@ export default defineConfig({
     video: 'retain-on-failure',
     ignoreHTTPSErrors: false
   },
-  projects: [
-    { name: 'iPhone 13', use: { ...devices['iPhone 13'] } },
-    { name: 'Pixel 5', use: { ...devices['Pixel 5'] } }
-  ]
+  projects
 });
