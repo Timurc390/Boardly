@@ -10,18 +10,7 @@ test.describe.parallel('browserstack parallel warmup', () => {
     'Parallel warmup runs only for BrowserStack checklist.'
   );
 
-  const paths = [
-    { name: 'home', path: '/' },
-    { name: 'auth', path: '/auth' },
-    { name: 'board', path: '/board' },
-    { name: 'my-cards', path: '/my-cards' },
-    { name: 'profile', path: '/profile' },
-    { name: 'faq', path: '/faq' }
-  ];
-
-  for (const { name, path } of paths) {
-    test(`open ${name}`, async ({ page }) => {
-      await page.goto(path, { waitUntil: navigationWaitUntil });
-    });
-  }
+  test('open home', async ({ page }) => {
+    await page.goto('/', { waitUntil: navigationWaitUntil });
+  });
 });

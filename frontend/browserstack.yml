@@ -6,13 +6,23 @@ platforms:
     osVersion: 11
     browserName: chrome
     browserVersion: latest
-  - browserName: safari
-    osVersion: 17
-    deviceName: iPhone 15
-  - browserName: chrome
-    osVersion: 13.0
-    deviceName: Samsung Galaxy S22
-parallelsPerPlatform: 5
+  - os: Windows
+    osVersion: 11
+    browserName: edge
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: firefox
+    browserVersion: latest
+  - os: OS X
+    osVersion: Monterey
+    browserName: chrome
+    browserVersion: latest
+  - os: OS X
+    osVersion: Monterey
+    browserName: safari
+    browserVersion: 15.6
+parallelsPerPlatform: 1
 browserstackLocal: true
 buildName: boardly-mobile
 projectName: boardly

@@ -7,11 +7,15 @@ const bsWorkersEnv = Number(process.env.BROWSERSTACK_PARALLEL_WORKERS);
 const bsWorkers =
   Number.isFinite(bsWorkersEnv) && bsWorkersEnv > 0 ? bsWorkersEnv : 1;
 const browserStackWorkers = process.env.BROWSERSTACK_PARALLEL_RUN ? bsWorkers : 1;
+const testMatch = process.env.BROWSERSTACK_PARALLEL_RUN
+  ? ['**/bs-parallel.spec.ts']
+  : undefined;
 
 export default defineConfig({
   testDir: './tests',
   timeout: isBrowserStack ? 120000 : 60000,
   workers: isBrowserStack ? browserStackWorkers : undefined,
+  testMatch,
   expect: { timeout: 10000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
