@@ -14,8 +14,6 @@ jobs:
       TEST_USERNAME: ${{ secrets.TEST_USERNAME }}
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
       TEST_BOARD_ID: ${{ secrets.TEST_BOARD_ID }}
-      BROWSERSTACK_LOG_DIR: ${{ runner.temp }}/bs-logs
-      BROWSERSTACK_INTERNAL_LOG_DIR: ${{ runner.temp }}/bs-logs-internal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +21,10 @@ jobs:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
+      - name: Set BrowserStack log directories
+        run: |
+          echo "BROWSERSTACK_LOG_DIR=$RUNNER_TEMP/bs-logs" >> $GITHUB_ENV
+          echo "BROWSERSTACK_INTERNAL_LOG_DIR=$RUNNER_TEMP/bs-logs-internal" >> $GITHUB_ENV
       - name: Install dependencies
         run: npm ci
         working-directory: frontend
