@@ -2170,11 +2170,31 @@ const globalStyles = `
     .board-surface .board-toolbar { top: 56px; }
     .nav-logo { font-size: 16px; max-width: 60vw; }
     .nav-greeting { display: none; }
-    .board-toolbar { padding: 10px 16px 14px; }
-    .toolbar-group-primary { display: grid; gap: 6px; flex: 1 1 auto; align-content: start; }
+    .board-toolbar { padding: 6px 12px 8px; gap: 6px; }
+    .toolbar-row { gap: 4px; }
+    .toolbar-group { gap: 6px; }
+    .toolbar-group-primary { display: grid; gap: 2px; flex: 1 1 auto; align-content: start; }
     .toolbar-select { display: none; }
     .board-selector-button { display: flex; }
-    .toolbar-search .input { width: 100%; }
+    .toolbar-search { padding: 0 6px; min-height: 32px; }
+    .toolbar-search .input { width: 100%; padding: 2px 0; min-width: 0; font-size: 12px; }
+    .toolbar-group-actions {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .toolbar-group-actions::-webkit-scrollbar { display: none; }
+    .toolbar-group-actions .board-btn { padding: 6px 10px; font-size: 12px; min-height: 30px; }
+    .toolbar-group-actions .board-btn.icon { width: 30px; height: 30px; padding: 0; }
+    .toolbar-group-actions .toolbar-pill {
+      width: auto;
+      justify-content: flex-start;
+      white-space: nowrap;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
     .board-layout { padding: 8px 12px calc(16px + env(safe-area-inset-bottom)); gap: 12px; }
     .kanban-column { flex: 0 0 240px; width: 240px; min-width: 240px; }
     .members-label { display: none; }
@@ -2219,7 +2239,7 @@ const globalStyles = `
     .modal-subtitle { font-size: 11px; }
     .top-nav { height: 52px; padding: 0 12px; }
     .board-surface .board-toolbar { top: 52px; }
-    .board-toolbar { padding: 4px 8px 6px; gap: 4px; }
+    .board-toolbar { padding: 4px 8px 6px; gap: 3px; }
     .mycards-grid { grid-template-columns: 1fr; }
     .profile-shell { gap: 20px; }
     .profile-card { padding: 18px; gap: 12px; }
@@ -2231,18 +2251,18 @@ const globalStyles = `
     .faq-item { padding: 14px; }
     .toolbar-row { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 2px; }
     .toolbar-group { gap: 4px; }
-    .toolbar-group-primary { flex: 1 1 auto; display: grid; gap: 2px; align-content: start; }
+    .toolbar-group-primary { flex: 1 1 auto; display: grid; gap: 1px; align-content: start; }
     .toolbar-group-actions,
     .toolbar-divider { display: none; }
     .toolbar-select { display: none; }
     .board-selector-button {
       display: flex;
-      height: 30px;
-      padding: 3px 8px;
+      height: 28px;
+      padding: 2px 8px;
       font-size: 12px;
     }
-    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 4px; min-height: 30px; }
-    .toolbar-search .input { min-width: 0; width: 100%; padding: 0; height: 26px; font-size: 12px; }
+    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 4px; min-height: 28px; }
+    .toolbar-search .input { min-width: 0; width: 100%; padding: 0; height: 24px; font-size: 12px; }
     .toolbar-pill { padding: 4px 8px; font-size: 11px; }
     .toolbar-meta { font-size: 11px; }
     .toolbar-panel { padding: 8px 10px; gap: 8px; }
