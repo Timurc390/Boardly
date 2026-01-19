@@ -2219,7 +2219,7 @@ const globalStyles = `
     .modal-subtitle { font-size: 11px; }
     .top-nav { height: 52px; padding: 0 12px; }
     .board-surface .board-toolbar { top: 52px; }
-    .board-toolbar { padding: 6px 10px 8px; gap: 4px; }
+    .board-toolbar { padding: 4px 8px 6px; gap: 4px; }
     .mycards-grid { grid-template-columns: 1fr; }
     .profile-shell { gap: 20px; }
     .profile-card { padding: 18px; gap: 12px; }
@@ -2229,7 +2229,7 @@ const globalStyles = `
     .profile-grid { gap: 12px; }
     .profile-hint { font-size: 12px; }
     .faq-item { padding: 14px; }
-    .toolbar-row { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; }
+    .toolbar-row { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 2px; }
     .toolbar-group { gap: 4px; }
     .toolbar-group-primary { flex: 1 1 auto; display: grid; gap: 2px; align-content: start; }
     .toolbar-group-actions,
@@ -2237,12 +2237,12 @@ const globalStyles = `
     .toolbar-select { display: none; }
     .board-selector-button {
       display: flex;
-      height: 32px;
-      padding: 4px 8px;
+      height: 30px;
+      padding: 3px 8px;
       font-size: 12px;
     }
-    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 6px; min-height: 32px; }
-    .toolbar-search .input { min-width: 0; width: 100%; padding: 2px 0; height: 28px; }
+    .toolbar-search { flex: 1 1 100%; min-width: 0; padding: 0 4px; min-height: 30px; }
+    .toolbar-search .input { min-width: 0; width: 100%; padding: 0; height: 26px; font-size: 12px; }
     .toolbar-pill { padding: 4px 8px; font-size: 11px; }
     .toolbar-meta { font-size: 11px; }
     .toolbar-panel { padding: 8px 10px; gap: 8px; }
@@ -2265,7 +2265,7 @@ const globalStyles = `
       box-shadow: 0 -12px 28px rgba(0,0,0,0.3);
     }
     .board-picker-modal { width: calc(100vw - 20px); }
-    .board-picker-list { max-height: 38vh; }
+    .board-picker-list { max-height: 40vh; -webkit-overflow-scrolling: touch; }
     .board-picker-item { padding: 8px 10px; }
     .board-picker-title { font-size: 12px; }
     .mobile-action-bar .board-menu-panel {

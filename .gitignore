@@ -33,6 +33,8 @@ Thumbs.db
 *.log
 *.err
 runserver.out
+ngrok-front.log
+ngrok-front.out
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
