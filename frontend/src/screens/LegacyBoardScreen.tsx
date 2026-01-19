@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { LanguageSelect } from '../components/LanguageSelect';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -105,16 +106,6 @@ interface Card {
   comments?: Comment[];
 }
 
-type DragStartEvent =
-  | React.DragEvent<HTMLElement>
-  | React.MouseEvent<HTMLElement>
-  | React.TouchEvent<HTMLElement>
-  | React.PointerEvent<HTMLElement>
-  | DragEvent
-  | MouseEvent
-  | TouchEvent
-  | PointerEvent;
-
 const BACKGROUND_PRESETS = [
   { key: 'board.background.default', value: '' },
   { key: 'board.background.slate', value: '#0f172a' },
@@ -161,10 +152,6 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const inviteHandledRef = useRef<string | null>(null);
   const locationRef = useRef(location);
   locationRef.current = location;
-
-  const isDragEvent = (event: DragStartEvent): event is React.DragEvent<HTMLElement> | DragEvent => (
-    'dataTransfer' in event
-  );
 
   const isBackgroundColor = (value: string) => {
     const normalized = value.trim();
@@ -255,16 +242,13 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const [isBoardLoading, setIsBoardLoading] = useState(false);
   const [openListMenuId, setOpenListMenuId] = useState<number | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<number | null>(null);
+  const [cardMenuAnchor, setCardMenuAnchor] = useState<{ cardId: number; left: number; right: number; top: number; bottom: number } | null>(null);
   const [openBoardMenu, setOpenBoardMenu] = useState(false);
   const [highlightCardId, setHighlightCardId] = useState<number | null>(null);
   const [pendingListHighlightId, setPendingListHighlightId] = useState<number | null>(null);
   const [pendingCardHighlightId, setPendingCardHighlightId] = useState<number | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
-  const [draggingListId, setDraggingListId] = useState<number | null>(null);
-  const [dragOverListId, setDragOverListId] = useState<number | null>(null);
-  const [draggingCardId, setDraggingCardId] = useState<number | null>(null);
-  const [dragOverCardId, setDragOverCardId] = useState<number | null>(null);
 
   const handleBackgroundFile = (file: File, onChange: (value: string) => void) => {
     if (!file.type.startsWith('image/')) {
@@ -560,16 +544,23 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (target.closest('.list-menu') || target.closest('.card-menu') || target.closest('.command-modal') || target.closest('.board-menu')) {
+      if (target.closest('.list-menu') || target.closest('.card-menu') || target.closest('.card-menu-portal') || target.closest('.command-modal') || target.closest('.board-menu')) {
         return;
       }
       setOpenListMenuId(null);
       setOpenCardMenuId(null);
+      setCardMenuAnchor(null);
       setOpenBoardMenu(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  useEffect(() => {
+    if (openCardMenuId === null) {
+      setCardMenuAnchor(null);
+    }
+  }, [openCardMenuId]);
 
   useEffect(() => {
     if (activeBoard) {
@@ -1644,6 +1635,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
   const handleToggleCardArchive = async (card: Card) => {
     const nextValue = !card.is_archived;
     setCards(cards.map(c => c.id === card.id ? { ...c, is_archived: nextValue } : c));
+    if (cardDraft?.id === card.id) {
+      setCardDraft({ ...cardDraft, is_archived: nextValue });
+    }
     try {
       await axios.patch(
         `${API_URL}/cards/${card.id}/`,
@@ -1652,6 +1646,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       );
     } catch {
       setCards(cards.map(c => c.id === card.id ? { ...c, is_archived: card.is_archived } : c));
+      if (cardDraft?.id === card.id) {
+        setCardDraft({ ...cardDraft, is_archived: card.is_archived });
+      }
       setToast(t('toast.cardArchiveFailed'));
     }
   };
@@ -1845,74 +1842,34 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
       <div className="skeleton skeleton-card" />
     </div>
   ));
-  const isDnDEnabled = !hasSearch;
-  const clearDragState = () => {
-    setDraggingListId(null);
-    setDragOverListId(null);
-    setDraggingCardId(null);
-    setDragOverCardId(null);
-  };
-  const handleListDragStart = (event: DragStartEvent, listId: number) => {
-    if (!isDnDEnabled || !isDragEvent(event) || !event.dataTransfer) return;
-    event.dataTransfer.setData('text/plain', `list:${listId}`);
-    event.dataTransfer.effectAllowed = 'move';
-    setDraggingListId(listId);
-    setDraggingCardId(null);
-  };
-  const handleCardDragStart = (event: DragStartEvent, card: Card) => {
-    if (!isDnDEnabled || card.is_archived || !isDragEvent(event) || !event.dataTransfer) return;
-    event.dataTransfer.setData('text/plain', `card:${card.id}`);
-    event.dataTransfer.effectAllowed = 'move';
-    setDraggingCardId(card.id);
-    setDraggingListId(null);
-  };
-  const handleListDragOver = (event: React.DragEvent, listId: number) => {
-    if (!draggingListId && !draggingCardId) return;
-    const targetList = lists.find(list => list.id === listId);
-    if (!targetList || targetList.is_archived) return;
-    event.preventDefault();
-    setDragOverListId(listId);
-  };
-  const handleCardDragOver = (event: React.DragEvent, targetCard: Card) => {
-    const targetList = lists.find(list => list.id === targetCard.list);
-    if (!draggingCardId || draggingCardId === targetCard.id || targetCard.is_archived || targetList?.is_archived) return;
-    event.preventDefault();
-    setDragOverCardId(targetCard.id);
-    setDragOverListId(targetCard.list);
-  };
-  const handleCardDropOnCard = (event: React.DragEvent, targetCard: Card) => {
-    const targetList = lists.find(list => list.id === targetCard.list);
-    if (!draggingCardId || draggingCardId === targetCard.id || targetCard.is_archived || targetList?.is_archived) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const targetListCards = getActiveListCards(targetCard.list);
-    const targetIndex = targetListCards.findIndex(card => card.id === targetCard.id);
-    const sourceIndex = targetListCards.findIndex(card => card.id === draggingCardId);
-    if (targetIndex >= 0) {
-      const adjustedIndex = sourceIndex >= 0 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-      moveCardToPosition(draggingCardId, targetCard.list, adjustedIndex);
+  const isDnDEnabled = !hasSearch && !showArchivedCards && !showArchivedLists;
+  const handleDragEnd = (result: DropResult) => {
+    if (!isDnDEnabled) return;
+    const { destination, source, draggableId, type } = result;
+    if (!destination) return;
+    if (type === 'LIST') {
+      if (destination.index === source.index) return;
+      const listId = Number(draggableId.replace('list-', ''));
+      if (!Number.isFinite(listId)) return;
+      const visibleIds = visibleLists.map(list => list.id);
+      const targetListId = visibleIds[destination.index];
+      const targetIndex = sortedLists.findIndex(list => list.id === targetListId);
+      if (targetIndex < 0) return;
+      handleMoveListToPosition(listId, targetIndex);
+      return;
     }
-    clearDragState();
-  };
-  const handleListDrop = (event: React.DragEvent, listId: number) => {
-    if (!draggingListId && !draggingCardId) return;
-    const targetList = lists.find(list => list.id === listId);
-    if (!targetList || targetList.is_archived) return;
-    event.preventDefault();
-
-    if (draggingListId && draggingListId !== listId) {
-      const targetIndex = sortedLists.findIndex(list => list.id === listId);
-      if (targetIndex >= 0) {
-        handleMoveListToPosition(draggingListId, targetIndex);
-      }
+    if (type === 'CARD') {
+      if (
+        destination.droppableId === source.droppableId
+        && destination.index === source.index
+      ) return;
+      const cardId = Number(draggableId.replace('card-', ''));
+      const targetListId = Number(destination.droppableId.replace('list-', ''));
+      if (!Number.isFinite(cardId) || !Number.isFinite(targetListId)) return;
+      const targetList = lists.find(list => list.id === targetListId);
+      if (!targetList || targetList.is_archived) return;
+      moveCardToPosition(cardId, targetListId, destination.index);
     }
-
-    if (draggingCardId) {
-      const targetListCards = getActiveListCards(listId);
-      moveCardToPosition(draggingCardId, listId, targetListCards.length);
-    }
-
-    clearDragState();
   };
   const activeChecklists = cardDraft ? getCardChecklists(cardDraft) : [];
   const checklistTotal = activeChecklists.reduce((acc, checklist) => acc + (checklist.items?.length || 0), 0);
@@ -1944,6 +1901,9 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
     : '';
   const activeAttachments = cardDraft?.attachments || [];
   const activeComments = cardDraft?.comments || [];
+  const activeCardMenu = openCardMenuId
+    ? cards.find(card => card.id === openCardMenuId) || null
+    : null;
   const commandItems = [
     {
       id: 'create-card',
@@ -2295,7 +2255,14 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
         )}
       </div>
 
-      <div className="board-layout">
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="board" type="LIST" direction="horizontal">
+          {(boardProvided) => (
+            <div
+              className="board-layout"
+              ref={boardProvided.innerRef}
+              {...boardProvided.droppableProps}
+            >
         {showBoardSkeleton ? (
           skeletonColumns
         ) : visibleLists.length === 0 ? (
@@ -2324,27 +2291,26 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
             {visibleLists.map((list, index) => {
             const listCards = cardsForList(list.id);
             const currentListIndex = sortedLists.findIndex(sorted => sorted.id === list.id);
+            const listDragDisabled = !isDnDEnabled || list.is_archived || editingListId === list.id;
             return (
-              <motion.div
+              <Draggable
                 key={list.id}
-                layout
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 12 }}
-                transition={{ duration: 0.18 }}
-                className={`kanban-column${dragOverListId === list.id ? ' drag-over' : ''}${draggingListId === list.id ? ' dragging' : ''}`}
-                onClick={() => setActiveListId(list.id)}
-                onDragOver={(event) => handleListDragOver(event, list.id)}
-                onDrop={(event) => handleListDrop(event, list.id)}
-                ref={(node) => { listRefs.current[list.id] = node; }}
+                draggableId={`list-${list.id}`}
+                index={index}
+                isDragDisabled={listDragDisabled}
               >
-                <div
-                  className="list-header"
-                  draggable={isDnDEnabled && !list.is_archived && editingListId !== list.id}
-                  onDragStart={(event) => handleListDragStart(event, list.id)}
-                  onDragEnd={clearDragState}
-                >
-                  <div className="list-title">
+                {(listProvided, listSnapshot) => (
+                  <div
+                    ref={(node) => {
+                      listProvided.innerRef(node);
+                      listRefs.current[list.id] = node;
+                    }}
+                    {...listProvided.draggableProps}
+                    className={`kanban-column${listSnapshot.isDragging ? ' dragging' : ''}`}
+                    onClick={() => setActiveListId(list.id)}
+                  >
+                <div className="list-header">
+                  <div className="list-title drag-handle" {...listProvided.dragHandleProps}>
                     <div className={`dot col-${index % 3}`}></div>
                     {editingListId === list.id ? (
                       <input
@@ -2460,12 +2426,17 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     </div>
                   </div>
                 </div>
-
-                <div className="task-list">
+                <Droppable droppableId={`list-${list.id}`} type="CARD">
+                  {(cardProvided, cardSnapshot) => (
+                    <div
+                      className={`task-list${cardSnapshot.isDraggingOver ? ' drag-over' : ''}`}
+                      ref={cardProvided.innerRef}
+                      {...cardProvided.droppableProps}
+                    >
                   {listCards.length === 0 && (
                     <div className="empty-state">{emptyListMessage}</div>
                   )}
-                  {listCards.map(card => {
+                  {listCards.map((card, cardIndex) => {
                     const cardLabels = card.labels || [];
                     const cardChecklists = card.checklists || [];
                     const cardChecklistTotal = cardChecklists.reduce((acc, checklist) => acc + (checklist.items?.length || 0), 0);
@@ -2473,123 +2444,95 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                       acc + (checklist.items || []).filter(item => item.is_checked).length
                     ), 0);
                     const dueLabel = card.due_date ? toDateInputValue(card.due_date) : '';
+                    const cardDragDisabled = !isDnDEnabled || card.is_archived || list.is_archived;
                     return (
-                      <motion.div
+                      <Draggable
                         key={card.id}
-                        layout
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 6 }}
-                        transition={{ duration: 0.16 }}
-                        className={`task-card${highlightCardId === card.id ? ' highlight' : ''}${draggingCardId === card.id ? ' dragging' : ''}${dragOverCardId === card.id ? ' drag-over' : ''}`}
-                        style={card.is_archived ? { opacity: 0.6 } : undefined}
-                        onClick={() => openCardDetails(card)}
-                        draggable={isDnDEnabled && !card.is_archived && !list.is_archived}
-                        onDragStart={(event) => handleCardDragStart(event, card)}
-                        onDragEnd={clearDragState}
-                        onDragOver={(event) => handleCardDragOver(event, card)}
-                        onDrop={(event) => handleCardDropOnCard(event, card)}
-                        ref={(node) => { cardRefs.current[card.id] = node; }}
+                        draggableId={`card-${card.id}`}
+                        index={cardIndex}
+                        isDragDisabled={cardDragDisabled}
                       >
-                        {card.card_color && <div className="card-color-bar" style={{ backgroundColor: card.card_color }} />}
-                        <div className="card-meta">
-                          {card.is_archived && <span className="card-badge">{t('archive.badge')}</span>}
-                          {dueLabel && <span className="card-badge due">{dueLabel}</span>}
-                          {cardChecklistTotal > 0 && (
-                            <span className="card-badge progress">{cardChecklistDone}/{cardChecklistTotal}</span>
-                          )}
-                          {cardLabels.length > 0 && (
-                            <div className="card-labels">
-                              {cardLabels.map(label => (
-                                <span key={label.id} className="card-label" style={{ backgroundColor: label.color }} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="task-title">{highlightText(card.title)}</div>
-                        {card.description && <div className="task-desc">{highlightText(card.description)}</div>}
-
-                        <div className="task-footer">
-                          <div className="card-menu">
-                            <button
-                              className="card-menu-button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setOpenCardMenuId(openCardMenuId === card.id ? null : card.id);
-                                setOpenListMenuId(null);
-                                setOpenBoardMenu(false);
+                        {(cardProvided, cardSnapshot) => {
+                          const cardStyle = {
+                            ...(cardProvided.draggableProps.style || {}),
+                            ...(card.is_archived ? { opacity: 0.6 } : undefined)
+                          };
+                          return (
+                            <div
+                              ref={(node) => {
+                                cardProvided.innerRef(node);
+                                cardRefs.current[card.id] = node;
                               }}
-                              onMouseDown={(event) => event.stopPropagation()}
-                              aria-label={t('card.menu')}
-                              title={t('card.menu')}
+                              {...cardProvided.draggableProps}
+                              {...cardProvided.dragHandleProps}
+                              className={`task-card${highlightCardId === card.id ? ' highlight' : ''}${cardSnapshot.isDragging ? ' dragging' : ''}`}
+                              style={cardStyle}
+                              onClick={(event) => {
+                                const target = event.target as HTMLElement;
+                                if (target.closest('.card-menu')) return;
+                                if (cardSnapshot.isDragging) return;
+                                openCardDetails(card);
+                              }}
                             >
-                              ...
-                            </button>
-                            {openCardMenuId === card.id && (
-                              <div className="card-menu-panel" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
-                                <label className="menu-label">
-                                  {t('card.moveToList')}
-                                  <select
-                                    className="input"
-                                    value={card.list}
-                                    onChange={(event) => {
-                                      const targetId = Number(event.target.value);
-                                      if (targetId !== card.list) {
-                                        handleMoveCard(card, targetId);
-                                      }
-                                      setOpenCardMenuId(null);
-                                    }}
-                                  >
-                                    {sortedLists.map(targetList => (
-                                      <option key={targetList.id} value={targetList.id}>
-                                        {targetList.title}{targetList.is_archived ? ` ${t('board.archivedSuffix')}` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <button
-                                  className="menu-item"
-                                  onClick={() => {
-                                    setOpenCardMenuId(null);
-                                    handleCopyCard(card);
-                                  }}
-                                >
-                                  {t('card.copy')}
-                                </button>
-                                <button
-                                  className="menu-item"
-                                  onClick={() => {
-                                    setOpenCardMenuId(null);
-                                    handleShareCard(card);
-                                  }}
-                                >
-                                  {t('common.share')}
-                                </button>
-                                <button
-                                  className="menu-item"
-                                  onClick={() => {
-                                    setOpenCardMenuId(null);
-                                    handleToggleCardArchive(card);
-                                  }}
-                                >
-                                  {card.is_archived ? t('card.unarchive') : t('card.archive')}
-                                </button>
-                                <button
-                                  className="menu-item danger"
-                                  onClick={() => {
-                                    setOpenCardMenuId(null);
-                                    handleDelete(card.id);
-                                  }}
-                                >
-                                  {t('common.delete')}
-                                </button>
+                              <div className="task-content">
+                                {card.card_color && <div className="card-color-bar" style={{ backgroundColor: card.card_color }} />}
+                                <div className="card-meta">
+                                  {card.is_archived && <span className="card-badge">{t('archive.badge')}</span>}
+                                  {dueLabel && <span className="card-badge due">{dueLabel}</span>}
+                                  {cardChecklistTotal > 0 && (
+                                    <span className="card-badge progress">{cardChecklistDone}/{cardChecklistTotal}</span>
+                                  )}
+                                  {cardLabels.length > 0 && (
+                                    <div className="card-labels">
+                                      {cardLabels.map(label => (
+                                        <span key={label.id} className="card-label" style={{ backgroundColor: label.color }} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="task-title">{highlightText(card.title)}</div>
+                                {card.description && <div className="task-desc">{highlightText(card.description)}</div>}
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
+
+                              <div className="task-footer">
+                                <div className="card-menu">
+                                  <button
+                                    className="card-menu-button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (openCardMenuId === card.id) {
+                                        setOpenCardMenuId(null);
+                                        setCardMenuAnchor(null);
+                                        return;
+                                      }
+                                      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                                      setCardMenuAnchor({
+                                        cardId: card.id,
+                                        left: rect.left,
+                                        right: rect.right,
+                                        top: rect.top,
+                                        bottom: rect.bottom
+                                      });
+                                      setOpenCardMenuId(card.id);
+                                      setOpenListMenuId(null);
+                                      setOpenBoardMenu(false);
+                                    }}
+                                    onMouseDown={(event) => event.stopPropagation()}
+                                    aria-label={t('card.menu')}
+                                    title={t('card.menu')}
+                                  >
+                                    ...
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </Draggable>
                     );
                   })}
+
+                  {cardProvided.placeholder}
 
                   {addingToListId === list.id ? (
                     <form onSubmit={(e) => handleAddTask(e, list.id)} style={{ marginTop: 12 }}>
@@ -2603,12 +2546,20 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                     <button onClick={() => { setActiveListId(list.id); setAddingToListId(list.id); setNewTaskTitle(''); }} className="board-btn ghost small">{t('card.create.newButton')}</button>
                   )}
                 </div>
-              </motion.div>
+              )}
+            </Droppable>
+          </div>
+        )}
+      </Draggable>
             );
           })}
           </AnimatePresence>
         )}
-      </div>
+              {boardProvided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
       <div className="mobile-action-bar" role="toolbar" aria-label={t('toolbar.actions')}>
         <div className="mobile-action-row">
@@ -3081,6 +3032,21 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
                   <button className="board-btn ghost" onClick={() => handleShareCard(cardDraft)}>
                     {t('common.share')}
                   </button>
+                  <button
+                    className="board-btn ghost"
+                    onClick={() => handleToggleCardArchive(cardDraft)}
+                  >
+                    {cardDraft.is_archived ? t('card.unarchive') : t('card.archive')}
+                  </button>
+                  <button
+                    className="board-btn ghost danger"
+                    onClick={() => {
+                      handleDelete(cardDraft.id);
+                      closeCardDetails();
+                    }}
+                  >
+                    {t('common.delete')}
+                  </button>
                 </div>
                 {shareStatus && <span className="modal-hint">{shareStatus}</span>}
               </div>
@@ -3088,6 +3054,81 @@ export const LegacyBoardScreen: React.FC<LegacyBoardScreenProps> = ({ activeBoar
           </motion.div>
         )}
       </AnimatePresence>
+
+      {activeCardMenu && cardMenuAnchor && (
+        <div
+          className="card-menu-panel card-menu-portal"
+          style={{
+            position: 'fixed',
+            left: Math.max(12, Math.min(cardMenuAnchor.right - 220, window.innerWidth - 232)),
+            top: (window.innerHeight - cardMenuAnchor.bottom < 220)
+              ? Math.max(12, cardMenuAnchor.top - 12)
+              : cardMenuAnchor.bottom + 8,
+            transform: (window.innerHeight - cardMenuAnchor.bottom < 220) ? 'translateY(-100%)' : 'none',
+            maxHeight: '60vh',
+            overflowY: 'auto'
+          }}
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <label className="menu-label">
+            {t('card.moveToList')}
+            <select
+              className="input"
+              value={activeCardMenu.list}
+              onChange={(event) => {
+                const targetId = Number(event.target.value);
+                if (targetId !== activeCardMenu.list) {
+                  handleMoveCard(activeCardMenu, targetId);
+                }
+                setOpenCardMenuId(null);
+              }}
+            >
+              {sortedLists.map(targetList => (
+                <option key={targetList.id} value={targetList.id}>
+                  {targetList.title}{targetList.is_archived ? ` ${t('board.archivedSuffix')}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="menu-item"
+            onClick={() => {
+              setOpenCardMenuId(null);
+              handleCopyCard(activeCardMenu);
+            }}
+          >
+            {t('card.copy')}
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              setOpenCardMenuId(null);
+              handleShareCard(activeCardMenu);
+            }}
+          >
+            {t('common.share')}
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              setOpenCardMenuId(null);
+              handleToggleCardArchive(activeCardMenu);
+            }}
+          >
+            {activeCardMenu.is_archived ? t('card.unarchive') : t('card.archive')}
+          </button>
+          <button
+            className="menu-item danger"
+            onClick={() => {
+              setOpenCardMenuId(null);
+              handleDelete(activeCardMenu.id);
+            }}
+          >
+            {t('common.delete')}
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {showMembersModal && (

@@ -140,6 +140,34 @@ const globalStyles = `
     color: var(--text-primary); font-size: 15px; transition: all 0.2s ease;
   }
   .input:focus { outline: none; background-color: #454545; border-color: var(--accent-link); }
+  .input.error { border-color: var(--accent-danger); box-shadow: 0 0 0 2px rgba(255,107,107,0.15); }
+  .field-error { margin-top: 6px; font-size: 12px; color: var(--accent-danger); }
+  .error-message {
+    margin: 12px 0 18px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,107,107,0.12);
+    border: 1px solid rgba(255,107,107,0.35);
+    color: var(--accent-danger);
+    font-size: 13px;
+  }
+  .password-field { position: relative; display: flex; align-items: center; }
+  .password-field .input { padding-right: 96px; }
+  .password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  .password-toggle:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
 
   /* Buttons */
   .btn-primary {
@@ -325,7 +353,7 @@ const globalStyles = `
     padding: 18px 24px 32px;
     overflow-x: auto;
     overflow-y: hidden;
-    align-items: flex-start;
+    align-items: stretch;
     scroll-snap-type: x proximity;
   }
 
@@ -382,6 +410,8 @@ const globalStyles = `
   }
 
   .list-header[draggable="true"] { cursor: grab; }
+  .list-title.drag-handle { cursor: grab; user-select: none; }
+  .list-title.drag-handle:active { cursor: grabbing; }
 
   .list-actions {
     display: inline-flex;
@@ -450,14 +480,16 @@ const globalStyles = `
 
   .task-list {
     flex: 1;
-    min-height: 0;
+    min-height: 120px;
     overflow-y: auto;
+    overflow-x: visible;
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding-right: 6px;
     padding-bottom: 12px; /* Space for add button */
   }
+  .task-list.drag-over { outline: 2px dashed rgba(143,140,255,0.5); outline-offset: 4px; border-radius: 12px; }
 
   .task-list::-webkit-scrollbar {
     width: 8px;
@@ -475,12 +507,14 @@ const globalStyles = `
     cursor: pointer;
     transition: background 0.2s, box-shadow 0.2s, transform 0.2s, border-color 0.2s;
     border: 1px solid rgba(148,163,184,0.18);
+    overflow: visible;
   }
   .task-card:hover { background: var(--bg-input); box-shadow: 0 10px 24px rgba(15,23,42,0.2); transform: translateY(-1px); }
   .task-card[draggable="true"] { cursor: grab; }
   .task-card.dragging { opacity: 0.5; cursor: grabbing; }
   .task-card.drag-over { border-color: rgba(143,140,255,0.6); box-shadow: 0 12px 20px rgba(15,23,42,0.25); }
   .task-card.highlight { border-color: rgba(143,140,255,0.8); box-shadow: 0 0 0 2px rgba(143,140,255,0.25); }
+  .task-content { display: grid; gap: 6px; }
 
   .card-color-bar {
     height: 6px;
@@ -1146,7 +1180,20 @@ const globalStyles = `
     padding: 10px;
     min-width: 220px;
     box-shadow: 0 16px 32px rgba(0,0,0,0.28);
-    z-index: 25;
+    z-index: 60;
+  }
+
+  .card-menu-panel {
+    top: auto;
+    bottom: 36px;
+  }
+
+  .card-menu-portal {
+    position: fixed;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    z-index: 120;
   }
 
   .menu-item {
@@ -2317,8 +2364,13 @@ const AuthScreen: React.FC = () => {
   const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '' });
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string; confirmPassword?: string }>({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginInvalid, setLoginInvalid] = useState(false);
 
   useEffect(() => { if (isAuthenticated) navigate('/board', { replace: true }); }, [isAuthenticated, navigate]);
 
@@ -2358,14 +2410,44 @@ const AuthScreen: React.FC = () => {
   }, [googleLogin, isRegistering, locale, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(''); setLoading(true);
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    setLoginInvalid(false);
+    setLoading(true);
+    if (isRegistering && formData.password !== confirmPassword) {
+      const mismatch = t('auth.passwordMismatch');
+      setError(mismatch);
+      setFieldErrors({ password: mismatch, confirmPassword: mismatch });
+      setLoading(false);
+      return;
+    }
     try {
       if (isRegistering) await register(formData);
       else await login({ username: formData.username, password: formData.password });
     } catch (err: any) {
-      if (err.response?.data) {
-         const d = err.response.data; const k = Object.keys(d)[0]; setError(`${k}: ${d[k]}`);
-      } else setError(t('auth.loginError'));
+      const data = err.response?.data;
+      if (!data) {
+        setError(isRegistering ? t('auth.registerError') : t('auth.loginError'));
+      } else if (!isRegistering && (data.non_field_errors || data.detail || typeof data === 'string')) {
+        setLoginInvalid(true);
+        setError(t('auth.invalidCredentials'));
+      } else {
+        const pick = (value: any) => (Array.isArray(value) ? value[0] : value);
+        const nextFieldErrors: { username?: string; password?: string; confirmPassword?: string } = {};
+        if (data.username) nextFieldErrors.username = pick(data.username);
+        if (data.password) nextFieldErrors.password = pick(data.password);
+        if (data.non_field_errors) {
+          setError(pick(data.non_field_errors));
+        } else if (data.detail) {
+          setError(pick(data.detail));
+        } else if (Object.keys(nextFieldErrors).length > 0) {
+          setError(nextFieldErrors.username || nextFieldErrors.password || t('auth.registerError'));
+        } else {
+          setError(isRegistering ? t('auth.registerError') : t('auth.loginError'));
+        }
+        setFieldErrors(nextFieldErrors);
+      }
     } finally { setLoading(false); }
   };
 
@@ -2382,12 +2464,95 @@ const AuthScreen: React.FC = () => {
               <div className="form-group"><label className="label">{t('auth.lastName')}</label><input className="input" type="text" placeholder={t('auth.placeholderLastName')} value={formData.last_name} onChange={e => setFormData({...formData, last_name: e.target.value})} required={isRegistering} /></div>
             </div>
           )}
-          <div className="form-group"><label className="label">{t('auth.username')}</label><input className="input" type="text" placeholder={t('auth.placeholderUsername')} value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required /></div>
-          <div className="form-group"><label className="label">{t('auth.password')}</label><input className="input" type="password" placeholder={t('auth.placeholderPassword')} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required /></div>
+          <div className="form-group">
+            <label className="label">{t('auth.username')}</label>
+            <input
+              className={`input${(loginInvalid || fieldErrors.username) ? ' error' : ''}`}
+              type="text"
+              placeholder={t('auth.placeholderUsername')}
+              value={formData.username}
+              onChange={e => {
+                setFormData({ ...formData, username: e.target.value });
+                setFieldErrors(prev => ({ ...prev, username: undefined }));
+                setLoginInvalid(false);
+              }}
+              required
+            />
+            {isRegistering && fieldErrors.username && <div className="field-error">{fieldErrors.username}</div>}
+          </div>
+          <div className="form-group">
+            <label className="label">{t('auth.password')}</label>
+            <div className="password-field">
+              <input
+                className={`input${(loginInvalid || fieldErrors.password) ? ' error' : ''}`}
+                type={showPassword ? 'text' : 'password'}
+                placeholder={t('auth.placeholderPassword')}
+                value={formData.password}
+                onChange={e => {
+                  setFormData({ ...formData, password: e.target.value });
+                  setFieldErrors(prev => ({ ...prev, password: undefined }));
+                  setLoginInvalid(false);
+                }}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(prev => !prev)}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+              >
+                {showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+              </button>
+            </div>
+            {isRegistering && fieldErrors.password && <div className="field-error">{fieldErrors.password}</div>}
+          </div>
+          {isRegistering && (
+            <div className="form-group">
+              <label className="label">{t('auth.confirmPassword')}</label>
+              <div className="password-field">
+                <input
+                  className={`input${fieldErrors.confirmPassword ? ' error' : ''}`}
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder={t('auth.placeholderConfirmPassword')}
+                  value={confirmPassword}
+                  onChange={e => {
+                    setConfirmPassword(e.target.value);
+                    setFieldErrors(prev => ({ ...prev, confirmPassword: undefined }));
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowConfirmPassword(prev => !prev)}
+                  aria-label={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                >
+                  {showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                </button>
+              </div>
+              {fieldErrors.confirmPassword && <div className="field-error">{fieldErrors.confirmPassword}</div>}
+            </div>
+          )}
           {!isRegistering && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}><Link to="/forgot-password" className="link">{t('auth.forgotPassword')}</Link></div>}
           <button type="submit" disabled={loading} className="btn-primary">{loading ? t('auth.processing') : (isRegistering ? t('auth.signUp') : t('auth.signIn'))}</button>
         </form>
-        <div className="auth-footer"><span>{isRegistering ? `${t('auth.hasAccount')} ` : `${t('auth.noAccount')} `}</span><button className="link" onClick={() => { setIsRegistering(!isRegistering); setError(''); }}>{isRegistering ? t('auth.signIn') : t('auth.createAccount')}</button></div>
+        <div className="auth-footer">
+          <span>{isRegistering ? `${t('auth.hasAccount')} ` : `${t('auth.noAccount')} `}</span>
+          <button
+            className="link"
+            onClick={() => {
+              setIsRegistering(prev => !prev);
+              setError('');
+              setFieldErrors({});
+              setLoginInvalid(false);
+              setConfirmPassword('');
+              setShowPassword(false);
+              setShowConfirmPassword(false);
+            }}
+          >
+            {isRegistering ? t('auth.signIn') : t('auth.createAccount')}
+          </button>
+        </div>
         <div className="google-wrapper"><div id="googleSignInDiv" style={{ height: '44px' }}></div></div>
       </div>
       <KanbanPreview />
