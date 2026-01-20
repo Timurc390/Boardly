@@ -54,10 +54,13 @@ export const LegacyAuthScreen: React.FC<{ defaultRegister?: boolean }> = ({ defa
       }
     };
     const initBtn = () => {
-      if (window.google) {
+      if (!window.google?.accounts?.id) return;
+      try {
         window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
         const p = document.getElementById("googleSignInDiv");
         if (p) window.google.accounts.id.renderButton(p, { theme: "filled_blue", size: "large", width: "400", shape: "rectangular" });
+      } catch {
+        setError('Не вдалося завантажити Google Sign-In.');
       }
     };
     if (!document.getElementById('google-client-script')) {
@@ -67,6 +70,7 @@ export const LegacyAuthScreen: React.FC<{ defaultRegister?: boolean }> = ({ defa
       s.async = true;
       s.defer = true;
       s.onload = initBtn;
+      s.onerror = () => setError('Не вдалося завантажити Google Sign-In.');
       document.body.appendChild(s);
     } else {
       initBtn();
