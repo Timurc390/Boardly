@@ -59,6 +59,9 @@ export const ProfileScreen: React.FC = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const themeSyncRef = useRef(false);
+  const themeSaveTimerRef = useRef<number | null>(null);
+  const themePendingRef = useRef<'light' | 'dark' | null>(null);
 
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -69,14 +72,18 @@ export const ProfileScreen: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      setForm({
+      const resolvedTheme = (user.profile?.theme as 'light' | 'dark') || 'dark';
+      if (themePendingRef.current && resolvedTheme === themePendingRef.current) {
+        themePendingRef.current = null;
+      }
+      setForm((prev) => ({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
         organization: user.profile?.organization || '',
-        theme: (user.profile?.theme as 'light' | 'dark') || 'dark',
+        theme: themePendingRef.current ? prev.theme : resolvedTheme,
         language: (user.profile?.language as Locale) || 'uk',
         notify_email: user.profile?.notify_email ?? true,
-      });
+      }));
       setLoadingProfile(false);
     } else if (!isAuthenticated) {
       setLoadingProfile(false);
@@ -92,7 +99,21 @@ export const ProfileScreen: React.FC = () => {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.theme = form.theme;
-  }, [form.theme]);
+    localStorage.setItem('profileTheme', form.theme);
+
+    if (!user) return;
+    if (!themeSyncRef.current) {
+      themeSyncRef.current = true;
+      return;
+    }
+    if (themeSaveTimerRef.current) {
+      window.clearTimeout(themeSaveTimerRef.current);
+    }
+    themePendingRef.current = form.theme;
+    themeSaveTimerRef.current = window.setTimeout(() => {
+      void updateProfile({ profile: { theme: form.theme } });
+    }, 300);
+  }, [form.theme, user, updateProfile]);
 
   useEffect(() => {
     if (activeTab === 'activity' && authToken && !activityLoaded) {

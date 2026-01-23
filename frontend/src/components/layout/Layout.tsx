@@ -9,6 +9,7 @@ export const Layout: React.FC = () => {
   const { t } = useI18n();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const avatarUrl = user?.profile?.avatar_url || user?.profile?.avatar || '';
 
   // Функція для перевірки активного посилання
   const isActive = (path: string) => location.pathname === path ? 'active' : '';
@@ -46,19 +47,12 @@ export const Layout: React.FC = () => {
               
               <Link to="/profile" className={`link ${isActive('/profile')}`} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                  {/* Аватарка (кружечок) */}
-                 <div style={{ 
-                    width: 28, 
-                    height: 28, 
-                    borderRadius: '50%', 
-                    background: 'var(--primary-blue)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 'bold'
-                 }}>
-                    {user.username.charAt(0).toUpperCase()}
+                 <div className="nav-profile-avatar">
+                   {avatarUrl ? (
+                     <img src={avatarUrl} alt={t('profile.avatarAlt')} />
+                   ) : (
+                     user.username.charAt(0).toUpperCase()
+                   )}
                  </div>
                  <span>{t('nav.profile')}</span>
               </Link>

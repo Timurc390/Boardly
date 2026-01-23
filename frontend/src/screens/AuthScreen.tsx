@@ -20,6 +20,9 @@ export const AuthScreen: React.FC = () => {
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '', email: '' });
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleScriptLoaded, setGoogleScriptLoaded] = useState(false);
@@ -74,6 +77,11 @@ export const AuthScreen: React.FC = () => {
     setLoading(true);
     try {
       if (isRegistering) {
+        if (formData.password !== confirmPassword) {
+          setError('Паролі не співпадають.');
+          setLoading(false);
+          return;
+        }
         await register(formData);
       } else {
         await login({ username: formData.username, password: formData.password });
@@ -133,8 +141,48 @@ export const AuthScreen: React.FC = () => {
             </div>
             
             <div className="form-group">
-              <input className="input" type="password" placeholder="Пароль" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
+              <div className="input-with-icon">
+                <input
+                  className="input"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Пароль"
+                  value={formData.password}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="input-icon-button"
+                  aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? '🙈' : '👁'}
+                </button>
+              </div>
             </div>
+
+            {isRegistering && (
+              <div className="form-group">
+                <div className="input-with-icon">
+                  <input
+                    className="input"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="Повторіть пароль"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="input-icon-button"
+                    aria-label={showConfirmPassword ? 'Сховати пароль' : 'Показати пароль'}
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  >
+                    {showConfirmPassword ? '🙈' : '👁'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {!isRegistering && (
                <div style={{ textAlign: 'right', marginBottom: '24px' }}>

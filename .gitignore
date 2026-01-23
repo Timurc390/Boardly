@@ -21,3 +21,10 @@ out/
 # Інше
 .DS_Store
 .env
+
+# Editor settings (local only)
+.vscode/
+
+# Local DB / uploads
+backend/db.sqlite3
+backend/media/
