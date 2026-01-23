@@ -1,20 +1,15 @@
-import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
+import client, { API_URL } from '../api/client';
 import { User, ProfileData } from '../types';
-
-const API_URL = process.env.REACT_APP_API_URL || '/api';
-
-type CachedBoard = { id: number; [key: string]: any };
-type CachedCard = { id: number; [key: string]: any };
-type CardsCache = Record<number, CachedCard[]>;
 
 interface AuthContextType {
   authToken: string | null;
   isAuthenticated: boolean;
   user: User | null;
+  isLoading: boolean;
   login: (data: any) => Promise<void>;
   register: (data: any) => Promise<void>;
-  googleLogin: (token: string) => Promise<void>;
+  googleLogin: (authCode: string) => Promise<void>; // Тепер приймає code
   logout: () => void;
   updateProfile: (data: Partial<User> & { profile?: Partial<ProfileData> }) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -22,10 +17,6 @@ interface AuthContextType {
   removeAvatar: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   resetPasswordConfirm: (data: any) => Promise<void>;
-  boardCache: CachedBoard[] | null;
-  setBoardCache: (boards: CachedBoard[]) => void;
-  cardsCache: CardsCache;
-  setCardsCacheForBoard: (boardId: number, cards: CachedCard[]) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,90 +30,105 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('authToken'));
   const [user, setUser] = useState<User | null>(null);
-  const [boardCache, setBoardCache] = useState<CachedBoard[] | null>(null);
-  const [cardsCache, setCardsCache] = useState<CardsCache>({});
-  const isAuthenticated = !!authToken;
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  useEffect(() => { if (authToken) fetchMe(authToken); else setUser(null); }, [authToken]);
-
-  const fetchMe = async (token: string) => {
+  const fetchMe = useCallback(async () => {
+    if (!authToken) {
+      setIsLoading(false);
+      return;
+    }
     try {
-      const res = await axios.get(`${API_URL}/users/me/`, { headers: { Authorization: `Token ${token}` } });
+      const res = await client.get('/users/me/');
       setUser(res.data);
     } catch (err: any) {
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
+      if (err.response?.status === 401) {
         logout();
-      } else {
-        setUser(null);
       }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
+
+  const login = async (data: any) => {
+    const res = await client.post('/auth/token/login/', data);
+    const token = res.data.auth_token;
+    setAuthToken(token);
+    localStorage.setItem('authToken', token);
+    await fetchMe();
+  };
+
+  // --- ОНОВЛЕНИЙ GOOGLE LOGIN (Code Flow) ---
+  const googleLogin = async (authCode: string) => {
+    try {
+        // Відправляємо 'code' на бекенд. 
+        // Бекенд обміняє його на токени доступу.
+        const res = await client.post('/auth/google/', { 
+            code: authCode
+        });
+        
+        const authToken = res.data.key || res.data.auth_token;
+        setAuthToken(authToken);
+        localStorage.setItem('authToken', authToken);
+        await fetchMe();
+    } catch (error: any) {
+        console.error("Google Auth Failed:", error.response?.data || error.message);
+        throw error;
     }
   };
 
-  const login = async (data: any) => {
-    const res = await axios.post(`${API_URL}/auth/token/login/`, data);
-    const token = res.data.auth_token || res.data.key || res.data.token;
-    if (!token) throw new Error('token_missing');
-    setAuthToken(token);
-    localStorage.setItem('authToken', token);
-    setBoardCache(null);
-    setCardsCache({});
-  };
-  const googleLogin = async (t: string) => {
-    const res = await axios.post(`${API_URL}/auth/google/`, { access_token: t, id_token: t });
-    const token = res.data.auth_token || res.data.key || res.data.token;
-    if (!token) throw new Error('token_missing');
-    setAuthToken(token);
-    localStorage.setItem('authToken', token);
-    setBoardCache(null);
-    setCardsCache({});
-  };
   const register = async (d: any) => {
-    await axios.post(`${API_URL}/auth/users/`, { ...d, email: d.email || `${d.username}@boardly.local` });
+    await client.post('/auth/users/', { ...d, email: d.email || `${d.username}@boardly.local` });
     await login({ username: d.username, password: d.password });
   };
+
   const logout = () => {
-    setAuthToken(null); setUser(null); localStorage.removeItem('authToken');
-    setBoardCache(null);
-    setCardsCache({});
-    if (authToken) axios.post(`${API_URL}/auth/token/logout/`, null, { headers: { Authorization: `Token ${authToken}` } }).catch(()=>{});
+    setAuthToken(null);
+    setUser(null);
+    localStorage.removeItem('authToken');
+    client.post('/auth/token/logout/').catch(() => {});
   };
+
   const updateProfile = async (d: any) => {
-    if (!authToken) return;
-    await axios.patch(`${API_URL}/users/me/`, d, { headers: { Authorization: `Token ${authToken}` } });
-    await fetchMe(authToken);
+    await client.patch('/users/me/', d);
+    await fetchMe();
   };
+
   const refreshUser = async () => {
-    if (!authToken) return;
-    await fetchMe(authToken);
+    await fetchMe();
   };
+
   const uploadAvatar = async (file: File) => {
-    if (!authToken) return;
     const formData = new FormData();
     formData.append('avatar', file);
-    const res = await axios.post(`${API_URL}/users/me/avatar/`, formData, {
-      headers: { Authorization: `Token ${authToken}` }
+    const res = await client.post('/users/me/avatar/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     });
     setUser(res.data);
   };
+
   const removeAvatar = async () => {
-    if (!authToken) return;
-    const res = await axios.delete(`${API_URL}/users/me/avatar/`, {
-      headers: { Authorization: `Token ${authToken}` }
-    });
+    const res = await client.delete('/users/me/avatar/');
     setUser(res.data);
   };
-  const resetPassword = async (e: string) => { await axios.post(`${API_URL}/auth/users/reset_password/`, { email: e }); };
-  const resetPasswordConfirm = async (d: any) => { await axios.post(`${API_URL}/auth/users/reset_password_confirm/`, d); };
-  const setCardsCacheForBoard = (boardId: number, cards: CachedCard[]) => {
-    setCardsCache(prev => ({ ...prev, [boardId]: cards }));
+
+  const resetPassword = async (email: string) => {
+    await client.post('/auth/users/reset_password/', { email });
+  };
+
+  const resetPasswordConfirm = async (data: any) => {
+    await client.post('/auth/users/reset_password_confirm/', data);
   };
 
   return (
     <AuthContext.Provider value={{
       authToken,
-      isAuthenticated,
+      isAuthenticated: !!authToken,
       user,
+      isLoading,
       login,
       register,
       googleLogin,
@@ -133,10 +139,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       removeAvatar,
       resetPassword,
       resetPasswordConfirm,
-      boardCache,
-      setBoardCache,
-      cardsCache,
-      setCardsCacheForBoard
     }}>
       {children}
     </AuthContext.Provider>

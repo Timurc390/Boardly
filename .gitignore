@@ -1,50 +1,23 @@
-# Dependencies
+# Залежності
 node_modules/
-backend/venv/
 .venv/
+env/
 venv/
+ENV/
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Build
-frontend/build/
-dist/
-*.pyc
+# Кеш та компіляція Python
 __pycache__/
-frontend/playwright-report/
-frontend/test-results/
-frontend/.browserstack-logs/
+*.py[cod]
+*$py.class
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Збірки та дистрибутиви
+dist/
+build/
+out/
 
-# OS
+# Системні файли Git (хоча .git ігнорується автоматично, краще не додавати його вручну в список)
+# .git/ 
+
+# Інше
 .DS_Store
-Thumbs.db
-
-# Logs
-*.log
-*.err
-runserver.out
-ngrok-front.log
-ngrok-front.out
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# DB
-*.sqlite3
-db.sqlite3
-
-# Tools
-.tools/
-
-# Media
-backend/media/
+.env

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom'; // Використовуємо Link замість перемикання станів
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 
 export const ForgotPasswordScreen: React.FC = () => {
   const { resetPassword } = useAuth();
@@ -17,58 +19,63 @@ export const ForgotPasswordScreen: React.FC = () => {
       setStatus('success');
     } catch (error) {
       setStatus('error');
-      setErrorMsg('Не вдалося знайти користувача з таким email або сталася помилка.');
+      setErrorMsg('Не вдалося знайти користувача або сталася помилка.');
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="card">
-        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#0052CC', marginBottom: '20px' }}>
-            🔐 Відновлення
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-header">
+           <div className="auth-logo">🔐 Відновлення</div>
         </div>
-        
-        {status === 'success' ? (
-          <div style={{ textAlign: 'center' }}>
-            <h3 style={{ color: '#5AAC44' }}>Лист відправлено!</h3>
-            <p style={{ color: '#5E6C84', marginBottom: '20px' }}>
-              Перевірте вашу пошту (або консоль розробника Django), щоб знайти посилання для скидання паролю.
-            </p>
-            <Link to="/login" className="btn btn-primary" style={{ display: 'block', textDecoration: 'none' }}>
-              Повернутися до входу
-            </Link>
-          </div>
-        ) : (
-          <>
-            <p style={{ color: '#5E6C84', marginBottom: '20px' }}>
-              Введіть вашу електронну пошту, і ми надішлемо вам посилання для відновлення доступу.
-            </p>
 
-            {status === 'error' && <div className="error-message">{errorMsg}</div>}
+        <div className="auth-card">
+          {status === 'success' ? (
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{ color: 'var(--success)', marginBottom: '8px' }}>Лист відправлено!</h3>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '14px' }}>
+                Перевірте вашу пошту, щоб знайти посилання для скидання паролю.
+              </p>
+              <Link to="/auth" className="btn btn-primary btn-full" style={{ textDecoration: 'none' }}>
+                Повернутися до входу
+              </Link>
+            </div>
+          ) : (
+            <>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '14px', textAlign: 'center' }}>
+                Введіть ваш email, і ми надішлемо інструкції для відновлення.
+              </p>
 
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">Email</label>
-                <input
-                  className="form-input"
+              {status === 'error' && (
+                <div style={{ color: 'var(--danger)', marginBottom: '16px', fontSize: '14px', textAlign: 'center' }}>
+                    {errorMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+                <Input
+                  label="Email"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
                   placeholder="name@example.com"
                 />
+
+                <Button type="submit" className="btn-full" isLoading={status === 'loading'}>
+                  Відновити пароль
+                </Button>
+              </form>
+
+              <div className="auth-footer">
+                <Link to="/auth" className="btn-link" style={{ fontSize: '14px' }}>
+                  ← Я згадав пароль
+                </Link>
               </div>
-
-              <button type="submit" className="btn btn-primary" disabled={status === 'loading'}>
-                {status === 'loading' ? 'Відправка...' : 'Відновити пароль'}
-              </button>
-            </form>
-
-            <Link to="/login" className="btn-link" style={{ display: 'block', marginTop: '15px' }}>
-              Я згадав пароль
-            </Link>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

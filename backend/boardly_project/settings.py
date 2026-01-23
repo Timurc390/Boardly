@@ -202,7 +202,7 @@ CORS_ALLOW_CREDENTIALS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication', 
-        'rest_framework.authentication.SessionAuthentication', 
+        # 'rest_framework.authentication.SessionAuthentication', 
     ],
     # Встановлюємо дозвіл за замовчуванням (усі методи заборонені, якщо не вказано інше)
     'DEFAULT_PERMISSION_CLASSES': [
@@ -227,8 +227,30 @@ DJOSER = {
     'ACTIVATION_URL': 'activate/{uid}/{token}',
     'SEND_ACTIVATION_EMAIL': False,
     'SERIALIZERS': {
-        'user_create': 'core.serializers.UserCreateSerializer',
-        'user': 'core.serializers.UserSerializer',
-        'current_user': 'core.serializers.UserSerializer',
+        'user_create': 'core.api.serializers.UserCreateSerializer',
+        'user': 'core.api.serializers.UserSerializer',
+        'current_user': 'core.api.serializers.UserSerializer',
     },
 }
+
+# 3. Налаштування Social Auth (Google)
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'APP': {
+            'client_id': '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com', # Встав сюди ID з консолі
+            'secret': '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', # Встав сюди Secret
+            'key': ''
+        }
+    }
+}
+
+# Важливо для dj-rest-auth: вимикаємо перевірку email для соціальних акаунтів, щоб не було помилок
+SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
+SOCIALACCOUNT_EMAIL_REQUIRED = False

@@ -3,7 +3,7 @@ export type Locale = typeof SUPPORTED_LOCALES[number];
 
 export const translations: Record<Locale, Record<string, string>> = {
   uk: {
-    'nav.board': 'Дошка',
+    'nav.board': 'Дошки',
     'nav.myCards': 'Мої картки',
     'nav.profile': 'Профіль',
     'nav.faq': 'FAQ',
