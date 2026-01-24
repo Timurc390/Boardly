@@ -6,6 +6,8 @@ import { Layout } from './components/layout/Layout';
 
 // Screens
 import { AuthScreen } from './screens/AuthScreen';
+import { LandingScreen } from './screens/LandingScreen';
+import { PrivacyPolicyScreen } from './screens/PrivacyPolicyScreen';
 import { BoardListScreen } from './features/boards/BoardListScreen';
 import { BoardDetailScreen } from './features/boards/BoardDetailScreen';
 import { InviteScreen } from './features/boards/InviteScreen'; 
@@ -34,21 +36,16 @@ export default function App() {
         <I18nProvider>
           <Routes>
             {/* Публічні маршрути */}
+            <Route path="/" element={<LandingScreen />} />
+            <Route path="/signup" element={<LandingScreen />} />
             <Route path="/auth" element={<AuthScreen />} />
             <Route path="/login" element={<Navigate to="/auth" replace />} />
             <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
             <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
+            <Route path="/privacy" element={<PrivacyPolicyScreen />} />
 
             {/* Захищені маршрути (всередині Layout) */}
             <Route element={<Layout />}>
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/boards" replace />
-                  </ProtectedRoute>
-                } 
-              />
               <Route 
                 path="/boards" 
                 element={

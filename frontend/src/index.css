@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Zen+Dots&display=swap');
 
 /* =========================================
    1. RESET & VARIABLES
@@ -62,13 +62,26 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   background-color: var(--bg-main);
   color: var(--text-primary);
   font-family: "Inter", sans-serif;
-  height: 100vh;
+  height: 100%;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+html.landing-no-scroll,
+body.landing-no-scroll,
+body.landing-no-scroll #root {
+  overflow: hidden;
 }
 
 h1, h2, h3 { font-weight: 700; margin-bottom: 0.5em; }
@@ -86,6 +99,7 @@ a { text-decoration: none; color: inherit; }
   max-width: 100%;
   margin: 0;
   overflow: hidden;
+  position: relative;
 }
 
 /* --- Left: Form --- */
@@ -205,6 +219,28 @@ a { text-decoration: none; color: inherit; }
   text-align: center;
 }
 
+.auth-privacy-link {
+  position: absolute;
+  right: 32px;
+  bottom: 32px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.auth-privacy-link:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
 /* --- Right: Kanban Preview (STICKY RIGHT) --- */
 .auth-right {
   flex: 1;
@@ -213,6 +249,252 @@ a { text-decoration: none; color: inherit; }
   justify-content: flex-end; /* ПРИТИСКАЄМО ПРАВОРУЧ */
   position: relative;
   background-color: var(--bg-main); /* Фон під дошкою */
+}
+
+/* =========================================
+   Landing Page
+   ========================================= */
+.landing-page {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.landing-content {
+  height: 100%;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.landing-inner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.landing-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 12px 64px 0;
+  margin: 0;
+  width: 100%;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  opacity: 0.85;
+}
+
+.landing-brand-icon {
+  height: 32px;
+  width: auto;
+  border-radius: 6px;
+  display: block;
+}
+
+.landing-logo {
+  font-family: "Zen Dots", "Inter", sans-serif;
+  font-size: 44px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
+  justify-self: center;
+}
+
+.landing-spacer {
+  justify-self: end;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 32px;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.landing-copy {
+  padding-left: 64px;
+  padding-right: 24px;
+}
+
+.landing-copy h1 {
+  font-size: 54px;
+  line-height: 1.05;
+  letter-spacing: 0.2px;
+  margin: 0 0 18px;
+}
+
+.landing-copy p {
+  font-size: 17px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  max-width: 520px;
+}
+
+.landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  background: #ffffff;
+  color: #6b4ce6;
+  border-radius: 10px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+.landing-media {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.landing-media img {
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* =========================================
+   Privacy Policy
+   ========================================= */
+.privacy-header {
+  width: 100%;
+  background: #1d1d1d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.privacy-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 85px;
+  padding: 0 35px;
+}
+
+.privacy-brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.privacy-back {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.privacy-back:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.privacy-page {
+  min-height: 100vh;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.privacy-content {
+  max-width: 820px;
+  margin: 0;
+  padding: 28px 35px 0;
+  line-height: 1.6;
+}
+
+.privacy-content h1 {
+  font-size: 32px;
+  margin-bottom: 18px;
+}
+
+.privacy-content h3 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+.privacy-content ul {
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.privacy-footer {
+  margin-top: auto;
+  background: #1d1d1d;
+}
+
+.privacy-footer-inner {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 173px;
+  padding: 20px 35px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.privacy-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .privacy-header-inner {
+    padding: 0 20px;
+  }
+
+  .privacy-content {
+    padding: 20px 20px 0;
+  }
+
+  .privacy-footer-inner {
+    gap: 12px;
+    font-size: 12px;
+    padding: 16px 20px;
+  }
 }
 
 /* The dark grey container that holds the board */

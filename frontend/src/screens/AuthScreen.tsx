@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -17,6 +17,7 @@ declare global {
 export const AuthScreen: React.FC = () => {
   const { login, register, googleLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({ username: '', password: '', first_name: '', last_name: '', email: '' });
@@ -30,6 +31,12 @@ export const AuthScreen: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) navigate('/');
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    if (mode === 'register') setIsRegistering(true);
+    if (mode === 'login') setIsRegistering(false);
+  }, [searchParams]);
 
   // Завантаження скрипта Google GSI
   useEffect(() => {
@@ -237,7 +244,15 @@ export const AuthScreen: React.FC = () => {
 
         <div className="auth-footer">
           {isRegistering ? 'Вже є акаунт?' : 'Ще немає акаунту?'}
-          <button className="btn-link" onClick={() => { setIsRegistering(!isRegistering); setError(''); }}>
+          <button
+            className="btn-link"
+            onClick={() => {
+              setIsRegistering(!isRegistering);
+              setConfirmPassword('');
+              setShowConfirmPassword(false);
+              setError('');
+            }}
+          >
             {isRegistering ? 'Увійти' : 'Зареєструватися'}
           </button>
         </div>
@@ -246,6 +261,10 @@ export const AuthScreen: React.FC = () => {
       <div className="auth-right">
         <KanbanPreview />
       </div>
+
+      <Link to="/privacy" className="auth-privacy-link" aria-label="Privacy policy">
+        ?
+      </Link>
     </div>
   );
 };
