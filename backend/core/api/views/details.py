@@ -19,9 +19,30 @@ class ChecklistItemViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     queryset = ChecklistItem.objects.select_related('checklist__card__list__board')
 
+    def perform_create(self, serializer):
+        item = serializer.save()
+        card = item.checklist.card
+        log_activity(
+            self.request.user,
+            'add_checklist_item',
+            'card',
+            card.id,
+            {
+                'board_id': card.list.board_id if card.list_id else None,
+                'board_title': card.list.board.title if card.list_id else None,
+                'card_id': card.id,
+                'title': card.title,
+                'checklist_id': item.checklist_id,
+                'checklist_title': item.checklist.title,
+                'item_id': item.id,
+                'item_text': item.text
+            }
+        )
+
     def perform_update(self, serializer):
         previous = serializer.instance
         prev_checked = previous.is_checked
+        prev_text = previous.text
         item = serializer.save()
         if 'is_checked' in serializer.validated_data and item.is_checked != prev_checked:
             card = item.checklist.card
@@ -32,11 +53,33 @@ class ChecklistItemViewSet(viewsets.ModelViewSet):
                 card.id,
                 {
                     'board_id': card.list.board_id if card.list_id else None,
+                    'board_title': card.list.board.title if card.list_id else None,
                     'card_id': card.id,
                     'title': card.title,
                     'checklist_id': item.checklist_id,
+                    'checklist_title': item.checklist.title,
                     'item_id': item.id,
-                    'item_text': item.text
+                    'item_text': item.text,
+                    'is_checked': item.is_checked
+                }
+            )
+        if 'text' in serializer.validated_data and item.text != prev_text:
+            card = item.checklist.card
+            log_activity(
+                self.request.user,
+                'update_checklist_item',
+                'card',
+                card.id,
+                {
+                    'board_id': card.list.board_id if card.list_id else None,
+                    'board_title': card.list.board.title if card.list_id else None,
+                    'card_id': card.id,
+                    'title': card.title,
+                    'checklist_id': item.checklist_id,
+                    'checklist_title': item.checklist.title,
+                    'item_id': item.id,
+                    'item_text': item.text,
+                    'item_text_prev': prev_text
                 }
             )
 
@@ -63,4 +106,19 @@ class CommentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        comment = serializer.save(author=self.request.user)
+        card = comment.card
+        log_activity(
+            self.request.user,
+            'add_comment',
+            'card',
+            card.id,
+            {
+                'board_id': card.list.board_id if card.list_id else None,
+                'board_title': card.list.board.title if card.list_id else None,
+                'card_id': card.id,
+                'title': card.title,
+                'comment_id': comment.id,
+                'comment_text': comment.text
+            }
+        )

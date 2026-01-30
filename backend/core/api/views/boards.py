@@ -39,7 +39,11 @@ class BoardViewSet(viewsets.ModelViewSet):
             List(title='In Progress', board=board, order=2),
             List(title='Done', board=board, order=3),
         ])
-        log_activity(self.request.user, 'create_board', 'board', board.id, {'title': board.title, 'board_id': board.id})
+        log_activity(self.request.user, 'create_board', 'board', board.id, {
+            'title': board.title,
+            'board_id': board.id,
+            'board_title': board.title
+        })
 
     def perform_update(self, serializer):
         previous = serializer.instance
@@ -49,12 +53,23 @@ class BoardViewSet(viewsets.ModelViewSet):
 
         if 'is_archived' in serializer.validated_data and board.is_archived != prev_archived:
             action = 'archive_board' if board.is_archived else 'unarchive_board'
-            log_activity(self.request.user, action, 'board', board.id, {'title': board.title, 'board_id': board.id})
+            log_activity(self.request.user, action, 'board', board.id, {
+                'title': board.title,
+                'board_id': board.id,
+                'board_title': board.title
+            })
         elif 'title' in serializer.validated_data or 'background_url' in serializer.validated_data:
             if board.title != prev_title:
-                log_activity(self.request.user, 'rename_board', 'board', board.id, {'title': board.title, 'board_id': board.id})
+                log_activity(self.request.user, 'rename_board', 'board', board.id, {
+                    'title': board.title,
+                    'board_id': board.id,
+                    'board_title': board.title
+                })
             else:
-                log_activity(self.request.user, 'update_board', 'board', board.id, {'board_id': board.id})
+                log_activity(self.request.user, 'update_board', 'board', board.id, {
+                    'board_id': board.id,
+                    'board_title': board.title
+                })
 
     @action(detail=True, methods=['post'])
     def favorite(self, request, pk=None):
@@ -178,6 +193,34 @@ class LabelViewSet(viewsets.ModelViewSet):
         if board_id:
             queryset = queryset.filter(board__id=board_id)
         return queryset
+
+    def perform_create(self, serializer):
+        label = serializer.save()
+        log_activity(self.request.user, 'create_label', 'label', label.id, {
+            'label_id': label.id,
+            'label_name': label.name,
+            'board_id': label.board_id,
+            'board_title': label.board.title
+        })
+
+    def perform_update(self, serializer):
+        label = serializer.save()
+        log_activity(self.request.user, 'update_label', 'label', label.id, {
+            'label_id': label.id,
+            'label_name': label.name,
+            'board_id': label.board_id,
+            'board_title': label.board.title
+        })
+
+    def perform_destroy(self, instance):
+        meta = {
+            'label_id': instance.id,
+            'label_name': instance.name,
+            'board_id': instance.board_id,
+            'board_title': instance.board.title
+        }
+        instance.delete()
+        log_activity(self.request.user, 'delete_label', 'label', meta['label_id'], meta)
 
 class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ActivitySerializer

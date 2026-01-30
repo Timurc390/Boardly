@@ -3,45 +3,55 @@ import React from 'react';
 export const KanbanPreview: React.FC = () => {
     return (
         <div className="board-preview-container">
-            {/* Column 1: To Do (Yellow) */}
+            {/* Column 1: To Do */}
             <div className="preview-column todo">
-                <h3>До виконання</h3>
+                <h3>To do</h3>
                 <div className="preview-card">
-                    Дизайн сторінки входу
-                    <br/>
-                    <span className="card-tag">High Priority</span>
+                    Design login page
                 </div>
                 <div className="preview-card">
-                    Створення бази даних
+                    Create task board
                 </div>
-                <div className="preview-card" style={{opacity: 0.5}}>
-                    + Нова задача
+                <div className="preview-card">
+                    Set up notifications
                 </div>
             </div>
 
-            {/* Column 2: In Progress (Purple) */}
+            {/* Column 2: In Progress */}
             <div className="preview-column progress">
-                <h3>У процесі</h3>
-                <div className="preview-card">
-                    Реалізувати Drag & Drop
-                    <div className="avatars">
-                        <div className="avatar-circle" style={{background: '#FF6B6B'}}></div>
-                        <div className="avatar-circle" style={{background: '#4ECDC4'}}></div>
+                <h3>In progress</h3>
+                <div className="preview-card card-large">
+                    <span style={{alignSelf: 'center', marginBottom: 'auto'}}>Implement drag & drop</span>
+                    
+                    <div className="avatars-container">
+                        <div className="avatar-circle" style={{background: '#FF6B6B'}}>AB</div>
+                        <div className="avatar-circle" style={{background: '#4ECDC4'}}>CD</div>
+                        <div className="avatar-circle" style={{background: '#FFD93D'}}>EF</div>
+                    </div>
+                    
+                    <div className="progress-bar-container">
+                        <div className="progress-bar-fill"></div>
                     </div>
                 </div>
-                 <div className="preview-card">
-                    Налаштування API
-                </div>
             </div>
 
-            {/* Column 3: Done (Grey) */}
+            {/* Column 3: Done */}
             <div className="preview-column done">
-                <h3>Готово</h3>
-                <div className="preview-card" style={{opacity: 0.6}}>
-                    Авторизація через Google
+                <h3>Done</h3>
+                <div className="preview-card card-done">
+                    <span className="check-icon check-left">✅</span>
+                    User authentication
+                    <span className="check-icon check-right">✅</span>
                 </div>
-                <div className="preview-card" style={{opacity: 0.6}}>
-                    Налаштування проекту
+                <div className="preview-card card-done">
+                    <span className="check-icon check-left">✅</span>
+                    Board creation
+                    <span className="check-icon check-right">✅</span>
+                </div>
+                <div className="preview-card card-done">
+                    <span className="check-icon check-left">✅</span>
+                    Team invites
+                    <span className="check-icon check-right">✅</span>
                 </div>
             </div>
         </div>

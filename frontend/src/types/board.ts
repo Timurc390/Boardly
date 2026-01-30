@@ -47,9 +47,13 @@ export interface Card {
   is_completed?: boolean;
   is_archived?: boolean;
   
+  // НОВЕ ПОЛЕ
+  is_public?: boolean;
+  
   // Relations
   members?: User[];
   labels?: Label[];
+  label_ids?: number[]; 
   checklists?: Checklist[];
   attachments?: Attachment[];
   comments?: Comment[];

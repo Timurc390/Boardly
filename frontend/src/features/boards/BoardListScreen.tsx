@@ -1,17 +1,35 @@
-import React, { useState } from 'react';
-import { useBoards } from './hooks/useBoards';
+import React, { useState, useEffect } from 'react';
 import { BoardCard } from './components/BoardCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { useI18n } from '../../context/I18nContext';
+import * as api from './api';
+import { Board } from '../../types';
 
 export const BoardListScreen: React.FC = () => {
-  const { boards, isLoading, addBoard } = useBoards();
   const { t } = useI18n();
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    const fetchBoards = async () => {
+      try {
+        setIsLoading(true);
+        const data = await api.getBoards();
+        setBoards(data);
+      } catch (error) {
+        console.error("Failed to fetch boards", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchBoards();
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,12 +37,13 @@ export const BoardListScreen: React.FC = () => {
     
     setIsCreating(true);
     try {
-      await addBoard(newBoardTitle);
+      const newBoard = await api.createBoard(newBoardTitle);
+      setBoards(prev => [...prev, newBoard]);
       setNewBoardTitle('');
       setIsModalOpen(false);
     } catch (error) {
       console.error(error);
-      // Тут можна додати toast notification
+      alert('Помилка створення дошки');
     } finally {
       setIsCreating(false);
     }
@@ -45,12 +64,12 @@ export const BoardListScreen: React.FC = () => {
           <BoardCard key={board.id} board={board} />
         ))}
         
-        {/* Кнопка створення як картка */}
         <button 
           className="board-card create-board-card" 
           onClick={() => setIsModalOpen(true)}
         >
-          <span>+ {t('common.create')}</span>
+          <span style={{ fontSize: '24px', lineHeight: 1 }}>+</span>
+          <span>{t('common.create')}</span>
         </button>
       </div>
 
@@ -60,18 +79,21 @@ export const BoardListScreen: React.FC = () => {
         title={t('common.create')}
       >
         <form onSubmit={handleCreate}>
-          <Input 
-            autoFocus
-            placeholder="Назва дошки" 
-            value={newBoardTitle}
-            onChange={e => setNewBoardTitle(e.target.value)}
-          />
-          <div className="modal-actions" style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <div className="form-group">
+             <label className="form-label">Назва дошки</label>
+             <Input 
+                autoFocus
+                placeholder="Введіть назву..." 
+                value={newBoardTitle}
+                onChange={e => setNewBoardTitle(e.target.value)}
+             />
+          </div>
+          <div className="modal-footer">
+            <Button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit" isLoading={isCreating}>
-              {t('common.create')}
+            <Button type="submit" className="btn-primary" disabled={isCreating}>
+              {isCreating ? 'Створення...' : t('common.create')}
             </Button>
           </div>
         </form>

@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
+//import { useAuth } from '../context/AuthContext.tsx.bak';
 import { ActivityLog } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { type Locale } from '../i18n/translations';
+
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -16,573 +18,450 @@ const TAB_LABEL_KEYS: Record<TabKey, string> = {
   settings: 'profile.tabs.settings',
 };
 
-const ACTION_LABEL_KEYS: Record<string, string> = {
-  create_board: 'activity.createBoard',
-  rename_board: 'activity.renameBoard',
-  update_board: 'activity.updateBoard',
-  archive_board: 'activity.archiveBoard',
-  unarchive_board: 'activity.unarchiveBoard',
-  create_list: 'activity.createList',
-  rename_list: 'activity.renameList',
-  move_list: 'activity.moveList',
-  archive_list: 'activity.archiveList',
-  unarchive_list: 'activity.unarchiveList',
-  create_card: 'activity.createCard',
-  move_card: 'activity.moveCard',
-  archive_card: 'activity.archiveCard',
-  unarchive_card: 'activity.unarchiveCard',
-  update_card: 'activity.updateCard',
-  update_card_description: 'activity.updateCardDescription',
-  update_card_due_date: 'activity.updateCardDueDate',
-  toggle_checklist_item: 'activity.toggleChecklistItem',
-  update_profile: 'activity.updateProfile',
-  update_avatar: 'activity.updateAvatar',
-  remove_avatar: 'activity.removeAvatar',
+const formatEntity = (name?: string, id?: number | null) => {
+  if (name) return `«${name}»`;
+  if (id) return `#${id}`;
+  return '';
+};
+
+const getUserName = (log: ActivityLog) => {
+  const u = (log as any).user;
+  if (!u) return 'Користувач';
+  const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return full || u.username || u.email || 'Користувач';
 };
 
 export const ProfileScreen: React.FC = () => {
-  const { user, isAuthenticated, authToken, logout, updateProfile, uploadAvatar, removeAvatar } = useAuth();
+  const dispatch = useAppDispatch();
+  const logout = () => {
+    dispatch({ type: 'auth/logoutUser' });
+  };
+
+  const updateProfile = async (data: Partial<any>) => {
+    return dispatch({ type: 'auth/updateUserProfile', payload: data });
+  };
+
+  const uploadAvatar = async (file: File) => {
+    return dispatch({ type: 'auth/uploadUserAvatar', payload: file });
+  };
+  const { user, token } = useAppSelector(state => state.auth);
   const { t, locale, setLocale, supportedLocales } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Form State
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
     organization: '',
-    theme: 'dark' as 'light' | 'dark',
-    language: 'uk' as Locale,
+    theme: 'dark', // За замовчуванням темна
+    language: 'uk',
     notify_email: true,
   });
-  const [loadingProfile, setLoadingProfile] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const themeSyncRef = useRef(false);
-  const themeSaveTimerRef = useRef<number | null>(null);
-  const themePendingRef = useRef<'light' | 'dark' | null>(null);
 
-  const [activity, setActivity] = useState<ActivityLog[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
-  const [activityError, setActivityError] = useState<string | null>(null);
-  const [activityOffset, setActivityOffset] = useState(0);
-  const [activityHasMore, setActivityHasMore] = useState(true);
-  const [activityLoaded, setActivityLoaded] = useState(false);
-
+  // Load user data into form
   useEffect(() => {
     if (user) {
-      const resolvedTheme = (user.profile?.theme as 'light' | 'dark') || 'dark';
-      if (themePendingRef.current && resolvedTheme === themePendingRef.current) {
-        themePendingRef.current = null;
-      }
-      setForm((prev) => ({
+      setForm({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
         organization: user.profile?.organization || '',
-        theme: themePendingRef.current ? prev.theme : resolvedTheme,
-        language: (user.profile?.language as Locale) || 'uk',
+        theme: (user.profile?.theme as string) || 'dark',
+        language: user.profile?.language || 'uk',
         notify_email: user.profile?.notify_email ?? true,
-      }));
-      setLoadingProfile(false);
-    } else if (!isAuthenticated) {
-      setLoadingProfile(false);
+      });
     }
-  }, [user, isAuthenticated]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2200);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.dataset.theme = form.theme;
-    localStorage.setItem('profileTheme', form.theme);
-
-    if (!user) return;
-    if (!themeSyncRef.current) {
-      themeSyncRef.current = true;
-      return;
-    }
-    if (themeSaveTimerRef.current) {
-      window.clearTimeout(themeSaveTimerRef.current);
-    }
-    themePendingRef.current = form.theme;
-    themeSaveTimerRef.current = window.setTimeout(() => {
-      void updateProfile({ profile: { theme: form.theme } });
-    }, 300);
-  }, [form.theme, user, updateProfile]);
-
-  useEffect(() => {
-    if (activeTab === 'activity' && authToken && !activityLoaded) {
-      void loadActivity(0, false);
-    }
-  }, [activeTab, activityLoaded, authToken]);
-
-  useEffect(() => () => { if (avatarPreview) URL.revokeObjectURL(avatarPreview); }, [avatarPreview]);
-
-  const avatarUrl = avatarPreview || user?.profile?.avatar_url || user?.profile?.avatar || '';
-  const initials = (user?.first_name || user?.last_name || user?.username || 'U')[0]?.toUpperCase() || 'U';
-  const displayName = useMemo(() => {
-    if (!user) return '';
-    const full = `${user.first_name || ''} ${user.last_name || ''}`.trim();
-    return full || user.username;
   }, [user]);
-  const dateLocale = useMemo(() => {
-    switch (locale) {
-      case 'uk':
-        return 'uk-UA';
-      case 'pl':
-        return 'pl-PL';
-      case 'de':
-        return 'de-DE';
-      case 'fr':
-        return 'fr-FR';
-      case 'es':
-        return 'es-ES';
-      default:
-        return 'en-US';
+
+  // Fetch Activity Logs
+  useEffect(() => {
+    if (activeTab === 'activity' && token) {
+      setLoadingActivity(true);
+      axios.get(`${API_URL}/activity/`, {
+        headers: { Authorization: `Token ${token}` }
+      })
+      .then(res => setActivityLogs(res.data))
+      .catch(console.error)
+      .finally(() => setLoadingActivity(false));
     }
-  }, [locale]);
+  }, [activeTab, token]);
 
-  const formatRelative = (iso: string) => {
-    const timestamp = new Date(iso).getTime();
-    if (Number.isNaN(timestamp)) return '';
-    const diff = Math.max(Date.now() - timestamp, 0);
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return t('profile.time.justNow');
-    if (minutes < 60) return t('profile.time.minutesAgo', { count: minutes });
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return t('profile.time.hoursAgo', { count: hours });
-    const days = Math.floor(hours / 24);
-    if (days < 7) return t('profile.time.daysAgo', { count: days });
-    return new Date(iso).toLocaleDateString(dateLocale);
-  };
-
-  const getActivityTitle = (entry: ActivityLog) => {
-    const labelKey = ACTION_LABEL_KEYS[entry.action] || 'activity.event';
-    const label = t(labelKey);
-    const title = entry.meta?.title ? ` "${entry.meta.title}"` : '';
-    return `${label}${title}`;
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
   };
 
   const handleSave = async () => {
-    if (!user) return;
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setProfileError(t('profile.errors.requiredName'));
-      return;
-    }
-    setProfileError(null);
     setSaving(true);
     try {
       await updateProfile({
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        first_name: form.first_name,
+        last_name: form.last_name,
         profile: {
-          organization: form.organization.trim(),
-          theme: form.theme,
-          language: form.language,
+          organization: form.organization,
+          theme: form.theme as 'light' | 'dark',
+          language: form.language as Locale, // ВИПРАВЛЕНО: Явне приведення типу для TypeScript
           notify_email: form.notify_email,
-        },
+        }
       });
-      setToast(t('profile.toast.saved'));
-    } catch (err) {
-      console.error(err);
-      setProfileError(t('profile.errors.saveFailed'));
+      
+      // Update local locale if changed
+      if (form.language !== locale) {
+        setLocale(form.language as Locale);
+      }
+      
+      showToast(t('profile.saved'));
+    } catch (e) {
+      console.error(e);
+      showToast(t('common.error'));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAvatarClick = () => fileInputRef.current?.click();
-
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setProfileError(t('profile.errors.imageOnly'));
-      return;
-    }
-    const preview = URL.createObjectURL(file);
-    setAvatarPreview(preview);
-    setAvatarUploading(true);
-    try {
-      await uploadAvatar(file);
-      setToast(t('profile.toast.avatarUpdated'));
-    } catch (err) {
-      console.error(err);
-      setProfileError(t('profile.errors.avatarUploadFailed'));
-      setAvatarPreview(null);
-    } finally {
-      setAvatarUploading(false);
-      e.target.value = '';
+    if (e.target.files?.[0]) {
+      try {
+        await uploadAvatar(e.target.files[0]);
+        showToast(t('profile.avatarUpdated'));
+      } catch {
+        showToast(t('common.error'));
+      }
     }
   };
 
-  const handleRemoveAvatar = async () => {
-    setAvatarUploading(true);
-    try {
-      await removeAvatar();
-      setAvatarPreview(null);
-      setToast(t('profile.toast.avatarRemoved'));
-    } catch (err) {
-      console.error(err);
-      setProfileError(t('profile.errors.avatarRemoveFailed'));
-    } finally {
-      setAvatarUploading(false);
+  const avatarUrl = user?.profile?.avatar_url || user?.profile?.avatar;
+
+  // Helper for activity messages
+  const getActivityMessage = (log: ActivityLog) => {
+    const meta = log.meta || {};
+    const actor = getUserName(log);
+    const title = meta.title as string | undefined;
+    const itemText = meta.item_text as string | undefined;
+    const boardId = meta.board_id as number | undefined;
+    const listId = meta.list as number | undefined;
+    const fromList = meta.from_list as number | undefined;
+    const toList = meta.to_list as number | undefined;
+    const cardId = meta.card_id as number | undefined;
+    const listTitle = meta.list_title as string | undefined;
+    const fromListTitle = meta.from_list_title as string | undefined;
+    const toListTitle = meta.to_list_title as string | undefined;
+    const boardTitle = meta.board_title as string | undefined;
+    const dueBefore = meta.due_before as string | undefined;
+    const dueAfter = meta.due_after as string | undefined;
+    const addedLabels = meta.added_labels as string[] | undefined;
+    const removedLabels = meta.removed_labels as string[] | undefined;
+    const labelName = meta.label_name as string | undefined;
+    const commentText = meta.comment_text as string | undefined;
+    const originalTitle = meta.original_title as string | undefined;
+    const checklistTitle = meta.checklist_title as string | undefined;
+
+    switch (log.action) {
+      case 'create_board':
+        return `${actor} створив(ла) дошку ${formatEntity(title, boardId)}`.trim();
+      case 'rename_board':
+        return `${actor} перейменував(ла) дошку ${formatEntity(title, boardId)}`.trim();
+      case 'update_board':
+        return `${actor} оновив(ла) дошку ${formatEntity(title, boardId)}`.trim();
+      case 'archive_board':
+        return `${actor} архівував(ла) дошку ${formatEntity(title, boardId)}`.trim();
+      case 'unarchive_board':
+        return `${actor} відновив(ла) дошку ${formatEntity(title, boardId)}`.trim();
+
+      case 'create_list':
+        return `${actor} додав(ла) список ${formatEntity(title, log.entity_id)}${boardTitle ? ` на дошці «${boardTitle}»` : boardId ? ` на дошці #${boardId}` : ''}`.trim();
+      case 'rename_list':
+        return `${actor} перейменував(ла) список ${formatEntity(title, log.entity_id)}`.trim();
+      case 'move_list':
+        return `${actor} переніс(ла) список ${formatEntity(title, log.entity_id)}${boardTitle ? ` на дошці «${boardTitle}»` : boardId ? ` на дошці #${boardId}` : ''}`.trim();
+      case 'archive_list':
+        return `${actor} архівував(ла) список ${formatEntity(title, log.entity_id)}`.trim();
+      case 'unarchive_list':
+        return `${actor} відновив(ла) список ${formatEntity(title, log.entity_id)}`.trim();
+      case 'copy_list':
+        return `${actor} скопіював(ла) список ${formatEntity(originalTitle, meta.original_id)} → ${formatEntity(title, log.entity_id)}`.trim();
+
+      case 'create_card':
+        return `${actor} додав(ла) картку ${formatEntity(title, cardId)}${listTitle ? ` до «${listTitle}»` : listId ? ` до списку #${listId}` : ''}`.trim();
+      case 'move_card':
+        return `${actor} переніс(ла) цю картку ${formatEntity(title, cardId)}${fromListTitle ? ` з «${fromListTitle}»` : fromList ? ` з #${fromList}` : ''}${toListTitle ? ` в «${toListTitle}»` : toList ? ` в #${toList}` : ''}`.trim();
+      case 'archive_card':
+        return `${actor} архівував(ла) картку ${formatEntity(title, cardId)}${listTitle ? ` у «${listTitle}»` : listId ? ` у списку #${listId}` : ''}`.trim();
+      case 'unarchive_card':
+        return `${actor} відновив(ла) картку ${formatEntity(title, cardId)}${listTitle ? ` у «${listTitle}»` : listId ? ` у списку #${listId}` : ''}`.trim();
+      case 'update_card':
+        return `${actor} оновив(ла) картку ${formatEntity(title, cardId)}`.trim();
+      case 'update_card_description':
+        return `${actor} оновив(ла) опис картки ${formatEntity(title, cardId)}`.trim();
+      case 'update_card_due_date':
+        return `${actor} змінив(ла) дедлайн картки ${formatEntity(title, cardId)} з ${dueBefore ? new Date(dueBefore).toLocaleString() : 'без дати'} на ${dueAfter ? new Date(dueAfter).toLocaleString() : 'без дати'}`.trim();
+      case 'copy_card':
+        return `${actor} скопіював(ла) картку ${formatEntity(originalTitle, meta.original_id)} → ${formatEntity(title, cardId)}`.trim();
+      case 'complete_card':
+        return `Учасник ${actor} позначив цю картку як завершену`.trim();
+      case 'uncomplete_card':
+        return `Учасник ${actor} зняв позначку завершення з цієї картки`.trim();
+
+      case 'toggle_checklist_item':
+        if (meta.is_checked === false) {
+          return `${actor} позначив(ла) як не зроблене ${formatEntity(itemText, meta.item_id)}${checklistTitle ? ` у чек-листі «${checklistTitle}»` : ''}${title ? ` на цій картці «${title}»` : ''}`.trim();
+        }
+        return `${actor} позначив(ла) як зроблене ${formatEntity(itemText, meta.item_id)}${checklistTitle ? ` у чек-листі «${checklistTitle}»` : ''}${title ? ` на цій картці «${title}»` : ''}`.trim();
+      case 'add_checklist_item':
+        return `${actor} додав(ла) підзадачу ${formatEntity(itemText, meta.item_id)}${checklistTitle ? ` до чек-листа «${checklistTitle}»` : ''}${title ? ` у картці «${title}»` : ''}`.trim();
+      case 'update_checklist_item':
+        return `${actor} відредагував(ла) підзадачу ${formatEntity(itemText, meta.item_id)}${checklistTitle ? ` у чек-листі «${checklistTitle}»` : ''}${title ? ` у картці «${title}»` : ''}`.trim();
+      case 'add_comment':
+        return `${actor} залишив(ла) коментар ${formatEntity(commentText, meta.comment_id)}${title ? ` під карткою «${title}»` : ''}`.trim();
+      case 'update_card_labels': {
+        const added = addedLabels && addedLabels.length ? `додав(ла) мітки: ${addedLabels.join(', ')}` : '';
+        const removed = removedLabels && removedLabels.length ? `видалив(ла) мітки: ${removedLabels.join(', ')}` : '';
+        const parts = [added, removed].filter(Boolean).join('; ');
+        return `${actor} ${parts || 'оновив(ла) мітки'} для картки ${formatEntity(title, cardId)}`.trim();
+      }
+      case 'create_label':
+        return `${actor} створив(ла) мітку ${formatEntity(labelName, meta.label_id)}${boardTitle ? ` на дошці «${boardTitle}»` : ''}`.trim();
+      case 'update_label':
+        return `${actor} оновив(ла) мітку ${formatEntity(labelName, meta.label_id)}${boardTitle ? ` на дошці «${boardTitle}»` : ''}`.trim();
+      case 'delete_label':
+        return `${actor} видалив(ла) мітку ${formatEntity(labelName, meta.label_id)}${boardTitle ? ` на дошці «${boardTitle}»` : ''}`.trim();
+
+      case 'update_profile':
+        return `${actor} оновив(ла) профіль`;
+      case 'update_avatar':
+        return `${actor} оновив(ла) аватар`;
+      case 'remove_avatar':
+        return `${actor} видалив(ла) аватар`;
+
+      default: {
+        const target = title || itemText || (log.entity_id ? `#${log.entity_id}` : '');
+        return `${actor} виконав(ла) дію ${target}`.trim();
+      }
     }
   };
 
-  const loadActivity = async (offset = 0, append = false) => {
-    if (!authToken) return;
-    setActivityLoading(true);
-    setActivityError(null);
-    try {
-      const res = await axios.get(`${API_URL}/activity/`, {
-        params: { limit: 10, offset },
-        headers: { Authorization: `Token ${authToken}` },
-      });
-      const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
-      setActivity((prev) => (append ? [...prev, ...payload] : payload));
-      setActivityOffset(offset + payload.length);
-      setActivityHasMore(Boolean(res.data?.next));
-      setActivityLoaded(true);
-    } catch (err) {
-      console.error(err);
-      setActivityError(t('profile.errors.activityLoad'));
-    } finally {
-      setActivityLoading(false);
-    }
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 }
   };
 
-  if (loadingProfile) {
-    return (
-      <div className="profile-page">
-        <div className="profile-shell">
-          <div className="profile-card">
-            <div className="profile-avatar skeleton" />
-            <div className="skeleton" style={{ height: 16, width: '70%' }} />
-            <div className="skeleton" style={{ height: 12, width: '90%' }} />
-            <div className="skeleton" style={{ height: 12, width: '80%' }} />
-            <div className="profile-actions">
-              <div className="skeleton" style={{ height: 36, width: 120 }} />
-              <div className="skeleton" style={{ height: 36, width: 120 }} />
-            </div>
-          </div>
-          <div className="profile-content">
-            <div className="skeleton" style={{ height: 24, width: '40%' }} />
-            <div className="profile-panel">
-              <div className="skeleton" style={{ height: 14, width: '30%' }} />
-              <div className="profile-grid">
-                <div className="skeleton" style={{ height: 44 }} />
-                <div className="skeleton" style={{ height: 44 }} />
-                <div className="skeleton" style={{ height: 44 }} />
-                <div className="skeleton" style={{ height: 44 }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="profile-page">
-        <div className="profile-shell">
-          <div className="profile-panel">
-            <h3>{t('profile.authRequiredTitle')}</h3>
-            <p className="profile-hint">{t('profile.authRequiredHint')}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <div className="loading-state">{t('common.loading')}</div>;
 
   return (
     <div className="profile-page">
-      <div className="profile-shell">
-        <motion.aside
-          className="profile-card"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-        >
-          <motion.div className="profile-avatar" whileHover={{ scale: 1.03 }}>
-            {avatarUrl ? <img src={avatarUrl} alt={t('profile.avatarAlt')} /> : initials}
-          </motion.div>
-          <div>
-            <div className="profile-name">{displayName}</div>
-            <div className="profile-meta">
-              <span>@{user.username}</span>
-              <span>{user.email}</span>
+      <div className="profile-container">
+        {/* SIDEBAR */}
+        <aside className="profile-sidebar">
+          <div className="profile-user-card">
+            <div className="profile-avatar-wrapper">
+              <div className="profile-avatar">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" />
+                ) : (
+                  <span className="profile-initials">
+                    {user.username.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <div className="avatar-overlay" onClick={() => fileInputRef.current?.click()}>
+                  <span>📷</span>
+                </div>
+                <input 
+                  type="file" 
+                  hidden 
+                  ref={fileInputRef} 
+                  onChange={handleAvatarChange} 
+                  accept="image/*"
+                />
+              </div>
             </div>
-          </div>
-          <div className="profile-actions">
-            <button
-              className="btn-secondary focus-ring"
-              onClick={handleAvatarClick}
-              disabled={avatarUploading}
-              aria-label={t('profile.avatar.change')}
-            >
-              {avatarUploading ? t('common.loading') : t('profile.avatar.change')}
-            </button>
-            {(user.profile?.avatar_url || user.profile?.avatar || avatarPreview) && (
-              <button
-                className="btn-danger focus-ring"
-                onClick={handleRemoveAvatar}
-                disabled={avatarUploading}
-                aria-label={t('profile.avatar.remove')}
-              >
-                {t('profile.avatar.remove')}
-              </button>
+            <h2 className="profile-name">{user.first_name} {user.last_name}</h2>
+            <p className="profile-username">@{user.username}</p>
+            {user.profile?.organization && (
+              <div className="profile-org-badge">
+                🏢 {user.profile.organization}
+              </div>
             )}
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={handleAvatarChange}
-          />
-          <button className="btn-ghost focus-ring" onClick={logout}>{t('nav.logout')}</button>
-        </motion.aside>
 
-        <section className="profile-content">
-          <div className="profile-tabs" role="tablist" aria-label={t('profile.tabsLabel')}>
-            {(Object.keys(TAB_LABEL_KEYS) as TabKey[]).map((tab) => (
+          <nav className="profile-nav">
+            {(Object.keys(TAB_LABEL_KEYS) as TabKey[]).map((key) => (
               <button
-                key={tab}
-                role="tab"
-                id={`tab-${tab}`}
-                aria-controls={`panel-${tab}`}
-                aria-selected={activeTab === tab}
-                className={`profile-tab ${activeTab === tab ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab)}
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`profile-nav-item ${activeTab === key ? 'active' : ''}`}
               >
-                {t(TAB_LABEL_KEYS[tab])}
+                {t(TAB_LABEL_KEYS[key])}
               </button>
             ))}
-          </div>
+          </nav>
 
+          <button onClick={logout} className="profile-logout-btn">
+            🚪 {t('nav.logout')}
+          </button>
+        </aside>
+
+        {/* CONTENT AREA */}
+        <main className="profile-content">
           <AnimatePresence mode="wait">
             {activeTab === 'profile' && (
-              <motion.div
+              <motion.div 
                 key="profile"
-                className="profile-panel"
-                role="tabpanel"
-                id="panel-profile"
-                aria-labelledby="tab-profile"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="profile-tab-content"
               >
-                <h3>{t('profile.sections.profile')}</h3>
-                <div className="profile-grid">
-                  <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-first-name">{t('profile.fields.firstName')}</label>
-                    <input
-                      id="profile-first-name"
-                      className="input focus-ring"
+                <h3>{t('profile.personalInfo')}</h3>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>{t('profile.fields.firstName')}</label>
+                    <input 
+                      className="form-input"
                       value={form.first_name}
-                      onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                      aria-label={t('profile.fields.firstName')}
+                      onChange={e => setForm({...form, first_name: e.target.value})}
                     />
                   </div>
-                  <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-last-name">{t('profile.fields.lastName')}</label>
-                    <input
-                      id="profile-last-name"
-                      className="input focus-ring"
+                  <div className="form-group">
+                    <label>{t('profile.fields.lastName')}</label>
+                    <input 
+                      className="form-input"
                       value={form.last_name}
-                      onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                      aria-label={t('profile.fields.lastName')}
+                      onChange={e => setForm({...form, last_name: e.target.value})}
                     />
                   </div>
-                  <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-org">{t('profile.fields.organization')}</label>
-                    <input
-                      id="profile-org"
-                      className="input focus-ring"
+                  <div className="form-group">
+                    <label>{t('profile.fields.organization')}</label>
+                    <input 
+                      className="form-input"
                       value={form.organization}
-                      onChange={(e) => setForm({ ...form, organization: e.target.value })}
-                      aria-label={t('profile.fields.organization')}
+                      onChange={e => setForm({...form, organization: e.target.value})}
+                      placeholder="Company Inc."
                     />
                   </div>
-                  <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-username">{t('profile.fields.nickname')}</label>
-                    <input id="profile-username" className="input" value={user.username} readOnly aria-label={t('profile.fields.nickname')} />
-                  </div>
-                  <div className="profile-field">
-                    <label className="profile-label" htmlFor="profile-email">Email</label>
-                    <input id="profile-email" className="input" value={user.email} readOnly aria-label="Email" />
+                  <div className="form-group">
+                    <label>{t('profile.fields.email')}</label>
+                    <input 
+                      className="form-input"
+                      value={user.email}
+                      disabled
+                      title="Email cannot be changed"
+                    />
                   </div>
                 </div>
-                {profileError && <div className="profile-hint">{profileError}</div>}
-                <div className="profile-actions-row">
-                  <button className="btn-secondary focus-ring" onClick={handleSave} disabled={saving}>
-                    {saving ? t('profile.saving') : t('common.save')}
-                  </button>
-                  <button
-                    className="btn-ghost focus-ring"
-                    onClick={() => setForm({
-                      first_name: user.first_name || '',
-                      last_name: user.last_name || '',
-                      organization: user.profile?.organization || '',
-                      theme: (user.profile?.theme as 'light' | 'dark') || 'dark',
-                      language: (user.profile?.language as Locale) || 'uk',
-                      notify_email: user.profile?.notify_email ?? true,
-                    })}
-                    disabled={saving}
-                  >
-                    {t('common.cancel')}
+                
+                <div className="form-actions">
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                    {saving ? t('common.saving') : t('common.save')}
                   </button>
                 </div>
               </motion.div>
             )}
 
             {activeTab === 'activity' && (
-              <motion.div
+              <motion.div 
                 key="activity"
-                className="profile-panel"
-                role="tabpanel"
-                id="panel-activity"
-                aria-labelledby="tab-activity"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="profile-tab-content"
               >
-                <h3>{t('profile.sections.activity')}</h3>
+                <h3>{t('profile.tabs.activity')}</h3>
                 <div className="activity-list">
-                  {activityLoading && activity.length === 0 && (
-                    <>
-                      <div className="skeleton" style={{ height: 64 }} />
-                      <div className="skeleton" style={{ height: 64 }} />
-                      <div className="skeleton" style={{ height: 64 }} />
-                    </>
-                  )}
-                  {!activityLoading && activity.length === 0 && !activityError && (
-                    <div className="profile-hint">{t('profile.activity.empty')}</div>
-                  )}
-                  {activityError && <div className="profile-hint">{activityError}</div>}
-                  {activity.map((entry) => (
-                    <div key={entry.id} className="activity-item">
-                      <div className="activity-icon">{entry.entity_type?.[0]?.toUpperCase() || '•'}</div>
-                      <div>
-                        <div className="activity-title">{getActivityTitle(entry)}</div>
-                        <div className="activity-meta">
-                          {entry.entity_type && t('profile.activity.type', { type: entry.entity_type })}{' '}
-                          {entry.entity_id ? `#${entry.entity_id}` : ''}
+                  {loadingActivity ? (
+                    <div className="loading-state">{t('common.loading')}</div>
+                  ) : activityLogs.length === 0 ? (
+                    <div className="empty-state">{t('activity.empty')}</div>
+                  ) : (
+                    activityLogs.map(log => (
+                      <div key={log.id} className="activity-item">
+                        <div className="activity-icon">📝</div>
+                        <div className="activity-details">
+                          <span className="activity-text">{getActivityMessage(log)}</span>
+                          <span className="activity-date">
+                            {new Date(log.created_at).toLocaleString(locale)}
+                          </span>
                         </div>
                       </div>
-                      <div className="activity-meta">{formatRelative(entry.created_at)}</div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
-                {activityHasMore && (
-                  <div className="profile-actions-row">
-                    <button
-                      className="btn-ghost focus-ring"
-                      onClick={() => loadActivity(activityOffset, true)}
-                      disabled={activityLoading}
-                    >
-                      {activityLoading ? t('common.loading') : t('profile.activity.loadMore')}
-                    </button>
-                  </div>
-                )}
               </motion.div>
             )}
 
             {activeTab === 'settings' && (
-              <motion.div
+              <motion.div 
                 key="settings"
-                className="profile-panel"
-                role="tabpanel"
-                id="panel-settings"
-                aria-labelledby="tab-settings"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="profile-tab-content"
               >
-                <h3>{t('profile.sections.settings')}</h3>
-                <div className="profile-grid">
-                  <div className="profile-field">
-                    <label className="profile-label">{t('profile.fields.theme')}</label>
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={form.theme === 'dark'}
-                        onChange={(e) => setForm({ ...form, theme: e.target.checked ? 'dark' : 'light' })}
-                        aria-label={t('profile.fields.themeToggle')}
-                      />
-                      <span className="toggle-track" />
-                      <span>{form.theme === 'dark' ? t('profile.theme.dark') : t('profile.theme.light')}</span>
-                    </label>
+                <h3>{t('profile.appSettings')}</h3>
+                
+                <div className="settings-section">
+                  <div className="form-group">
+                    <label>{t('profile.fields.theme')}</label>
+                    <div className="theme-toggle">
+                      <button 
+                        className={`theme-option ${form.theme === 'light' ? 'active' : ''}`}
+                        onClick={() => setForm({...form, theme: 'light'})}
+                      >
+                        ☀️ Light
+                      </button>
+                      <button 
+                        className={`theme-option ${form.theme === 'dark' ? 'active' : ''}`}
+                        onClick={() => setForm({...form, theme: 'dark'})}
+                      >
+                        🌙 Dark
+                      </button>
+                    </div>
                   </div>
-                  <div className="profile-field">
-                    <label className="profile-label">{t('profile.fields.language')}</label>
-                    <select
-                      className="input focus-ring"
+
+                  <div className="form-group">
+                    <label>{t('profile.fields.language')}</label>
+                    <select 
+                      className="form-input"
                       value={form.language}
-                      onChange={(e) => {
-                        const next = e.target.value as Locale;
-                        setForm({ ...form, language: next });
-                        setLocale(next);
-                      }}
+                      onChange={e => setForm({...form, language: e.target.value})}
                     >
                       {supportedLocales.map(code => (
-                        <option key={code} value={code}>{t(`lang.${code}`)}</option>
+                        <option key={code} value={code}>
+                          {t(`lang.${code}`)}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  <div className="profile-field">
-                    <label className="profile-label">{t('profile.fields.emailNotifications')}</label>
-                    <label className="toggle">
-                      <input
+
+                  <div className="form-group checkbox-group">
+                    <label className="checkbox-label">
+                      <input 
                         type="checkbox"
                         checked={form.notify_email}
-                        onChange={(e) => setForm({ ...form, notify_email: e.target.checked })}
-                        aria-label={t('profile.fields.emailNotifications')}
+                        onChange={e => setForm({...form, notify_email: e.target.checked})}
                       />
-                      <span className="toggle-track" />
-                      <span>{form.notify_email ? t('profile.notifications.on') : t('profile.notifications.off')}</span>
+                      {t('profile.fields.emailNotifications')}
                     </label>
                   </div>
                 </div>
-                {profileError && <div className="profile-hint">{profileError}</div>}
-                <div className="profile-actions-row">
-                  <button className="btn-secondary focus-ring" onClick={handleSave} disabled={saving}>
-                    {saving ? t('profile.saving') : t('profile.saveSettings')}
-                  </button>
-                  <button className="btn-danger focus-ring" disabled title={t('profile.logoutAllHint')}>
-                    {t('profile.logoutAll')}
+
+                <div className="form-actions">
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                    {saving ? t('common.saving') : t('common.save')}
                   </button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </section>
+        </main>
       </div>
-
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            className="toast"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ duration: 0.2 }}
-            role="status"
-          >
-            {toast}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

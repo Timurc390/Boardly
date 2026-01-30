@@ -24,7 +24,8 @@ class CardSerializer(serializers.ModelSerializer):
         model = Card
         fields = (
             'id', 'title', 'description', 'card_color', 'order', 'due_date',
-            'is_completed', 'is_archived', 'list', 'board', 'board_title',
+            'is_completed', 'is_archived', 'is_public', # <-- ДОДАНО
+            'list', 'board', 'board_title',
             'members', 'labels', 'label_ids',
             'checklists', 'attachments', 'comments'
         )
@@ -68,7 +69,8 @@ class MyCardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Card
-        fields = ('id', 'title', 'description', 'card_color', 'due_date', 'is_archived', 'board', 'list', 'labels')
+        # Додано is_public
+        fields = ('id', 'title', 'description', 'card_color', 'due_date', 'is_archived', 'board', 'list', 'labels', 'is_public')
 
     def get_labels(self, obj):
         labels = Label.objects.filter(cardlabel__card=obj)

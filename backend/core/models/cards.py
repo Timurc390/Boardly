@@ -8,7 +8,6 @@ class List(models.Model):
     """
     Колонка на дошці.
     """
-    # Використовуємо рядок 'core.Board' щоб уникнути циклічного імпорту
     board = models.ForeignKey('core.Board', on_delete=models.CASCADE, related_name='lists', verbose_name="Дошка")
     title = models.CharField(max_length=255, verbose_name="Назва Списку")
     order = models.DecimalField(max_digits=10, decimal_places=5, default=0, verbose_name="Позиція")
@@ -35,6 +34,9 @@ class Card(models.Model):
     due_date = models.DateTimeField(null=True, blank=True, verbose_name="Кінцевий термін")
     is_completed = models.BooleanField(default=False, verbose_name="Завершено")
     is_archived = models.BooleanField(default=False, verbose_name="Архівувати Картку")
+
+    # НОВЕ ПОЛЕ: Статус приватності картки
+    is_public = models.BooleanField(default=True, verbose_name="Публічна картка")
 
     members = models.ManyToManyField(User, through='CardMember', related_name='assigned_cards', verbose_name="Призначені учасники")
     
@@ -68,7 +70,6 @@ class CardLabel(models.Model):
     Зв'язок Картка <-> Мітка.
     """
     card = models.ForeignKey(Card, on_delete=models.CASCADE, verbose_name="Картка")
-    # Використовуємо рядок 'core.Label'
     label = models.ForeignKey('core.Label', on_delete=models.CASCADE, verbose_name="Мітка")
 
     class Meta:

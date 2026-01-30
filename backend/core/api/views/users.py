@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.db.models import Q
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client # ПОТРІБЕН ДЛЯ CODE FLOW
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 
 from core.models import Profile, ActivityLog
@@ -13,11 +13,8 @@ from core.services.activity_logger import log_activity
 
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
-    # Налаштування для Authorization Code Flow
     client_class = OAuth2Client
-    # Callback URL має співпадати з тим, що вказано в Google Console, 
-    # або просто http://localhost:3000 для локальної розробки
-    callback_url = "http://localhost:3000"
+    callback_url = "postmessage"
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().select_related('profile')

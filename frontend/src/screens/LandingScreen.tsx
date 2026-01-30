@@ -1,15 +1,17 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+//import { useAuth } from '../context/AuthContext.tsx.bak';
+
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 
 export const LandingScreen: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAppSelector(state => state.auth);
   const navigate = useNavigate();
 
   useEffect(() => {
     document.body.classList.add('landing-no-scroll');
     document.documentElement.classList.add('landing-no-scroll');
-    if (isAuthenticated) navigate('/boards', { replace: true });
+
     return () => {
       document.body.classList.remove('landing-no-scroll');
       document.documentElement.classList.remove('landing-no-scroll');
@@ -47,9 +49,17 @@ export const LandingScreen: React.FC = () => {
                 <br />
                 підвищте продуктивність завдяки Boardly.
               </p>
-              <Link className="landing-cta" to="/auth?mode=register">
-                Sign up for free !
-              </Link>
+              
+              {/* Умовний рендер кнопки */}
+              {isAuthenticated ? (
+                <Link className="landing-cta" to="/boards">
+                  Перейти до роботи
+                </Link>
+              ) : (
+                <Link className="landing-cta" to="/auth?mode=register">
+                  Sign up for free !
+                </Link>
+              )}
             </div>
 
             <div className="landing-media">

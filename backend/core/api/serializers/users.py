@@ -7,6 +7,12 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
     class Meta(DjoserUserCreateSerializer.Meta):
         fields = ('id', 'username', 'email', 'password', 'first_name', 'last_name')
 
+    def validate_email(self, value):
+        # Перевіряємо, чи існує вже користувач з таким email (нечутливо до регістру)
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("Користувач з таким email вже існує.")
+        return value
+
 class ProfileSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
 
@@ -22,9 +28,6 @@ class ProfileSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 class UserSerializer(serializers.ModelSerializer):
-    """
-    Серіалізатор користувача з підтримкою вкладеного оновлення профілю.
-    """
     profile = ProfileSerializer(required=False)
     
     class Meta:
@@ -49,10 +52,11 @@ class ActivityLogSerializer(serializers.ModelSerializer):
     message = serializers.SerializerMethodField()
     board_id = serializers.SerializerMethodField()
     card_id = serializers.SerializerMethodField()
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = ActivityLog
-        fields = ('id', 'action', 'type', 'message', 'entity_type', 'entity_id', 'meta', 'board_id', 'card_id', 'created_at')
+        fields = ('id', 'action', 'type', 'message', 'entity_type', 'entity_id', 'meta', 'board_id', 'card_id', 'created_at', 'user')
 
     def get_message(self, obj):
         base = obj.action.replace('_', ' ').capitalize()

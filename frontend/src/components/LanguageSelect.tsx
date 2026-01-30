@@ -1,5 +1,8 @@
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
+// ВИПРАВЛЕНО: Використовуємо Redux
+import { useAppSelector, useAppDispatch } from '../store/hooks';
+import { updateUserProfile } from '../store/slices/authSlice';
+
 import { useI18n } from '../context/I18nContext';
 
 type LanguageSelectProps = {
@@ -8,14 +11,18 @@ type LanguageSelectProps = {
 };
 
 export const LanguageSelect: React.FC<LanguageSelectProps> = ({ compact = false, className }) => {
-  const { user, updateProfile } = useAuth();
+  const dispatch = useAppDispatch();
+  const { user } = useAppSelector(state => state.auth);
+  
   const { locale, setLocale, supportedLocales, t } = useI18n();
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value as typeof locale;
     setLocale(next);
-    if (user?.profile?.language !== next) {
-      void updateProfile({ profile: { language: next } });
+    
+    // Якщо користувач залогінений, зберігаємо мову на сервері
+    if (user?.profile?.language !== next && user) {
+      dispatch(updateUserProfile({ profile: { language: next } }));
     }
   };
 

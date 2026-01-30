@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
-import { List } from '../../../types';
+import { List, Card } from '../../../types';
 import { CardItem } from './CardItem';
 import { Button } from '../../../components/ui/Button';
 
@@ -8,8 +8,14 @@ interface BoardColumnProps {
   list: List;
   index: number;
   onAddCard: (listId: number, title: string) => void;
-  onUpdateList: (listId: number, data: Partial<List>) => void; // Новий проп
-  onDeleteList: (listId: number) => void; // Новий проп
+  onUpdateList: (listId: number, data: Partial<List>) => void;
+  onDeleteList: (listId: number) => void;
+  onCopyList?: (listId: number) => void;
+  onCardClick: (card: Card) => void;
+  onToggleCardComplete: (cardId: number, next: boolean) => void;
+  
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export const BoardColumn: React.FC<BoardColumnProps> = ({ 
@@ -17,17 +23,23 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
   index, 
   onAddCard, 
   onUpdateList, 
-  onDeleteList 
+  onDeleteList,
+  onCopyList,
+  onCardClick,
+  onToggleCardComplete,
+  isCollapsed,
+  onToggleCollapse
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
   
-  // Стейт для редагування заголовка
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(list.title);
+  
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // Автофокус при переході в режим редагування
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus();
@@ -40,7 +52,7 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
     if (titleValue.trim() && titleValue !== list.title) {
       onUpdateList(list.id, { title: titleValue });
     } else {
-      setTitleValue(list.title); // Повернути стару назву, якщо пусто або без змін
+      setTitleValue(list.title);
     }
   };
 
@@ -61,6 +73,43 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
     }
   };
 
+  const handleMenuAction = (action: 'copy' | 'archive' | 'collapse' | 'delete') => {
+      setIsMenuOpen(false);
+      if (action === 'copy' && onCopyList) onCopyList(list.id);
+      if (action === 'archive') onUpdateList(list.id, { is_archived: true });
+      if (action === 'delete') onDeleteList(list.id);
+      if (action === 'collapse') onToggleCollapse();
+  };
+
+  if (isCollapsed) {
+      return (
+        <Draggable draggableId={`list-${list.id}`} index={index}>
+            {(provided) => (
+                <div 
+                    className="kanban-column collapsed"
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    style={{ 
+                        ...provided.draggableProps.style, 
+                        width: '40px', minWidth: '40px', 
+                        alignItems: 'center', cursor: 'pointer',
+                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                        padding: '12px 0',
+                        background: 'var(--bg-surface)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.1)'
+                    }}
+                    onClick={onToggleCollapse}
+                >
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{list.title}</span>
+                    <span className="count-badge" style={{ marginTop: 8, transform: 'rotate(90deg)' }}>{list.cards?.length || 0}</span>
+                </div>
+            )}
+        </Draggable>
+      );
+  }
+
   return (
     <Draggable draggableId={`list-${list.id}`} index={index}>
       {(provided) => (
@@ -69,7 +118,6 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
           ref={provided.innerRef}
           {...provided.draggableProps}
         >
-          {/* Header зі зміною назви та видаленням */}
           <div className="list-header" {...provided.dragHandleProps}>
             {isEditingTitle ? (
               <input
@@ -82,30 +130,50 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
                 style={{ height: '30px', padding: '4px 8px', fontSize: '14px', width: '100%' }}
               />
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <>
                 <span 
-                  className="list-title" 
                   onClick={() => setIsEditingTitle(true)}
-                  title="Клікніть, щоб перейменувати"
-                  style={{ cursor: 'pointer', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  style={{ cursor: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8, flex: 1 }}
+                  title={list.title}
                 >
                   {list.title}
-                  <span className="count-badge" style={{ marginLeft: 8 }}>{list.cards?.length || 0}</span>
                 </span>
-                
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onDeleteList(list.id); }}
-                  className="btn-link" 
-                  style={{ 
-                    minWidth: 24, width: 24, height: 24, padding: 0, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    color: '#666', fontSize: '16px', marginLeft: 8
-                  }}
-                  title="Видалити список"
-                >
-                  ✕
-                </button>
-              </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+                    <span className="count-badge">{list.cards?.length || 0}</span>
+                    
+                    <button 
+                      className="list-menu-trigger btn-icon"
+                      onClick={() => setIsMenuOpen(!isMenuOpen)}
+                      style={{ fontSize: 16, width: 24, height: 24 }}
+                    >
+                      •••
+                    </button>
+
+                    {isMenuOpen && (
+                        <>
+                        <div 
+                            className="list-menu-overlay"
+                            onClick={() => setIsMenuOpen(false)}
+                        ></div>
+                        <div className="list-menu-dropdown">
+                            <button className="menu-item" onClick={() => handleMenuAction('collapse')}>
+                                🔽 Згорнути
+                            </button>
+                            <button className="menu-item" onClick={() => handleMenuAction('copy')}>
+                                📋 Копіювати
+                            </button>
+                            <button className="menu-item" onClick={() => handleMenuAction('archive')}>
+                                📦 Архівувати
+                            </button>
+                            <div style={{height:1, background:'rgba(255,255,255,0.1)', margin:'4px 0'}}></div>
+                            <button className="menu-item" onClick={() => handleMenuAction('delete')} style={{color: 'var(--danger)'}}>
+                                🗑️ Видалити
+                            </button>
+                        </div>
+                        </>
+                    )}
+                </div>
+              </>
             )}
           </div>
 
@@ -116,38 +184,52 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
                 ref={provided.innerRef}
                 {...provided.droppableProps}
               >
-                {list.cards?.map((card, idx) => (
-                  <CardItem key={card.id} card={card} index={idx} />
+                {list.cards?.filter(c => !c.is_archived).map((card, idx) => (
+                  <CardItem 
+                    key={card.id} 
+                    card={card} 
+                    index={idx} 
+                    onClick={() => onCardClick(card)}
+                    onToggleComplete={onToggleCardComplete}
+                  />
                 ))}
                 {provided.placeholder}
               </div>
             )}
           </Droppable>
 
-          {isAdding ? (
-            <form onSubmit={handleSubmit} style={{ marginTop: 8, padding: '0 4px' }}>
-              <input
-                className="form-input"
-                autoFocus
-                placeholder="Заголовок картки..."
-                value={newCardTitle}
-                onChange={e => setNewCardTitle(e.target.value)}
-                style={{ marginBottom: 8, fontSize: '13px', padding: '8px' }}
-              />
-              <div style={{ display: 'flex', gap: 4 }}>
-                <Button type="submit" size="sm" className="btn-primary">Додати</Button>
-                <Button type="button" size="sm" className="btn-secondary" onClick={() => setIsAdding(false)}>✕</Button>
-              </div>
-            </form>
-          ) : (
-            <button
-              className="btn btn-ghost"
-              style={{ justifyContent: 'flex-start', color: '#888', marginTop: 8 }}
-              onClick={() => setIsAdding(true)}
-            >
-              + Додати картку
-            </button>
-          )}
+          <div className="add-card-wrapper">
+            {isAdding ? (
+                <form onSubmit={handleSubmit}>
+                <input
+                    className="form-input"
+                    autoFocus
+                    placeholder="Введіть заголовок..."
+                    value={newCardTitle}
+                    onChange={e => setNewCardTitle(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <Button type="submit" size="sm" className="btn-primary">Додати</Button>
+                    <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 6 }} 
+                        onClick={() => setIsAdding(false)}
+                    >
+                        Скасувати
+                    </button>
+                </div>
+                </form>
+            ) : (
+                <button
+                    className="btn-ghost"
+                    onClick={() => setIsAdding(true)}
+                >
+                    + Додати картку
+                </button>
+            )}
+          </div>
         </div>
       )}
     </Draggable>

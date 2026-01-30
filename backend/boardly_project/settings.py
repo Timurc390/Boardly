@@ -30,6 +30,7 @@ ALLOWED_HOSTS.extend(_split_env(os.getenv('ALLOWED_HOSTS_EXTRA', '')))
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
     'corsheaders', 
     'rest_framework.authtoken',
     'djoser', # ДОДАНО: Для управления аутентифікацією (реєстрація, логін)
+    'channels',
     
     # My apps
     'core', # Реєструємо наш основний додаток для моделей
@@ -91,6 +93,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'boardly_project.wsgi.application'
+ASGI_APPLICATION = 'boardly_project.asgi.application'
 
 
 # Database
@@ -164,6 +167,15 @@ STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# ----------------------------------------------------------------------
+# CHANNELS (WebSocket)
+# ----------------------------------------------------------------------
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    }
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
@@ -196,36 +208,52 @@ if extra_csrf:
 CORS_ALLOW_CREDENTIALS = True 
 
 # ----------------------------------------------------------------------
-# DJANGO REST FRAMEWORK (DRF) НАЛАШТУВАННЯ
+# AUTHENTICATION BACKENDS
 # ----------------------------------------------------------------------
+AUTHENTICATION_BACKENDS = [
+    # Наш кастомний бекенд для входу через Email/Login
+    'core.authentication.EmailOrUsernameModelBackend',
+    # Стандартний бекенд (запасний)
+    'django.contrib.auth.backends.ModelBackend',
+    # Бекенд для Google Auth (allauth)
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
 
+
+# ----------------------------------------------------------------------
+# DJANGO REST FRAMEWORK (DRF)
+# ----------------------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication', 
-        # 'rest_framework.authentication.SessionAuthentication', 
     ],
-    # Встановлюємо дозвіл за замовчуванням (усі методи заборонені, якщо не вказано інше)
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
 
-# 1. Налаштування Email (для розробки виводимо в консоль)
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# Коли будемо готові до продакшну, замінимо на SMTP:
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'your-email@gmail.com'
-# EMAIL_HOST_PASSWORD = 'your-app-password'
+# ----------------------------------------------------------------------
+# EMAIL SETTINGS (Gmail SMTP)
+# ----------------------------------------------------------------------
+# Замінюємо консольний бекенд на реальний SMTP
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+# Встав сюди свою пошту та App Password (не звичайний пароль!)
+EMAIL_HOST_USER = 'tititimurc@gmail.com' 
+EMAIL_HOST_PASSWORD = 'fptmriinkxgsseln' 
+DEFAULT_FROM_EMAIL = 'Boardly Team <noreply@boardly.com>'
 
-# 2. Налаштування Djoser
+
+# ----------------------------------------------------------------------
+# DJOSER & SOCIAL AUTH
+# ----------------------------------------------------------------------
 DJOSER = {
     'PASSWORD_RESET_CONFIRM_URL': 'password-reset/{uid}/{token}',
     'USERNAME_RESET_CONFIRM_URL': 'username-reset/{uid}/{token}',
     'ACTIVATION_URL': 'activate/{uid}/{token}',
-    'SEND_ACTIVATION_EMAIL': False,
+    'SEND_ACTIVATION_EMAIL': True,
     'SERIALIZERS': {
         'user_create': 'core.api.serializers.UserCreateSerializer',
         'user': 'core.api.serializers.UserSerializer',
@@ -233,24 +261,28 @@ DJOSER = {
     },
 }
 
-# 3. Налаштування Social Auth (Google)
+# ----------------------------------------------------------------------
+# ALLAUTH & SOCIAL ACCOUNT SETTINGS (NEW FIXES)
+# ----------------------------------------------------------------------
+# Ці налаштування гарантують, що email буде збережено в моделі User
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False 
+ACCOUNT_AUTHENTICATION_METHOD = 'email' 
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_ADAPTER = 'core.adapters.GoogleAccountAdapter'
+
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
         'APP': {
-            'client_id': '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com', # Встав сюди ID з консолі
-            'secret': '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', # Встав сюди Secret
+            'client_id': '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com',
+            'secret': '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',
             'key': ''
         }
     }
 }
 
-# Важливо для dj-rest-auth: вимикаємо перевірку email для соціальних акаунтів, щоб не було помилок
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
 SOCIALACCOUNT_EMAIL_REQUIRED = False

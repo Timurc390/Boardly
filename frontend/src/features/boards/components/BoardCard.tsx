@@ -7,15 +7,25 @@ interface BoardCardProps {
 }
 
 export const BoardCard: React.FC<BoardCardProps> = ({ board }) => {
+  const style: React.CSSProperties = {};
+  
+  if (board.background_url) {
+    if (board.background_url.startsWith('#')) {
+      style.backgroundColor = board.background_url;
+    } else {
+      style.backgroundImage = `url(${board.background_url})`;
+      style.backgroundSize = 'cover';
+      style.backgroundPosition = 'center';
+    }
+  } else {
+    style.background = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)';
+  }
+
   return (
-    <Link to={`/boards/${board.id}`} className="board-card" style={{
-      background: board.background_url || 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center'
-    }}>
+    <Link to={`/boards/${board.id}`} className="board-card" style={style}>
       <div className="board-card-overlay">
-        <h3 className="board-card-title">{board.title}</h3>
-        {board.is_favorite && <span className="board-star">★</span>}
+        <span className="board-card-title">{board.title}</span>
+        {board.is_favorite && <span style={{ position: 'absolute', top: 10, right: 10, color: '#FFC107' }}>★</span>}
       </div>
     </Link>
   );

@@ -1,39 +1,34 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 
 export const PrivacyPolicyScreen: React.FC = () => {
-  const navigate = useNavigate();
-
   return (
     <div className="privacy-page">
       <div className="privacy-header">
+        {/* Прибрали justifyContent: 'center', щоб логотип був зліва */}
         <div className="privacy-header-inner">
            <div className="privacy-brand">Boardly</div>
-        <button className="privacy-back" type="button" onClick={() => navigate(-1)}>
-          ← Назад
-        </button>
         </div>
       </div>
-      <div className="privacy-content">
-        <h1>Політика конфіденційності</h1>
+      {/* Додали margin: '0 auto', щоб сам контейнер з текстом був по центру екрана */}
+      <div className="privacy-content" style={{ textAlign: 'center', margin: '0 auto' }}>
+        <h1>Privacy Policy</h1>
         <p>
-          Ваша приватність важлива для нас. У цій політиці ми пояснюємо, як Boardly та наші
-          афілійовані компанії збирають, використовують, передають і захищають вашу інформацію під
-          час користування нашими продуктами, сервісами та вебсайтом.
+          Your privacy matters to us. This privacy policy explains how Boardly, and our corporate affiliates collect, use,
+          share, and protect your information when you use our products, services, websites, or otherwise interact
+          with us (a list of Atlassian’s corporate affiliates can be found in the List of Subsidiaries section of Atlassian’s
+          most recent Form 10-K, available under the SEC Filings tab by selecting the “Annual Filings” filter on the page
+          located here). We offer a wide range of products,including our cloud and software products.
+          We refer to all of these products, together with our other services and websites, as "Services"
+          in this privacy policy.
         </p>
         <p>
-          Також ми описуємо ваші права і можливості керування даними: як заперечити певні способи
-          використання інформації, отримати доступ до даних і оновити їх.
+          This privacy policy also explains your choices surrounding how we use information about you,
+          which includes how you can object to certain uses of information about you and how you can access
+          and update certain information about you. If you do not agree with this privacy policy, do not access
+          or use our Services or interact with any other aspect of our business.
         </p>
-        <h3>Ця політика допоможе вам зрозуміти:</h3>
-        <ul>
-          <li>Яку інформацію ми збираємо</li>
-          <li>Як і для чого ми її використовуємо</li>
-          <li>Як ми зберігаємо та захищаємо інформацію</li>
-          <li>Як отримати доступ і керувати своїми даними</li>
-          <li>Як ми повідомляємо про зміни в політиці</li>
-          <li>Як з нами зв’язатися</li>
-        </ul>
+        
+        <h3>This privacy policy is intended to help you understand:</h3>
       </div>
       <div className="privacy-footer">
         <div className="privacy-footer-inner">

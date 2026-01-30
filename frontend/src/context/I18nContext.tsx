@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { useAuth } from './AuthContext';
+// ЗМІНА: Імпортуємо хук Redux замість useAuth
+import { useAppSelector } from '../store/hooks';
 import { getInitialLocale, normalizeLocale, SUPPORTED_LOCALES, translations, type Locale } from '../i18n/translations';
 
 type I18nContextValue = {
@@ -18,17 +19,21 @@ export const useI18n = () => {
 };
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  // ЗМІНА: Отримуємо користувача з Redux Store
+  const { user } = useAppSelector(state => state.auth);
+  
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
 
+  // Синхронізація мови з профілем користувача
   useEffect(() => {
     if (!user?.profile?.language) return;
     const profileLocale = normalizeLocale(user.profile.language);
     if (profileLocale !== locale) {
       setLocale(profileLocale);
     }
-  }, [user?.id, user?.profile?.language]);
+  }, [user?.id, user?.profile?.language, locale]);
 
+  // Збереження мови в localStorage та html тег
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('locale', locale);
@@ -40,7 +45,9 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const t = useMemo(() => {
     return (key: string, vars?: Record<string, string | number>) => {
+      // @ts-ignore
       const base = translations.uk[key] ?? key;
+      // @ts-ignore
       const value = translations[locale][key] ?? base;
       if (!vars) return value;
       return value.replace(/\{(\w+)\}/g, (_match, name) => (
@@ -53,7 +60,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     locale,
     setLocale,
     t,
-    supportedLocales: [...SUPPORTED_LOCALES],
+    supportedLocales: [...SUPPORTED_LOCALES]
   }), [locale, t]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

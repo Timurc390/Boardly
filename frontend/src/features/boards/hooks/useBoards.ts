@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Board } from '../../../types'; // Було ../../types
+import { Board } from '../../../types';
 import * as api from '../api';
 
 export const useBoards = () => {
