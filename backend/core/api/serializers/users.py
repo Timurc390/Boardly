@@ -18,7 +18,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ('organization', 'theme', 'language', 'notify_email', 'avatar', 'avatar_url')
+        fields = ('organization', 'bio', 'theme', 'language', 'notify_email', 'avatar', 'avatar_url')
 
     def get_avatar_url(self, obj):
         if not obj.avatar:
@@ -33,7 +33,18 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'profile')
-        read_only_fields = ('username', 'email')
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exclude(pk=self.instance.pk if self.instance else None).exists():
+            raise serializers.ValidationError("Користувач з таким email вже існує.")
+        return value
+
+    def validate_username(self, value):
+        if not value:
+            raise serializers.ValidationError("Username не може бути порожнім.")
+        if User.objects.filter(username__iexact=value).exclude(pk=self.instance.pk if self.instance else None).exists():
+            raise serializers.ValidationError("Користувач з таким username вже існує.")
+        return value
 
     def update(self, instance, validated_data):
         profile_data = validated_data.pop('profile', None)

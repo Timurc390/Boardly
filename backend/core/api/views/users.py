@@ -33,7 +33,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             )
         return queryset
 
-    @action(detail=False, methods=['get', 'patch'], url_path='me')
+    @action(detail=False, methods=['get', 'patch', 'delete'], url_path='me')
     def me(self, request):
         user = request.user
         if request.method == 'GET':
@@ -46,6 +46,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             serializer.save()
             log_activity(request.user, 'update_profile', 'profile', request.user.id)
             return Response(serializer.data)
+        
+        elif request.method == 'DELETE':
+            request.user.delete()
+            return Response(status=204)
 
     @action(detail=False, methods=['post', 'delete'], url_path='me/avatar')
     def avatar(self, request):

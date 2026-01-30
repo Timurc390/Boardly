@@ -33,6 +33,7 @@ class Profile(models.Model):
     theme = models.CharField(max_length=50, choices=THEME_CHOICES, default='light', verbose_name="Тема інтерфейсу")
     language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default='uk', verbose_name="Language")
     notify_email = models.BooleanField(default=True, verbose_name="Email notifications")
+    bio = models.TextField(blank=True, verbose_name="Bio")
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name="Avatar")
     
     class Meta:

@@ -9,8 +9,7 @@ export const PrivacyPolicyScreen: React.FC = () => {
            <div className="privacy-brand">Boardly</div>
         </div>
       </div>
-      {/* Додали margin: '0 auto', щоб сам контейнер з текстом був по центру екрана */}
-      <div className="privacy-content" style={{ textAlign: 'center', margin: '0 auto' }}>
+      <div className="privacy-content">
         <h1>Privacy Policy</h1>
         <p>
           Your privacy matters to us. This privacy policy explains how Boardly, and our corporate affiliates collect, use,

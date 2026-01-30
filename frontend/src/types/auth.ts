@@ -4,6 +4,7 @@ export interface ProfileData {
   email?: string;
   username?: string;
   organization?: string;
+  bio?: string;
   theme?: 'light' | 'dark';
   language?: 'uk' | 'en' | 'pl' | 'de' | 'fr' | 'es';
   notify_email?: boolean;

@@ -241,7 +241,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 # Встав сюди свою пошту та App Password (не звичайний пароль!)
-EMAIL_HOST_USER = '@gmail.com' 
+EMAIL_HOST_USER = 'example@gmail.com' 
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'fallback_if_needed')
 DEFAULT_FROM_EMAIL = 'Boardly Team <noreply@boardly.com>'
 
@@ -283,6 +283,5 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
-
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
 SOCIALACCOUNT_EMAIL_REQUIRED = False

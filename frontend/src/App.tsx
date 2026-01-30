@@ -91,14 +91,6 @@ const AppContent = () => {
             } 
           />
           <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <ProfileScreen />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
             path="/faq" 
             element={
               <ProtectedRoute>
@@ -107,6 +99,15 @@ const AppContent = () => {
             } 
           />
         </Route>
+
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <ProfileScreen />
+            </ProtectedRoute>
+          } 
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

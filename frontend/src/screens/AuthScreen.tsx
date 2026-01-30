@@ -8,7 +8,7 @@ import { KanbanPreview } from '../components/KanbanPreview';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loginUser, registerUser, googleLoginUser, clearError } from '../store/slices/authSlice';
 
-const GOOGLE_CLIENT_ID = 'GOOGLE_CLIENT_ID';
+const GOOGLE_CLIENT_ID = '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com';
 
 declare global {
   interface Window {
@@ -140,7 +140,7 @@ export const AuthScreen: React.FC = () => {
       <div className="auth-left">
         <div>
           <div className="auth-header">
-            <h1>Boardly.</h1>
+            <h1>Boardly</h1>
             <p>{isRegistering ? 'Створіть простір для продуктивності.' : 'Впорядкуйте свої задачі.'}</p>
           </div>
 

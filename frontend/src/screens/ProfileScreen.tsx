@@ -1,21 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 //import { useAuth } from '../context/AuthContext.tsx.bak';
 import { ActivityLog } from '../types';
+import { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 import { useI18n } from '../context/I18nContext';
 import { type Locale } from '../i18n/translations';
 
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { 
+  updateUserProfile, 
+  uploadUserAvatar, 
+  removeUserAvatar, 
+  logoutUser, 
+  changeUserPassword,
+  deleteUserAccount,
+  sendEmailVerification
+} from '../store/slices/authSlice';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
-type TabKey = 'profile' | 'activity' | 'settings';
+type TabKey = 'profile' | 'activity' | 'settings' | 'privacy';
 
 const TAB_LABEL_KEYS: Record<TabKey, string> = {
   profile: 'profile.tabs.profile',
   activity: 'profile.tabs.activity',
   settings: 'profile.tabs.settings',
+  privacy: 'profile.tabs.privacy',
 };
 
 const formatEntity = (name?: string, id?: number | null) => {
@@ -33,16 +45,21 @@ const getUserName = (log: ActivityLog) => {
 
 export const ProfileScreen: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const logout = () => {
-    dispatch({ type: 'auth/logoutUser' });
+    dispatch(logoutUser());
   };
 
   const updateProfile = async (data: Partial<any>) => {
-    return dispatch({ type: 'auth/updateUserProfile', payload: data });
+    return dispatch(updateUserProfile(data));
   };
 
   const uploadAvatar = async (file: File) => {
-    return dispatch({ type: 'auth/uploadUserAvatar', payload: file });
+    return dispatch(uploadUserAvatar(file));
+  };
+
+  const deleteAvatar = async () => {
+    return dispatch(removeUserAvatar());
   };
   const { user, token } = useAppSelector(state => state.auth);
   const { t, locale, setLocale, supportedLocales } = useI18n();
@@ -57,11 +74,20 @@ export const ProfileScreen: React.FC = () => {
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
+    username: '',
+    email: '',
     organization: '',
+    bio: '',
     theme: 'dark', // За замовчуванням темна
     language: 'uk',
     notify_email: true,
   });
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // Load user data into form
   useEffect(() => {
@@ -69,7 +95,10 @@ export const ProfileScreen: React.FC = () => {
       setForm({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
+        username: user.username || '',
+        email: user.email || '',
         organization: user.profile?.organization || '',
+        bio: user.profile?.bio || '',
         theme: (user.profile?.theme as string) || 'dark',
         language: user.profile?.language || 'uk',
         notify_email: user.profile?.notify_email ?? true,
@@ -98,11 +127,15 @@ export const ProfileScreen: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const emailChanged = form.email !== (user?.email || '');
       await updateProfile({
         first_name: form.first_name,
         last_name: form.last_name,
+        username: form.username,
+        email: form.email,
         profile: {
           organization: form.organization,
+          bio: form.bio,
           theme: form.theme as 'light' | 'dark',
           language: form.language as Locale, // ВИПРАВЛЕНО: Явне приведення типу для TypeScript
           notify_email: form.notify_email,
@@ -112,6 +145,14 @@ export const ProfileScreen: React.FC = () => {
       // Update local locale if changed
       if (form.language !== locale) {
         setLocale(form.language as Locale);
+      }
+
+      if (emailChanged) {
+        try {
+          await dispatch(sendEmailVerification(form.email)).unwrap();
+        } catch {
+          showToast(t('common.error'));
+        }
       }
       
       showToast(t('profile.saved'));
@@ -131,6 +172,42 @@ export const ProfileScreen: React.FC = () => {
       } catch {
         showToast(t('common.error'));
       }
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (!passwordForm.current_password || !passwordForm.new_password) {
+      showToast(t('common.error'));
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      showToast(t('resetConfirm.errorMismatch'));
+      return;
+    }
+    try {
+      await dispatch(changeUserPassword({
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password
+      })).unwrap();
+      showToast(t('resetConfirm.successTitle'));
+      await dispatch(logoutUser());
+      navigate('/');
+    } catch (e) {
+      console.error(e);
+      showToast(t('common.error'));
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm('Ви впевнені, що хочете видалити акаунт? Це дію неможливо скасувати.');
+    if (!confirmed) return;
+    try {
+      await dispatch(deleteUserAccount()).unwrap();
+      await dispatch(logoutUser());
+      navigate('/');
+    } catch (e) {
+      console.error(e);
+      showToast(t('common.error'));
     }
   };
 
@@ -254,9 +331,9 @@ export const ProfileScreen: React.FC = () => {
 
   return (
     <div className="profile-page">
-      <div className="profile-container">
-        {/* SIDEBAR */}
-        <aside className="profile-sidebar">
+      <div className="profile-shell">
+        <aside className="profile-side">
+          <div className="profile-side-brand">Boardly</div>
           <div className="profile-user-card">
             <div className="profile-avatar-wrapper">
               <div className="profile-avatar">
@@ -280,12 +357,7 @@ export const ProfileScreen: React.FC = () => {
               </div>
             </div>
             <h2 className="profile-name">{user.first_name} {user.last_name}</h2>
-            <p className="profile-username">@{user.username}</p>
-            {user.profile?.organization && (
-              <div className="profile-org-badge">
-                🏢 {user.profile.organization}
-              </div>
-            )}
+            <p className="profile-username">{user.email}</p>
           </div>
 
           <nav className="profile-nav">
@@ -295,18 +367,29 @@ export const ProfileScreen: React.FC = () => {
                 onClick={() => setActiveTab(key)}
                 className={`profile-nav-item ${activeTab === key ? 'active' : ''}`}
               >
-                {t(TAB_LABEL_KEYS[key])}
+                {key === 'privacy' ? 'Privacy policy' : t(TAB_LABEL_KEYS[key])}
               </button>
             ))}
           </nav>
 
-          <button onClick={logout} className="profile-logout-btn">
-            🚪 {t('nav.logout')}
-          </button>
+          <Link to="/boards" className="profile-back-link">← Back to main page</Link>
         </aside>
 
-        {/* CONTENT AREA */}
-        <main className="profile-content">
+        <main className="profile-main">
+          <div className="profile-header">
+            {activeTab === 'privacy' ? (
+              <>
+                <h1>Privacy policy</h1>
+                <p>Protect your personal information</p>
+              </>
+            ) : (
+              <>
+                <h1>Profile settings</h1>
+                <p>Manage your personal information</p>
+              </>
+            )}
+          </div>
+
           <AnimatePresence mode="wait">
             {activeTab === 'profile' && (
               <motion.div 
@@ -315,51 +398,173 @@ export const ProfileScreen: React.FC = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="profile-tab-content"
+                className="profile-grid"
               >
-                <h3>{t('profile.personalInfo')}</h3>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label>{t('profile.fields.firstName')}</label>
-                    <input 
-                      className="form-input"
-                      value={form.first_name}
-                      onChange={e => setForm({...form, first_name: e.target.value})}
-                    />
+                <section className="profile-card personal-info">
+                  <div className="profile-card-title">Personal Info</div>
+                  <div className="profile-personal-grid">
+                    <div className="profile-avatar-col">
+                      <div className="profile-avatar-large">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="Avatar" />
+                        ) : (
+                          <span>{user.username.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <button className="profile-btn-secondary avatar-btn" onClick={() => fileInputRef.current?.click()}>
+                        Change Photo
+                      </button>
+                      <button className="profile-btn-danger avatar-btn" onClick={deleteAvatar}>
+                        Remove Photo
+                      </button>
+                    </div>
+
+                    <div className="profile-fields-col">
+                      <div className="profile-name-row">
+                        <div className="form-group inline-field">
+                          <label>{t('profile.fields.firstName')}</label>
+                          <input 
+                            className="form-input input-first"
+                            value={form.first_name}
+                            onChange={e => setForm({...form, first_name: e.target.value})}
+                          />
+                        </div>
+                        <div className="form-group inline-field">
+                          <label>{t('profile.fields.lastName')}</label>
+                          <input 
+                            className="form-input input-last"
+                            value={form.last_name}
+                            onChange={e => setForm({...form, last_name: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Username</label>
+                        <input 
+                          className="form-input input-wide" 
+                          value={form.username}
+                          onChange={e => setForm({...form, username: e.target.value})}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Email</label>
+                        <input 
+                          className="form-input input-wide" 
+                          value={form.email}
+                          onChange={e => setForm({...form, email: e.target.value})}
+                        />
+                      </div>
+                      <div className="profile-card-actions">
+                        <button className="profile-btn-primary save-btn" onClick={handleSave} disabled={saving}>
+                          {saving ? t('common.saving') : t('common.save')}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>{t('profile.fields.lastName')}</label>
-                    <input 
-                      className="form-input"
-                      value={form.last_name}
-                      onChange={e => setForm({...form, last_name: e.target.value})}
-                    />
+                </section>
+
+                <section className="profile-card password-change">
+                  <div className="profile-card-title">Password change</div>
+                  <div className="profile-form-grid one-col">
+                    <div className="form-group">
+                      <label>Old Password</label>
+                      <input 
+                        className="form-input" 
+                        type="password" 
+                        value={passwordForm.current_password}
+                        onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>New Password</label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          className="form-input" 
+                          type={showNewPassword ? 'text' : 'password'} 
+                          value={passwordForm.new_password}
+                          onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          {showNewPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Confirm New Password</label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          className="form-input" 
+                          type={showNewPassword ? 'text' : 'password'} 
+                          value={passwordForm.confirm_password}
+                          onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          {showNewPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>{t('profile.fields.organization')}</label>
-                    <input 
-                      className="form-input"
-                      value={form.organization}
-                      onChange={e => setForm({...form, organization: e.target.value})}
-                      placeholder="Company Inc."
-                    />
+                  <div className="profile-card-actions">
+                    <button className="profile-btn-verify" onClick={handlePasswordChange}>
+                      Change password
+                    </button>
                   </div>
-                  <div className="form-group">
-                    <label>{t('profile.fields.email')}</label>
-                    <input 
-                      className="form-input"
-                      value={user.email}
-                      disabled
-                      title="Email cannot be changed"
-                    />
+                </section>
+
+                <section className="profile-card work-info">
+                  <div className="work-info-header">
+                    <div className="profile-card-title">Work Info</div>
+                    <div className="work-public-row">
+                      <span className="work-public-label">Public</span>
+                      <label className="toggle-switch">
+                        <input 
+                          type="checkbox"
+                          checked={form.notify_email}
+                          onChange={e => setForm({...form, notify_email: e.target.checked})}
+                        />
+                        <span className="toggle-slider"></span>
+                      </label>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="form-actions">
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? t('common.saving') : t('common.save')}
-                  </button>
-                </div>
+                  <div className="profile-form-grid one-col">
+                    <div className="form-group">
+                      <label>Role or Organization</label>
+                      <input 
+                        className="form-input work-input"
+                        value={form.organization}
+                        onChange={e => setForm({...form, organization: e.target.value})}
+                        placeholder="Role / Company"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Add your bio</label>
+                      <textarea
+                        className="form-input work-bio"
+                        value={form.bio}
+                        onChange={e => setForm({...form, bio: e.target.value})}
+                        placeholder="Tell us about yourself"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="profile-card access">
+                  <div className="profile-card-title">Access</div>
+                  <div className="profile-card-actions column">
+                    <button className="profile-btn-secondary" onClick={logout}>Log out</button>
+                    <button className="profile-btn-danger" onClick={handleDeleteAccount}>
+                      Deactivate your account
+                    </button>
+                  </div>
+                </section>
               </motion.div>
             )}
 
@@ -370,9 +575,9 @@ export const ProfileScreen: React.FC = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="profile-tab-content"
+                className="profile-card"
               >
-                <h3>{t('profile.tabs.activity')}</h3>
+                <div className="profile-card-title">{t('profile.tabs.activity')}</div>
                 <div className="activity-list">
                   {loadingActivity ? (
                     <div className="loading-state">{t('common.loading')}</div>
@@ -402,10 +607,9 @@ export const ProfileScreen: React.FC = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="profile-tab-content"
+                className="profile-card"
               >
-                <h3>{t('profile.appSettings')}</h3>
-                
+                <div className="profile-card-title">{t('profile.appSettings')}</div>
                 <div className="settings-section">
                   <div className="form-group">
                     <label>{t('profile.fields.theme')}</label>
@@ -424,7 +628,7 @@ export const ProfileScreen: React.FC = () => {
                       </button>
                     </div>
                   </div>
-
+                  
                   <div className="form-group">
                     <label>{t('profile.fields.language')}</label>
                     <select 
@@ -439,7 +643,7 @@ export const ProfileScreen: React.FC = () => {
                       ))}
                     </select>
                   </div>
-
+                  
                   <div className="form-group checkbox-group">
                     <label className="checkbox-label">
                       <input 
@@ -452,11 +656,24 @@ export const ProfileScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="form-actions">
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                <div className="profile-card-actions">
+                  <button className="profile-btn-primary" onClick={handleSave} disabled={saving}>
                     {saving ? t('common.saving') : t('common.save')}
                   </button>
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'privacy' && (
+              <motion.div 
+                key="privacy"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="profile-privacy-body"
+              >
+                <PrivacyPolicyScreen />
               </motion.div>
             )}
           </AnimatePresence>

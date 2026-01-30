@@ -20,6 +20,16 @@ const initialState: AuthState = {
   successMessage: null,
 };
 
+const toErrorMessage = (payload: any) => {
+  if (!payload) return 'Помилка авторизації.';
+  if (typeof payload === 'string') return payload;
+  if (payload.detail) return payload.detail;
+  if (Array.isArray(payload.non_field_errors)) return payload.non_field_errors[0];
+  const firstKey = Object.keys(payload)[0];
+  if (firstKey && Array.isArray(payload[firstKey])) return payload[firstKey][0];
+  return 'Помилка авторизації.';
+};
+
 // --- Async Thunks ---
 
 export const fetchMe = createAsyncThunk(
@@ -138,6 +148,42 @@ export const removeUserAvatar = createAsyncThunk(
   }
 );
 
+export const changeUserPassword = createAsyncThunk(
+  'auth/changePassword',
+  async (data: { current_password: string; new_password: string }, { rejectWithValue }) => {
+    try {
+      await client.post('/auth/users/set_password/', data);
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(err.response?.data || 'Password change failed');
+    }
+  }
+);
+
+export const sendEmailVerification = createAsyncThunk(
+  'auth/sendEmailVerification',
+  async (email: string, { rejectWithValue }) => {
+    try {
+      await client.post('/auth/users/resend_activation/', { email });
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(err.response?.data || 'Verification email failed');
+    }
+  }
+);
+
+export const deleteUserAccount = createAsyncThunk(
+  'auth/deleteAccount',
+  async (_, { rejectWithValue }) => {
+    try {
+      await client.delete('/users/me/');
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(err.response?.data || 'Delete account failed');
+    }
+  }
+);
+
 // --- Account Management ---
 
 export const activateUserAccount = createAsyncThunk(
@@ -220,7 +266,7 @@ const authSlice = createSlice({
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = toErrorMessage(action.payload);
       })
       // Google Login
       .addCase(googleLoginUser.pending, (state) => {
@@ -234,7 +280,7 @@ const authSlice = createSlice({
       })
       .addCase(googleLoginUser.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = toErrorMessage(action.payload);
       })
       // Logout - MOVED UP before addMatcher
       .addCase(logoutUser.fulfilled, (state) => {
