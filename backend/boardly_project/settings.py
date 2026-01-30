@@ -241,8 +241,8 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 # Встав сюди свою пошту та App Password (не звичайний пароль!)
-EMAIL_HOST_USER = 'tititimurc@gmail.com' 
-EMAIL_HOST_PASSWORD = 'fptmriinkxgsseln' 
+EMAIL_HOST_USER = '@gmail.com' 
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'fallback_if_needed')
 DEFAULT_FROM_EMAIL = 'Boardly Team <noreply@boardly.com>'
 
 
@@ -277,8 +277,8 @@ SOCIALACCOUNT_PROVIDERS = {
         'SCOPE': ['profile', 'email'],
         'AUTH_PARAMS': {'access_type': 'online'},
         'APP': {
-            'client_id': '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com',
-            'secret': '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',
+            'client_id': os.getenv('GOOGLE_CLIENT_ID', 'your_id'),
+            'secret': os.getenv('GOOGLE_CLIENT_SECRET', 'your_secret'),
             'key': ''
         }
     }
