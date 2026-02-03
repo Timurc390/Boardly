@@ -43,7 +43,7 @@ export const BoardListScreen: React.FC = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error(error);
-      alert('Помилка створення дошки');
+      alert(t('toast.boardCreateFailed'));
     } finally {
       setIsCreating(false);
     }
@@ -58,6 +58,13 @@ export const BoardListScreen: React.FC = () => {
       <div className="page-header">
         <h1>{t('nav.board')}</h1>
       </div>
+
+      {boards.length === 0 && (
+        <div className="empty-state" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600 }}>{t('board.empty.title')}</div>
+          <div style={{ color: 'var(--text-secondary)' }}>{t('board.empty.subtitle')}</div>
+        </div>
+      )}
 
       <div className="boards-grid">
         {boards.map(board => (
@@ -80,10 +87,10 @@ export const BoardListScreen: React.FC = () => {
       >
         <form onSubmit={handleCreate}>
           <div className="form-group">
-             <label className="form-label">Назва дошки</label>
+             <label className="form-label">{t('board.create.titleLabel')}</label>
              <Input 
                 autoFocus
-                placeholder="Введіть назву..." 
+                placeholder={t('board.create.titleInputPlaceholder')}
                 value={newBoardTitle}
                 onChange={e => setNewBoardTitle(e.target.value)}
              />
@@ -93,7 +100,7 @@ export const BoardListScreen: React.FC = () => {
               {t('common.cancel')}
             </Button>
             <Button type="submit" className="btn-primary" disabled={isCreating}>
-              {isCreating ? 'Створення...' : t('common.create')}
+              {isCreating ? t('common.creating') : t('common.create')}
             </Button>
           </div>
         </form>

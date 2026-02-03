@@ -4,12 +4,14 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { KanbanPreview } from '../components/KanbanPreview';
+import { useI18n } from '../context/I18nContext';
 
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useAppDispatch } from '../store/hooks';
 import { resetUserPassword } from '../store/slices/authSlice';
 
 export const ForgotPasswordScreen: React.FC = () => {
   const dispatch = useAppDispatch();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -24,7 +26,7 @@ export const ForgotPasswordScreen: React.FC = () => {
     } catch (error) {
       setStatus('error');
       // Для безпеки краще писати загальне повідомлення, навіть якщо email не знайдено
-      setErrorMsg('Якщо цей email зареєстрований, ми відправили інструкції.');
+      setErrorMsg(t('passwordReset.error'));
     }
   };
 
@@ -32,19 +34,19 @@ export const ForgotPasswordScreen: React.FC = () => {
     <div className="auth-page-split">
       <div className="auth-left">
         <div className="auth-header">
-           <h1>🔐 Відновлення</h1>
-           <p>Введіть вашу пошту, і ми надішлемо посилання для створення нового паролю.</p>
+           <h1>🔐 {t('passwordReset.title')}</h1>
+           <p>{t('passwordReset.description')}</p>
         </div>
 
         {status === 'success' ? (
             <div style={{ textAlign: 'center' }}>
-              <h3 style={{ color: 'var(--col-progress)', marginBottom: '12px' }}>Лист відправлено! ✉️</h3>
+              <h3 style={{ color: 'var(--col-progress)', marginBottom: '12px' }}>{t('passwordReset.successTitle')}</h3>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
-                Ми надіслали інструкції на <strong>{email}</strong>.<br/>
-                Перевірте папку "Вхідні" та "Спам".
+                {t('passwordReset.successDetail', { email: email || t('passwordReset.emailPlaceholder') })}<br/>
+                {t('passwordReset.successHint')}
               </p>
               <Link to="/auth" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', justifyContent: 'center' }}>
-                Повернутися до входу
+                {t('passwordReset.backToLogin')}
               </Link>
             </div>
         ) : (
@@ -59,22 +61,24 @@ export const ForgotPasswordScreen: React.FC = () => {
                     <div className="form-group">
                         <Input
                             type="email"
-                            placeholder="Ваш Email"
+                            placeholder={t('passwordReset.emailPlaceholder')}
                             value={email}
                             onChange={e => setEmail(e.target.value)}
+                            autoComplete="email"
+                            name="email"
                             required
                             autoFocus
                         />
                     </div>
 
                     <Button type="submit" className="btn btn-primary" disabled={status === 'loading'}>
-                        {status === 'loading' ? 'Відправка...' : 'Відновити пароль'}
+                        {status === 'loading' ? t('passwordReset.sending') : t('passwordReset.submit')}
                     </Button>
                 </form>
 
                 <div className="auth-footer">
                     <Link to="/auth" className="btn-link">
-                        ← Назад до входу
+                        ← {t('passwordReset.backToLogin')}
                     </Link>
                 </div>
             </>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../../context/I18nContext';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'link';
@@ -15,6 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props 
 }) => {
+  const { t } = useI18n();
   const baseClass = 'btn';
   const variantClass = `btn-${variant}`;
   const sizeClass = size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : '';
@@ -25,7 +27,7 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled || isLoading}
       {...props}
     >
-      {isLoading ? 'Завантаження...' : children}
+      {isLoading ? t('common.loading') : children}
     </button>
   );
 };  

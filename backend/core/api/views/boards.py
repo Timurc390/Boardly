@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from core.models import Board, List, Membership, Label, Activity
 from core.api.serializers import BoardSerializer, MembershipSerializer, LabelSerializer, ActivitySerializer
 from core.services.activity_logger import log_activity
-from core.services.permissions import IsOwnerOrReadOnly
+from core.services.permissions import IsOwnerOrReadOnly, ensure_board_admin
 
 class BoardViewSet(viewsets.ModelViewSet):
     serializer_class = BoardSerializer
@@ -195,6 +195,8 @@ class LabelViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        board = serializer.validated_data.get('board')
+        ensure_board_admin(self.request.user, board, 'Only admins can create labels.')
         label = serializer.save()
         log_activity(self.request.user, 'create_label', 'label', label.id, {
             'label_id': label.id,
@@ -204,6 +206,8 @@ class LabelViewSet(viewsets.ModelViewSet):
         })
 
     def perform_update(self, serializer):
+        board = serializer.instance.board
+        ensure_board_admin(self.request.user, board, 'Only admins can update labels.')
         label = serializer.save()
         log_activity(self.request.user, 'update_label', 'label', label.id, {
             'label_id': label.id,
@@ -213,6 +217,7 @@ class LabelViewSet(viewsets.ModelViewSet):
         })
 
     def perform_destroy(self, instance):
+        ensure_board_admin(self.request.user, instance.board, 'Only admins can delete labels.')
         meta = {
             'label_id': instance.id,
             'label_name': instance.name,
@@ -229,6 +234,9 @@ class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         queryset = Activity.objects.all().select_related('user', 'board')
         board_id = self.request.query_params.get('board_id')
+        user_id = self.request.query_params.get('user_id')
         if board_id:
             queryset = queryset.filter(board__id=board_id)
+        if user_id:
+            queryset = queryset.filter(user__id=user_id)
         return queryset.order_by('-timestamp')

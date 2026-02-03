@@ -1,6 +1,8 @@
 import React from 'react';
+import { useI18n } from '../context/I18nContext';
 
 export const PrivacyPolicyScreen: React.FC = () => {
+  const { t } = useI18n();
   return (
     <div className="privacy-page">
       <div className="privacy-header">
@@ -10,35 +12,22 @@ export const PrivacyPolicyScreen: React.FC = () => {
         </div>
       </div>
       <div className="privacy-content">
-        <h1>Privacy Policy</h1>
-        <p>
-          Your privacy matters to us. This privacy policy explains how Boardly, and our corporate affiliates collect, use,
-          share, and protect your information when you use our products, services, websites, or otherwise interact
-          with us (a list of Atlassian’s corporate affiliates can be found in the List of Subsidiaries section of Atlassian’s
-          most recent Form 10-K, available under the SEC Filings tab by selecting the “Annual Filings” filter on the page
-          located here). We offer a wide range of products,including our cloud and software products.
-          We refer to all of these products, together with our other services and websites, as "Services"
-          in this privacy policy.
-        </p>
-        <p>
-          This privacy policy also explains your choices surrounding how we use information about you,
-          which includes how you can object to certain uses of information about you and how you can access
-          and update certain information about you. If you do not agree with this privacy policy, do not access
-          or use our Services or interact with any other aspect of our business.
-        </p>
+        <h1>{t('profile.privacy.title')}</h1>
+        <p>{t('privacy.body.p1')}</p>
+        <p>{t('privacy.body.p2')}</p>
         
-        <h3>This privacy policy is intended to help you understand:</h3>
+        <h3>{t('privacy.summaryTitle')}</h3>
       </div>
       <div className="privacy-footer">
         <div className="privacy-footer-inner">
           <span>© 2026 Boardly</span>
           <div className="privacy-footer-links">
-            <span>Доступність</span>
-            <span>Ваш вибір конфіденційності</span>
-            <span>Політика конфіденційності</span>
-            <span>Умови</span>
-            <span>Вихідні дані</span>
-            <span>Безпека</span>
+            <span>{t('privacy.footer.accessibility')}</span>
+            <span>{t('privacy.footer.choices')}</span>
+            <span>{t('privacy.footer.policy')}</span>
+            <span>{t('privacy.footer.terms')}</span>
+            <span>{t('privacy.footer.data')}</span>
+            <span>{t('privacy.footer.security')}</span>
           </div>
         </div>
       </div>

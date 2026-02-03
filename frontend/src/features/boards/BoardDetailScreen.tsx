@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
 import { BoardColumn } from './components/BoardColumn';
 import { CardModal } from './components/CardModal';
+import { BoardHeader } from './components/BoardHeader';
+import { BoardMenuSidebar } from './components/BoardMenuSidebar';
+import { BoardFiltersModal } from './components/BoardFiltersModal';
+import { BoardActivityModal } from './components/BoardActivityModal';
 import { Button } from '../../components/ui/Button';
 import { useI18n } from '../../context/I18nContext';
-import { Card, List } from '../../types';
+import { Card, ActivityLog, Board } from '../../types';
+import { getBoardActivity } from './api';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { 
@@ -37,13 +42,12 @@ import {
   joinCardAction,
   leaveCardAction,
   removeCardMemberAction,
-  clearCurrentBoard
+  clearCurrentBoard,
+  updateBoardMemberRoleAction
 } from '../../store/slices/boardSlice';
+import { logoutUser } from '../../store/slices/authSlice';
 
-const PRESET_COLORS = [
-  '#0079bf', '#d29034', '#519839', '#b04632', '#89609e', 
-  '#cd5a91', '#4bbf6b', '#00aecc', '#838c91'
-];
+type BoardMember = NonNullable<Board['members']>[number];
 
 export const BoardDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -53,9 +57,7 @@ export const BoardDetailScreen: React.FC = () => {
   const { t } = useI18n();
 
   const { user } = useAppSelector(state => state.auth);
-  const { currentBoard: board, loading: isLoading, error } = useAppSelector(state => state.board);
-  const { currentBoard, loading, isLive } = useAppSelector(state => state.board);
-  const isSyncing = !isLive && currentBoard;
+  const { currentBoard: board, loading: isLoading, error, isLive } = useAppSelector(state => state.board);
   const [isAddingList, setIsAddingList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -69,6 +71,24 @@ export const BoardDetailScreen: React.FC = () => {
   const [filterDue, setFilterDue] = useState<'all' | 'overdue' | 'today' | 'week' | 'no_due'>('all');
   const [filterCompleted, setFilterCompleted] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [bgUrlInput, setBgUrlInput] = useState('');
+  const [isTouch, setIsTouch] = useState(false);
+  const [isGlobalMenuOpen, setIsGlobalMenuOpen] = useState(false);
+  const [boardIconFailed, setBoardIconFailed] = useState(false);
+  const [memberQuery, setMemberQuery] = useState('');
+  const [activeMemberId, setActiveMemberId] = useState<number | null>(null);
+  const [headerMemberId, setHeaderMemberId] = useState<number | null>(null);
+  const [activityMember, setActivityMember] = useState<BoardMember | null>(null);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
+  const [isActivityLoading, setIsActivityLoading] = useState(false);
+
+  const updateSearch = useCallback((value: string) => {
+    const params = new URLSearchParams(location.search);
+    if (value) params.set('q', value);
+    else params.delete('q');
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (id) {
@@ -78,6 +98,42 @@ export const BoardDetailScreen: React.FC = () => {
       dispatch(clearCurrentBoard());
     };
   }, [id, dispatch]);
+
+  useEffect(() => {
+    if (!id) return;
+    let timer: number | null = null;
+    let stopped = false;
+    const intervalMs = isLive ? 20000 : 5000;
+
+    const poll = () => {
+      if (stopped) return;
+      if (typeof document !== 'undefined' && document.hidden) {
+        timer = window.setTimeout(poll, intervalMs);
+        return;
+      }
+      dispatch(fetchBoardById(Number(id)));
+      timer = window.setTimeout(poll, intervalMs);
+    };
+
+    timer = window.setTimeout(poll, intervalMs);
+    return () => {
+      stopped = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [id, dispatch, isLive]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const media = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsTouch(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener('change', update);
+      return () => media.removeEventListener('change', update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
 
   useEffect(() => {
     if (board) setBoardTitle(board.title);
@@ -90,6 +146,10 @@ export const BoardDetailScreen: React.FC = () => {
         if (foundCard) setSelectedCard(foundCard);
     }
   }, [board, selectedCard]);
+
+  useEffect(() => {
+    setHeaderMemberId(null);
+  }, [board?.id]);
 
   useEffect(() => {
     if (!board) return;
@@ -107,18 +167,21 @@ export const BoardDetailScreen: React.FC = () => {
     setFilterQuery(q);
   }, [location.search]);
 
-  if (isLoading && !board) return <div className="loading-state">{t('common.loading')}</div>;
-  if (error) return <div className="error-state">{error}</div>;
-  if (!board) return null;
-
-  const isOwner = board.owner?.id === user?.id;
-  const isAdmin = board.members?.some(m => m.user.id === user?.id && m.role === 'admin');
+  const boardId = board?.id ?? 0;
+  const isOwner = board?.owner?.id === user?.id;
+  const isAdmin = !!board?.members?.some(m => m.user.id === user?.id && m.role === 'admin');
+  const currentMembership = board?.members?.find(m => m.user.id === user?.id);
   const canManageMembers = isOwner || isAdmin;
-  const activeLists = board.lists?.filter(l => !l.is_archived) || [];
-  const archivedLists = board.lists?.filter(l => l.is_archived) || [];
-  const archivedCards = board.lists?.flatMap(l => (l.cards || []).filter(c => c.is_archived)) || [];
+  const canEditBoard = isOwner || isAdmin;
+  const canLeaveBoard = !!currentMembership && !isOwner;
+  const activeLists = useMemo(() => board?.lists?.filter(l => !l.is_archived) || [], [board?.lists]);
+  const archivedLists = useMemo(() => board?.lists?.filter(l => l.is_archived) || [], [board?.lists]);
+  const archivedCards = useMemo(
+    () => board?.lists?.flatMap(l => (l.cards || []).filter(c => c.is_archived)) || [],
+    [board?.lists]
+  );
 
-  const matchesFilters = (card: Card) => {
+  const matchesFilters = useCallback((card: Card) => {
     if (filterQuery) {
       const q = filterQuery.toLowerCase();
       const title = card.title?.toLowerCase() || '';
@@ -150,34 +213,68 @@ export const BoardDetailScreen: React.FC = () => {
       }
     }
     return true;
-  };
+  }, [filterCompleted, filterDue, filterLabelId, filterMemberId, filterQuery]);
 
-  const filteredLists = activeLists.map(list => ({
-    ...list,
-    cards: (list.cards || []).filter(c => !c.is_archived && matchesFilters(c))
-  }));
+  const filteredLists = useMemo(
+    () =>
+      activeLists.map(list => ({
+        ...list,
+        cards: (list.cards || []).filter(c => !c.is_archived && matchesFilters(c))
+      })),
+    [activeLists, matchesFilters]
+  );
 
-  const handleCreateList = async (e: React.FormEvent) => {
+  const handleCreateList = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditBoard) return;
     if (!newListTitle.trim()) return;
-    const order = board.lists ? board.lists.length + 1 : 1;
-    dispatch(addListAction({ boardId: board.id, title: newListTitle, order }));
+    if (!boardId) return;
+    const order = board?.lists ? board.lists.length + 1 : 1;
+    dispatch(addListAction({ boardId, title: newListTitle, order }));
     setNewListTitle('');
     setIsAddingList(false);
-  };
+  }, [board?.lists, boardId, canEditBoard, dispatch, newListTitle]);
 
-  const handleTitleBlur = () => {
+  const handleUpdateSelectedCard = useCallback((data: Partial<Card> & { label_ids?: number[] }) => {
+    if (!selectedCard) return;
+    const { label_ids, ...rest } = data;
+    setSelectedCard(prev => (prev ? { ...prev, ...rest } : prev));
+    dispatch(updateCardAction({ cardId: selectedCard.id, data }));
+  }, [dispatch, selectedCard]);
+
+  const handleTitleBlur = useCallback(() => {
+    if (!boardId || !board) return;
     if (boardTitle !== board.title) {
-        dispatch(updateBoardAction({ id: board.id, data: { title: boardTitle } }));
+        dispatch(updateBoardAction({ id: boardId, data: { title: boardTitle } }));
     }
-  };
+  }, [board, boardId, boardTitle, dispatch]);
 
-  const handleCopyInvite = () => {
-    const link = `${window.location.origin}/invite/${board.invite_link}`;
-    navigator.clipboard.writeText(link);
-  };
+  const inviteLink = useMemo(
+    () => (board?.invite_link ? `${window.location.origin}/invite/${board.invite_link}` : ''),
+    [board?.invite_link]
+  );
 
-  const onDragEnd = (result: DropResult) => {
+  const handleCopyInvite = useCallback(() => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink);
+  }, [inviteLink]);
+
+  const handleInvite = useCallback(async () => {
+    if (!inviteLink) return;
+    const shareApi = (navigator as Navigator & { share?: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share;
+    if (shareApi) {
+      try {
+        await shareApi({ title: t('board.menu.inviteTitle'), url: inviteLink });
+        return;
+      } catch {
+        // Fallback to copy if sharing is cancelled or unavailable.
+      }
+    }
+    handleCopyInvite();
+  }, [handleCopyInvite, inviteLink, t]);
+
+  const onDragEnd = useCallback((result: DropResult) => {
+    if (!canEditBoard) return;
     const { destination, source, type, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
@@ -205,48 +302,226 @@ export const BoardDetailScreen: React.FC = () => {
       listId: destListId,
       order: destination.index + 1
     }));
-  };
+  }, [canEditBoard, dispatch]);
 
-  const toggleListCollapse = (listId: number) => {
+  const handleMoveList = useCallback((listId: number, fromIndex: number, toIndex: number) => {
+    if (!canEditBoard) return;
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= filteredLists.length) return;
+    dispatch(moveListOptimistic({ sourceIndex: fromIndex, destIndex: toIndex }));
+    dispatch(moveListAction({ listId, order: toIndex + 1 }));
+  }, [canEditBoard, dispatch, filteredLists.length]);
+
+  const handleMoveCard = useCallback((cardId: number, sourceListId: number, destListId: number, destIndex: number) => {
+    if (!canEditBoard) return;
+    if (destIndex < 0) return;
+    dispatch(moveCardOptimistic({ cardId, sourceListId, destListId, newIndex: destIndex }));
+    dispatch(moveCardAction({ cardId, listId: destListId, order: destIndex + 1 }));
+  }, [canEditBoard, dispatch]);
+
+  const toggleListCollapse = useCallback((listId: number) => {
     setCollapsedLists(prev => 
       prev.includes(listId) ? prev.filter(id => id !== listId) : [...prev, listId]
     );
-  };
+  }, []);
+
+  const defaultBoardBackground = '/board-backgrounds/board-default.jpg';
+  const backgroundValue = board?.background_url || defaultBoardBackground;
+  const backgroundStyle = useMemo(() => {
+    const isColorBackground = backgroundValue.startsWith('#');
+    const isGradientBackground = backgroundValue.startsWith('linear-gradient') || backgroundValue.startsWith('radial-gradient');
+    return {
+      backgroundColor: isColorBackground ? backgroundValue : undefined,
+      backgroundImage: !isColorBackground && backgroundValue ? (isGradientBackground ? backgroundValue : `url(${backgroundValue})`) : undefined,
+      backgroundSize: !isColorBackground && backgroundValue && !isGradientBackground ? 'cover' : undefined,
+      backgroundPosition: !isColorBackground && backgroundValue && !isGradientBackground ? 'center' : undefined,
+      backgroundRepeat: !isColorBackground && backgroundValue && !isGradientBackground ? 'no-repeat' : undefined,
+    } as React.CSSProperties;
+  }, [backgroundValue]);
+  const boardIconSrc = '/board-avatars/ava-anto-treklo.png';
+  const boardIconLetter = board?.title?.trim()?.charAt(0).toUpperCase() || 'B';
+  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const getAvatarSrc = useCallback((profile?: { avatar_url?: string | null; avatar?: string | null }) => {
+    const candidate = profile?.avatar_url || profile?.avatar || '';
+    if (!candidate) return fallbackAvatar;
+    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
+    return `/${candidate}`;
+  }, [fallbackAvatar]);
+  const getMemberDisplayName = useCallback((memberUser: BoardMember['user']) => {
+    const fullName = `${memberUser.first_name || ''} ${memberUser.last_name || ''}`.trim();
+    return fullName || memberUser.username || memberUser.email || t('nav.profile');
+  }, [t]);
+  const membersForDisplay = useMemo(() => {
+    const list: Array<NonNullable<Board['owner']>> = [];
+    const seen = new Set<number>();
+    if (board?.owner) {
+      list.push(board.owner);
+      seen.add(board.owner.id);
+    }
+    (board?.members || []).forEach(member => {
+      if (!seen.has(member.user.id)) {
+        list.push(member.user);
+        seen.add(member.user.id);
+      }
+    });
+    return list;
+  }, [board?.members, board?.owner]);
+  const headerMembers = useMemo(
+    () =>
+      membersForDisplay.map(userMember => ({
+        user: userMember,
+        membership: board?.members?.find(m => m.user.id === userMember.id)
+      })),
+    [board?.members, membersForDisplay]
+  );
+  const visibleMembers = useMemo(() => membersForDisplay.slice(0, 4), [membersForDisplay]);
+  const extraMembersCount = useMemo(
+    () => Math.max(0, membersForDisplay.length - visibleMembers.length),
+    [membersForDisplay.length, visibleMembers.length]
+  );
+  const normalizedMemberQuery = memberQuery.trim().toLowerCase();
+  const filteredMembers = useMemo(
+    () =>
+      (board?.members || []).filter(member => {
+        if (!normalizedMemberQuery) return true;
+        const displayName = getMemberDisplayName(member.user);
+        const haystack = [displayName, member.user.username || '', member.user.email || '']
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(normalizedMemberQuery);
+      }),
+    [board?.members, getMemberDisplayName, normalizedMemberQuery]
+  );
+
+  const colorOptions = useMemo(
+    () => [
+      { key: 'default', value: '', label: t('board.background.default'), preview: `url(${defaultBoardBackground})` },
+      { key: 'slate', value: '#1f2937', label: t('board.background.slate') },
+      { key: 'charcoal', value: '#2c2c2c', label: t('board.background.charcoal') },
+      { key: 'indigo', value: '#312e81', label: t('board.background.indigo') },
+      { key: 'emerald', value: '#064e3b', label: t('board.background.emerald') },
+      { key: 'warmLight', value: '#f5e7d0', label: t('board.background.warmLight') },
+    ],
+    [defaultBoardBackground, t]
+  );
+
+  const gradientOptions = useMemo(
+    () => [
+      { key: 'sunset', value: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', label: t('board.background.gradient.sunset') },
+      { key: 'ocean', value: 'linear-gradient(135deg, #5ee7df 0%, #b490ca 100%)', label: t('board.background.gradient.ocean') },
+      { key: 'forest', value: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)', label: t('board.background.gradient.forest') },
+      { key: 'blush', value: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', label: t('board.background.gradient.blush') },
+      { key: 'night', value: 'linear-gradient(135deg, #141e30 0%, #243b55 100%)', label: t('board.background.gradient.night') },
+      { key: 'dawn', value: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)', label: t('board.background.gradient.dawn') },
+    ],
+    [t]
+  );
+  const imageOptions = useMemo(
+    () =>
+      Array.from({ length: 16 }, (_, index) => {
+        const id = String(index + 1).padStart(2, '0');
+        return {
+          key: `photo-${id}`,
+          value: `/board-backgrounds/board-${id}.jpg`,
+          label: `Photo ${id}`,
+        };
+      }),
+    []
+  );
+
+  const handleBackgroundSelect = useCallback((value: string) => {
+    if (!boardId) return;
+    dispatch(updateBoardAction({ id: boardId, data: { background_url: value } }));
+  }, [boardId, dispatch]);
+
+  const handleBackgroundFile = useCallback((file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert(t('board.background.invalidFile'));
+      return;
+    }
+    const maxMb = 4;
+    if (file.size > maxMb * 1024 * 1024) {
+      alert(t('board.background.tooLarge', { size: String(maxMb) }));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        handleBackgroundSelect(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [handleBackgroundSelect, t]);
+
+  const handleToggleMemberRole = useCallback((member: BoardMember) => {
+    if (!canManageMembers) return;
+    if (member.user.id === board?.owner?.id) return;
+    const nextRole = member.role === 'admin' ? 'member' : 'admin';
+    dispatch(updateBoardMemberRoleAction({ membershipId: member.id, role: nextRole }));
+  }, [board?.owner?.id, canManageMembers, dispatch]);
+
+  const handleLeaveBoard = useCallback(async () => {
+    if (!currentMembership) return;
+    await dispatch(removeBoardMemberAction(currentMembership.id));
+    navigate('/boards');
+  }, [currentMembership, dispatch, navigate]);
+
+  const openMemberActivity = useCallback(async (member: BoardMember) => {
+    if (!boardId) return;
+    setActivityMember(member);
+    setIsActivityOpen(true);
+    setIsActivityLoading(true);
+    try {
+      const logs = await getBoardActivity(boardId, member.user.id);
+      setActivityLogs(logs as ActivityLog[]);
+    } catch {
+      setActivityLogs([]);
+    } finally {
+      setIsActivityLoading(false);
+    }
+  }, [boardId]);
+
+  if (isLoading && !board) return <div className="loading-state">{t('common.loading')}</div>;
+  if (error) return <div className="error-state">{t('board.error.loadDetails')}</div>;
+  if (!board) return null;
 
   return (
-    <div className="board-detail-page" style={{ 
-      backgroundColor: board.background_url?.startsWith('#') ? board.background_url : undefined,
-      backgroundImage: board.background_url && !board.background_url.startsWith('#') ? `url(${board.background_url})` : undefined,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      height: 'calc(100vh - 64px)', 
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      <div className="board-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Link to="/boards" className="btn-link" style={{color: 'white', fontSize: '20px', textDecoration: 'none'}}>←</Link>
-            <input 
-              value={boardTitle}
-              onChange={(e) => setBoardTitle(e.target.value)}
-              onBlur={handleTitleBlur}
-              className="board-title-input"
-              style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '18px', fontWeight: 'bold', width: 'auto', minWidth: '100px' }}
-            />
-            <button 
-                onClick={() => dispatch(toggleFavoriteAction(board.id))} 
-                className="btn-icon" 
-                style={{ color: board.is_favorite ? '#FFC107' : 'rgba(255,255,255,0.5)', fontSize: '20px' }}
-            >
-                {board.is_favorite ? '★' : '☆'}
-            </button>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-secondary" onClick={() => setIsFilterOpen(true)}>🔎 Фільтри</button>
-            <button className="btn-secondary" onClick={() => { setIsMenuOpen(true); setActiveMenuTab('main'); }}>••• Меню</button>
-        </div>
-      </div>
+    <div className="board-detail-page" style={backgroundStyle}>
+      <BoardHeader
+        board={board}
+        boardTitle={boardTitle}
+        canEditBoard={canEditBoard}
+        onBoardTitleChange={setBoardTitle}
+        onBoardTitleBlur={handleTitleBlur}
+        onToggleFavorite={() => dispatch(toggleFavoriteAction(board.id))}
+        boardIconSrc={boardIconSrc}
+        boardIconLetter={boardIconLetter}
+        boardIconFailed={boardIconFailed}
+        onBoardIconError={() => setBoardIconFailed(true)}
+        isGlobalMenuOpen={isGlobalMenuOpen}
+        onToggleGlobalMenu={() => setIsGlobalMenuOpen(prev => !prev)}
+        onCloseGlobalMenu={() => setIsGlobalMenuOpen(false)}
+        onLogout={() => dispatch(logoutUser())}
+        headerMembers={headerMembers}
+        visibleMembers={visibleMembers}
+        extraMembersCount={extraMembersCount}
+        headerMemberId={headerMemberId}
+        onToggleHeaderMember={(id) => setHeaderMemberId(id)}
+        onCloseHeaderMember={() => setHeaderMemberId(null)}
+        getAvatarSrc={getAvatarSrc}
+        fallbackAvatar={fallbackAvatar}
+        getMemberDisplayName={getMemberDisplayName}
+        canManageMembers={canManageMembers}
+        ownerId={board.owner?.id}
+        currentUserId={user?.id}
+        onOpenMemberActivity={openMemberActivity}
+        onToggleMemberRole={handleToggleMemberRole}
+        onRemoveMember={(membershipId) => dispatch(removeBoardMemberAction(membershipId))}
+        filterQuery={filterQuery}
+        onSearchChange={updateSearch}
+        onOpenFilter={() => setIsFilterOpen(true)}
+        onOpenMenu={() => { setIsMenuOpen(true); setActiveMenuTab('main'); }}
+      />
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="board-drop-zone" direction="horizontal" type="list">
@@ -255,13 +530,17 @@ export const BoardDetailScreen: React.FC = () => {
               className="board-canvas"
               ref={provided.innerRef}
               {...provided.droppableProps}
-              style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'flex-start', overflowX: 'auto', height: '100%', padding: '24px', gap: '24px' }}
             >
               {filteredLists.map((list, index) => (
                 <BoardColumn 
                   key={list.id} 
                   list={list} 
                   index={index} 
+                  listIndex={index}
+                  prevList={index > 0 ? filteredLists[index - 1] : null}
+                  nextList={index < filteredLists.length - 1 ? filteredLists[index + 1] : null}
+                  isTouch={isTouch}
+                  canEdit={canEditBoard}
                   onAddCard={(lid, title) => {
                       const order = (list.cards?.length || 0) + 1;
                       dispatch(addCardAction({ listId: lid, title, order }));
@@ -275,23 +554,27 @@ export const BoardDetailScreen: React.FC = () => {
                   onToggleCardComplete={(cardId, next) => dispatch(updateCardAction({ cardId, data: { is_completed: next } }))}
                   isCollapsed={collapsedLists.includes(list.id)}
                   onToggleCollapse={() => toggleListCollapse(list.id)}
+                  onMoveList={handleMoveList}
+                  onMoveCard={handleMoveCard}
                 />
               ))}
               {provided.placeholder}
 
-              <div className="add-list-wrapper">
-                {isAddingList ? (
-                  <form onSubmit={handleCreateList}>
-                    <input name="listTitle" className="form-input" autoFocus placeholder="Назва списку..." value={newListTitle} onChange={e => setNewListTitle(e.target.value)} style={{ marginBottom: 8, background: '#222' }} />
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <Button type="submit" size="sm" variant="primary">Додати</Button>
-                      <button type="button" onClick={() => setIsAddingList(false)} className="btn-secondary btn-sm" style={{ width: 'auto', background: 'transparent', color: 'white', border: '1px solid #555' }}>✕</button>
-                    </div>
-                  </form>
-                ) : (
-                  <button className="btn-add-list" onClick={() => setIsAddingList(true)}>+ Додати список</button>
-                )}
-              </div>
+              {canEditBoard && (
+                <div className="add-list-wrapper">
+                  {isAddingList ? (
+                    <form onSubmit={handleCreateList}>
+                      <input name="listTitle" className="form-input" autoFocus placeholder={t('list.create.placeholder')} value={newListTitle} onChange={e => setNewListTitle(e.target.value)} style={{ marginBottom: 8, background: 'var(--bg-input)' }} />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Button type="submit" size="sm" variant="primary">{t('list.create.submit')}</Button>
+                        <button type="button" onClick={() => setIsAddingList(false)} className="btn-secondary btn-sm" style={{ width: 'auto', background: 'transparent', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.2)' }} aria-label={t('common.close')}>✕</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button className="btn-add-list" onClick={() => setIsAddingList(true)}>{t('list.addButton')}</button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </Droppable>
@@ -307,9 +590,10 @@ export const BoardDetailScreen: React.FC = () => {
                const url = `${window.location.origin}/boards/${board.id}?card=${selectedCard.id}`;
                navigator.clipboard.writeText(url);
              }}
-             onUpdateCard={(data) => dispatch(updateCardAction({ cardId: selectedCard.id, data }))}
+             onUpdateCard={handleUpdateSelectedCard}
              onDeleteCard={() => dispatch(deleteCardAction(selectedCard.id))}
              onCopyCard={() => dispatch(copyCardAction({ cardId: selectedCard.id, listId: selectedCard.list }))}
+             onMoveCard={handleMoveCard}
              onAddChecklist={(title) => dispatch(addChecklistAction({ cardId: selectedCard.id, title }))}
              onAddChecklistItem={(checklistId, text) => dispatch(addChecklistItemAction({ checklistId, text }))}
              onDeleteChecklistItem={(itemId, checklistId) => dispatch(deleteChecklistItemAction({ itemId, checklistId }))}
@@ -326,217 +610,84 @@ export const BoardDetailScreen: React.FC = () => {
           />
       )}
 
-      {isFilterOpen && (
-        <div className="modal-overlay" onClick={() => setIsFilterOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
-            <div className="modal-header">
-              <h3>Фільтри</h3>
-              <button className="modal-close" onClick={() => setIsFilterOpen(false)}>&times;</button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <select
-                className="form-input"
-                value={filterMemberId}
-                onChange={(e) => setFilterMemberId(e.target.value ? Number(e.target.value) : '')}
-              >
-                <option value="">Всі учасники</option>
-                {(board.members || []).map(m => (
-                  <option key={m.user.id} value={m.user.id}>{m.user.username || m.user.email}</option>
-                ))}
-              </select>
-              <select
-                className="form-input"
-                value={filterLabelId}
-                onChange={(e) => setFilterLabelId(e.target.value ? Number(e.target.value) : '')}
-              >
-                <option value="">Всі мітки</option>
-                {(board.labels || []).map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-              <select
-                className="form-input"
-                value={filterDue}
-                onChange={(e) => setFilterDue(e.target.value as any)}
-              >
-                <option value="all">Будь-який дедлайн</option>
-                <option value="overdue">Прострочені</option>
-                <option value="today">На сьогодні</option>
-                <option value="week">На тиждень</option>
-                <option value="no_due">Без дедлайну</option>
-              </select>
-              <select
-                className="form-input"
-                value={filterCompleted}
-                onChange={(e) => setFilterCompleted(e.target.value as any)}
-              >
-                <option value="all">Всі</option>
-                <option value="completed">Завершені</option>
-                <option value="incomplete">Незавершені</option>
-              </select>
-            </div>
-            <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    setFilterMemberId('');
-                    setFilterLabelId('');
-                    setFilterDue('all');
-                    setFilterCompleted('all');
-                  }}
-                >
-                Скинути
-              </button>
-              <button type="button" className="btn-primary" onClick={() => setIsFilterOpen(false)}>
-                Застосувати
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BoardFiltersModal
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filterQuery={filterQuery}
+        onSearchChange={updateSearch}
+        filterMemberId={filterMemberId}
+        onMemberChange={setFilterMemberId}
+        filterLabelId={filterLabelId}
+        onLabelChange={setFilterLabelId}
+        filterDue={filterDue}
+        onDueChange={setFilterDue}
+        filterCompleted={filterCompleted}
+        onCompletedChange={setFilterCompleted}
+        members={board.members || []}
+        labels={board.labels || []}
+        onReset={() => {
+          setFilterMemberId('');
+          setFilterLabelId('');
+          setFilterDue('all');
+          setFilterCompleted('all');
+        }}
+      />
 
-      {isMenuOpen && (
-        <div className="menu-sidebar-overlay" onClick={() => setIsMenuOpen(false)}>
-            <div className="menu-sidebar" onClick={e => e.stopPropagation()}>
-               <div className="menu-header">
-                    {activeMenuTab !== 'main' && <button className="btn-icon" onClick={() => setActiveMenuTab('main')}>←</button>}
-                    <h3>Меню</h3>
-                    <button className="btn-icon" onClick={() => setIsMenuOpen(false)}>✕</button>
-                </div>
-                <div className="menu-content">
-                    {activeMenuTab === 'main' && (
-                        <>
-                            <ul className="menu-list">
-                                <li onClick={() => setActiveMenuTab('background')}>🖼️ Змінити фон</li>
-                                <li onClick={() => setActiveMenuTab('members')}>👥 Учасники</li>
-                                <li onClick={() => setActiveMenuTab('archived')}>🗄️ Архівовані елементи</li>
-                            </ul>
-                            <div className="menu-divider"></div>
-                            <div style={{ padding: '0 12px' }}>
-                                <h4 style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>Запросити</h4>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input className="form-input" readOnly value={`${window.location.origin}/invite/${board.invite_link}`} style={{ fontSize: '12px', padding: '6px' }} />
-                                    <button className="btn-primary" style={{ width: 'auto', padding: '6px 12px' }} onClick={handleCopyInvite}>Copy</button>
-                                </div>
-                            </div>
-                            <div className="menu-divider"></div>
-                            <ul className="menu-list">
-                                <li onClick={() => dispatch(updateBoardAction({ id: board.id, data: { is_archived: !board.is_archived } }))}>
-                                    {board.is_archived ? 'Відновити' : 'Закрити'} дошку
-                                </li>
-                                <li onClick={async () => {
-                                    if(isOwner && window.confirm('Видалити дошку?')) {
-                                        await dispatch(deleteBoardAction(board.id));
-                                        navigate('/boards');
-                                    }
-                                }} style={{ color: 'var(--danger)' }}>
-                                    {isOwner ? 'Видалити дошку' : 'Покинути дошку'}
-                                </li>
-                            </ul>
-                        </>
-                    )}
-                    {activeMenuTab === 'members' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            <h4 style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Учасники дошки</h4>
-                            {(board.members || []).length === 0 && (
-                              <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Немає учасників</div>
-                            )}
-                            {(board.members || []).map(member => (
-                                <div key={member.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <div style={{ fontSize: 13 }}>
-                                            {member.user.username || member.user.email}
-                                            {member.user.id === board.owner?.id && (
-                                              <span style={{ marginLeft: 6, color: 'var(--text-secondary)' }}>(Власник)</span>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{member.role}</div>
-                                    </div>
-                                    {canManageMembers && member.user.id !== board.owner?.id && (
-                                        <button
-                                            type="button"
-                                            className="btn-secondary btn-sm"
-                                            style={{ color: 'var(--danger)' }}
-                                            onClick={() => dispatch(removeBoardMemberAction(member.id))}
-                                        >
-                                            Видалити
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {activeMenuTab === 'archived' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                            <div>
-                                <h4 style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Архівовані списки</h4>
-                                {archivedLists.length === 0 && (
-                                  <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Немає списків</div>
-                                )}
-                                {archivedLists.map(list => (
-                                    <div key={list.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                                        <div style={{ fontSize: 13 }}>{list.title}</div>
-                                        <div style={{ display: 'flex', gap: 6 }}>
-                                            <button
-                                                type="button"
-                                                className="btn-secondary btn-sm"
-                                                onClick={() => dispatch(updateListAction({ listId: list.id, data: { is_archived: false } }))}
-                                            >
-                                                Відновити
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="btn-secondary btn-sm"
-                                                style={{ color: 'var(--danger)' }}
-                                                onClick={() => dispatch(deleteListAction(list.id))}
-                                            >
-                                                Видалити
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+      <BoardMenuSidebar
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        activeTab={activeMenuTab}
+        onTabChange={setActiveMenuTab}
+        board={board}
+        inviteLink={inviteLink}
+        onInvite={handleInvite}
+        canEditBoard={canEditBoard}
+        canManageMembers={canManageMembers}
+        canLeaveBoard={canLeaveBoard}
+        isOwner={isOwner}
+        onArchiveToggle={() => dispatch(updateBoardAction({ id: board.id, data: { is_archived: !board.is_archived } }))}
+        onDeleteBoard={async () => {
+          if (window.confirm(t('board.deleteConfirm'))) {
+            await dispatch(deleteBoardAction(board.id));
+            navigate('/boards');
+          }
+        }}
+        onLeaveBoard={handleLeaveBoard}
+        onLogout={() => dispatch(logoutUser())}
+        colorOptions={colorOptions}
+        gradientOptions={gradientOptions}
+        imageOptions={imageOptions}
+        bgUrlInput={bgUrlInput}
+        onBgUrlInputChange={setBgUrlInput}
+        onBackgroundSelect={handleBackgroundSelect}
+        onBackgroundFile={handleBackgroundFile}
+        memberQuery={memberQuery}
+        onMemberQueryChange={setMemberQuery}
+        filteredMembers={filteredMembers}
+        activeMemberId={activeMemberId}
+        onToggleActiveMember={setActiveMemberId}
+        getMemberDisplayName={getMemberDisplayName}
+        getAvatarSrc={getAvatarSrc}
+        fallbackAvatar={fallbackAvatar}
+        onOpenMemberActivity={openMemberActivity}
+        onToggleMemberRole={handleToggleMemberRole}
+        onRemoveMember={(membershipId) => dispatch(removeBoardMemberAction(membershipId))}
+        currentUserId={user?.id}
+        archivedLists={archivedLists}
+        archivedCards={archivedCards}
+        onUnarchiveList={(listId) => dispatch(updateListAction({ listId, data: { is_archived: false } }))}
+        onDeleteList={(listId) => dispatch(deleteListAction(listId))}
+        onUnarchiveCard={(cardId) => dispatch(updateCardAction({ cardId, data: { is_archived: false } }))}
+        onDeleteCard={(cardId) => dispatch(deleteCardAction(cardId))}
+      />
 
-                            <div>
-                                <h4 style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Архівовані картки</h4>
-                                {archivedCards.length === 0 && (
-                                  <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Немає карток</div>
-                                )}
-                                {archivedCards.map(card => (
-                                    <div key={card.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                                        <div style={{ fontSize: 13 }}>
-                                          {card.title}
-                                          <span style={{ color: 'var(--text-secondary)', fontSize: 11, marginLeft: 6 }}>
-                                            {board.lists?.find(l => l.id === card.list)?.title}
-                                          </span>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: 6 }}>
-                                            <button
-                                                type="button"
-                                                className="btn-secondary btn-sm"
-                                                onClick={() => dispatch(updateCardAction({ cardId: card.id, data: { is_archived: false } }))}
-                                            >
-                                                Відновити
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="btn-secondary btn-sm"
-                                                style={{ color: 'var(--danger)' }}
-                                                onClick={() => dispatch(deleteCardAction(card.id))}
-                                            >
-                                                Видалити
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-      )}
+      <BoardActivityModal
+        isOpen={isActivityOpen}
+        onClose={() => { setIsActivityOpen(false); setActivityMember(null); }}
+        activityMember={activityMember}
+        activityLogs={activityLogs}
+        isLoading={isActivityLoading}
+      />
     </div>
   );
 };

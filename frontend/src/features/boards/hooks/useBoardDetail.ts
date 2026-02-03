@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { Board, List, Card, Checklist, ChecklistItem, Label, Comment } from '../../../types';
 import * as api from '../api';
 import { DropResult } from '@hello-pangea/dnd';
+import { useI18n } from '../../../context/I18nContext';
 
 export const useBoardDetail = (boardId: number) => {
+  const { t } = useI18n();
   const [board, setBoard] = useState<Board | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,11 +22,11 @@ export const useBoardDetail = (boardId: number) => {
       }
       setBoard(data);
     } catch (err) {
-      setError('Failed to fetch board details');
+      setError(t('board.error.loadDetails'));
     } finally {
       setIsLoading(false);
     }
-  }, [boardId]);
+  }, [boardId, t]);
 
   useEffect(() => {
     fetchBoard();
@@ -60,7 +62,7 @@ export const useBoardDetail = (boardId: number) => {
   };
 
   const deleteLabelData = async (labelId: number) => {
-    if (!window.confirm('Видалити цю мітку? Вона зникне з усіх карток.')) return;
+    if (!window.confirm(t('labels.deleteConfirm'))) return;
     try { await api.deleteLabel(labelId); fetchBoard(); } catch (e) { console.error(e); }
   };
 
@@ -204,7 +206,7 @@ export const useBoardDetail = (boardId: number) => {
           })
         };
       });
-    } catch (e) { console.error(e); alert("Не вдалося приєднатися"); }
+    } catch (e) { console.error(e); alert(t('card.joinError')); }
   };
 
   const leaveCardMember = async (cardId: number) => {

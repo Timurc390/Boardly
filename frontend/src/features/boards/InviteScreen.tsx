@@ -6,6 +6,7 @@ import { useI18n } from '../../context/I18nContext';
 export const InviteScreen: React.FC = () => {
   const { link } = useParams<{ link: string }>();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export const InviteScreen: React.FC = () => {
         }
 
         console.error("Invite error:", err);
-        setError('Не вдалося приєднатися. Посилання недійсне або виникла помилка.');
+        setError(t('toast.inviteUnavailable'));
         setTimeout(() => navigate('/boards'), 3000);
       }
     };
@@ -36,16 +37,16 @@ export const InviteScreen: React.FC = () => {
   if (error) {
     return (
       <div className="loading-state" style={{ flexDirection: 'column', gap: 16 }}>
-        <h3 style={{ color: 'var(--danger)' }}>Помилка</h3>
+        <h3 style={{ color: 'var(--danger)' }}>{t('common.error')}</h3>
         <p>{error}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Перенаправлення...</p>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('common.redirecting')}</p>
       </div>
     );
   }
 
   return (
     <div className="loading-state">
-      <h3>Приєднання до дошки...</h3>
+      <h3>{t('board.joining')}</h3>
     </div>
   );
 };

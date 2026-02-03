@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { KanbanPreview } from '../components/KanbanPreview';
+import { useI18n } from '../context/I18nContext';
 
 // Redux
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -18,6 +19,7 @@ declare global {
 
 export const AuthScreen: React.FC = () => {
   const dispatch = useAppDispatch();
+  const { t } = useI18n();
   const { isAuthenticated, loading, error: authError } = useAppSelector(state => state.auth);
   
   const navigate = useNavigate();
@@ -78,7 +80,7 @@ export const AuthScreen: React.FC = () => {
             await dispatch(googleLoginUser(response.code)).unwrap();
           } catch (err: any) {
             console.error("Google Auth Error:", err);
-            setLocalError('Не вдалося увійти через Google.');
+            setLocalError(t('auth.googleError'));
           }
         }
       },
@@ -92,11 +94,21 @@ export const AuthScreen: React.FC = () => {
 
     if (isRegistering) {
         if (formData.password !== confirmPassword) {
-          setLocalError('Паролі не співпадають');
+          setLocalError(t('auth.passwordMismatch'));
+          return;
+        }
+        const emailValue = formData.email?.trim();
+        const emailValid = !!emailValue && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailValue);
+        if (!emailValid) {
+          setLocalError(t('auth.invalidEmail'));
+          return;
+        }
+        if ((formData.password || '').length < 8) {
+          setLocalError(t('auth.passwordTooShort', { min: '8' }));
           return;
         }
         if (!acceptPolicy) {
-          setLocalError('Будь ласка, погодьтеся з політикою конфіденційності.');
+          setLocalError(t('auth.policyRequired'));
           return;
         }
     }
@@ -113,9 +125,9 @@ export const AuthScreen: React.FC = () => {
          if (err.email) setLocalError(err.email[0]);
          else if (err.non_field_errors) setLocalError(err.non_field_errors[0]);
          else if (err.detail) setLocalError(err.detail);
-         else setLocalError('Помилка авторизації.');
+         else setLocalError(t('auth.loginError'));
       } else {
-         setLocalError('Помилка з\'єднання.');
+         setLocalError(t('common.noConnection'));
       }
     }
   };
@@ -125,10 +137,10 @@ export const AuthScreen: React.FC = () => {
       <div className="auth-page-split">
         <div className="auth-left" style={{ textAlign: 'center' }}>
           <div className="auth-header">
-            <h1>Перевірте пошту! ✉️</h1>
-            <p>Ми відправили посилання для активації на <strong>{formData.email}</strong>.</p>
+            <h1>{t('auth.registerSuccessTitle')}</h1>
+            <p>{t('auth.registerSuccessHint', { email: formData.email })}</p>
           </div>
-          <button className="btn btn-secondary" onClick={() => { setRegistrationSuccess(false); setIsRegistering(false); }}>Повернутися до входу</button>
+          <button className="btn btn-secondary" onClick={() => { setRegistrationSuccess(false); setIsRegistering(false); }}>{t('auth.backToLogin')}</button>
         </div>
         <div className="auth-right"><KanbanPreview /></div>
       </div>
@@ -141,7 +153,7 @@ export const AuthScreen: React.FC = () => {
         <div>
           <div className="auth-header">
             <h1>Boardly</h1>
-            <p>{isRegistering ? 'Створіть простір для продуктивності.' : 'Впорядкуйте свої задачі.'}</p>
+            <p>{isRegistering ? t('auth.joinBoardly') : t('auth.enterDetails')}</p>
           </div>
 
           {(localError || authError) && (
@@ -153,65 +165,120 @@ export const AuthScreen: React.FC = () => {
           <form onSubmit={handleSubmit}>
               {isRegistering && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                  <input className="input" placeholder="Ім'я" value={formData.first_name} onChange={e => setFormData({...formData, first_name: e.target.value})} />
-                  <input className="input" placeholder="Прізвище" value={formData.last_name} onChange={e => setFormData({...formData, last_name: e.target.value})} />
+                  <input
+                    className="input"
+                    placeholder={t('auth.firstName')}
+                    value={formData.first_name}
+                    onChange={e => setFormData({...formData, first_name: e.target.value})}
+                    autoComplete="given-name"
+                    name="first_name"
+                  />
+                  <input
+                    className="input"
+                    placeholder={t('auth.lastName')}
+                    value={formData.last_name}
+                    onChange={e => setFormData({...formData, last_name: e.target.value})}
+                    autoComplete="family-name"
+                    name="last_name"
+                  />
                 </div>
               )}
               
               {isRegistering && (
                 <div className="form-group">
-                  <input className="input" type="email" placeholder="Email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder={t('auth.email')}
+                    value={formData.email}
+                    onChange={e => setFormData({...formData, email: e.target.value})}
+                    autoComplete="email"
+                    name="email"
+                    required
+                  />
                 </div>
               )}
 
               {isRegistering && (
                   <div className="form-group">
-                      <input className="input" placeholder="Організація (необов'язково)" value={formData.organization} onChange={e => setFormData({...formData, organization: e.target.value})} />
+                      <input
+                        className="input"
+                        placeholder={t('auth.organizationOptional')}
+                        value={formData.organization}
+                        onChange={e => setFormData({...formData, organization: e.target.value})}
+                        autoComplete="organization"
+                        name="organization"
+                      />
                   </div>
               )}
 
               <div className="form-group">
                 <input 
                   className="input" 
-                  placeholder={isRegistering ? "Логін" : "Логін або Email"} 
+                  placeholder={isRegistering ? t('auth.username') : t('auth.usernameOrEmail')} 
                   value={formData.username} 
                   onChange={e => setFormData({...formData, username: e.target.value})} 
+                  autoComplete="username"
+                  name="username"
                   required 
                 />
               </div>
               
               <div className="form-group" style={{position: 'relative'}}>
-                <input className="input" type={showPassword ? "text" : "password"} placeholder="Пароль" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px'}}>{showPassword ? 'Hide' : 'Show'}</button>
+                <input
+                  className="input"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={t('auth.password')}
+                  value={formData.password}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                  autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                  name={isRegistering ? 'new-password' : 'current-password'}
+                  required
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px'}}>{showPassword ? t('auth.hidePassword') : t('auth.showPassword')}</button>
               </div>
 
               {isRegistering && (
                 <>
                   <div className="form-group" style={{position: 'relative'}}>
-                    <input className="input" type={showConfirmPassword ? "text" : "password"} placeholder="Підтвердження паролю" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px'}}>{showConfirmPassword ? 'Hide' : 'Show'}</button>
+                    <input
+                      className="input"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder={t('auth.confirmPassword')}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      autoComplete="new-password"
+                      name="confirm-password"
+                      required
+                    />
+                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px'}}>{showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'start', gap: '8px', marginBottom: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     <input type="checkbox" id="policy-check" checked={acceptPolicy} onChange={(e) => setAcceptPolicy(e.target.checked)} style={{ marginTop: '3px', cursor: 'pointer' }} />
-                    <label htmlFor="policy-check" style={{ cursor: 'pointer', lineHeight: '1.4' }}>Я погоджуюсь з <Link to="/privacy-policy" target="_blank" style={{ color: 'var(--primary-blue)', textDecoration: 'underline' }}>Політикою конфіденційності</Link></label>
+                    <label htmlFor="policy-check" style={{ cursor: 'pointer', lineHeight: '1.4' }}>
+                      {t('auth.policyPrefix')}{' '}
+                      <Link to="/privacy-policy" target="_blank" style={{ color: 'var(--primary-blue)', textDecoration: 'underline' }}>
+                        {t('auth.policyLink')}
+                      </Link>
+                    </label>
                   </div>
                 </>
               )}
 
               {!isRegistering && (
                 <div style={{ textAlign: 'right', marginBottom: '24px' }}>
-                  <Link to="/forgot-password" style={{ fontSize: '13px', color: '#888' }}>Забули пароль?</Link>
+                  <Link to="/forgot-password" style={{ fontSize: '13px', color: '#888' }}>{t('auth.forgotPassword')}</Link>
                 </div>
               )}
 
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? 'Зачекайте...' : (isRegistering ? 'Створити акаунт' : 'Увійти')}
+                {loading ? t('auth.processing') : (isRegistering ? t('auth.createAccount') : t('auth.signIn'))}
               </button>
           </form>
 
           <div style={{ margin: '24px 0', display: 'flex', alignItems: 'center', color: '#555', fontSize: '12px' }}>
               <div style={{ flex: 1, height: 1, background: '#333' }}></div>
-              <span style={{ padding: '0 10px' }}>АБО</span>
+              <span style={{ padding: '0 10px' }}>{t('common.or')}</span>
               <div style={{ flex: 1, height: 1, background: '#333' }}></div>
           </div>
 
@@ -228,13 +295,13 @@ export const AuthScreen: React.FC = () => {
                   <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"></path>
                   <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.271C4.672 5.14 6.656 3.58 9 3.58z" fill="#EA4335"></path>
               </svg>
-              Увійти через Google
+              {t('auth.googleSignIn')}
           </button>
 
           <div className="auth-footer">
-            {isRegistering ? 'Вже є акаунт?' : 'Ще немає акаунту?'}
+            {isRegistering ? t('auth.hasAccount') : t('auth.noAccount')}
             <button className="btn-link" onClick={() => { setIsRegistering(!isRegistering); setLocalError(''); }}>
-              {isRegistering ? 'Увійти' : 'Зареєструватися'}
+              {isRegistering ? t('auth.signIn') : t('auth.signUp')}
             </button>
           </div>
         </div>

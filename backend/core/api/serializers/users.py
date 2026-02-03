@@ -18,7 +18,23 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ('organization', 'bio', 'theme', 'language', 'notify_email', 'avatar', 'avatar_url')
+        fields = (
+            'organization',
+            'bio',
+            'theme',
+            'language',
+            'notify_email',
+            'notify_desktop',
+            'notify_assigned',
+            'notify_due',
+            'notify_added',
+            'default_board_view',
+            'session_timeout',
+            'two_factor_enabled',
+            'require_login_verification',
+            'avatar',
+            'avatar_url'
+        )
 
     def get_avatar_url(self, obj):
         if not obj.avatar:

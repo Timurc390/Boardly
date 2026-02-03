@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 // ВИПРАВЛЕНО: Redux
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { logoutUser } from '../../store/slices/authSlice';
@@ -12,12 +12,63 @@ export const Layout: React.FC = () => {
   // Беремо юзера зі стору
   const { user } = useAppSelector(state => state.auth);
   
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const location = useLocation();
-  const navigate = useNavigate();
+  const isBoardDetail = /^\/boards\/[^/]+$/.test(location.pathname);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
   
-  const avatarUrl = user?.profile?.avatar_url || user?.profile?.avatar || '';
+  const rawAvatarUrl = user?.profile?.avatar_url || '';
+  const rawAvatarPath = user?.profile?.avatar || '';
+  const resolvedAvatarUrl = useMemo(() => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const preferPath = rawAvatarUrl && origin.startsWith('https://') && rawAvatarUrl.startsWith('http://');
+    const candidate = preferPath ? (rawAvatarPath || rawAvatarUrl) : (rawAvatarUrl || rawAvatarPath);
+    if (!candidate) return '';
+    if (candidate.startsWith('data:')) return candidate;
+    if (candidate.startsWith('http')) {
+      try {
+        const url = new URL(candidate);
+        if (origin) {
+          const originUrl = new URL(origin);
+          const mixedContent = originUrl.protocol === 'https:' && url.protocol === 'http:';
+          const differentHost = url.host !== originUrl.host;
+          if ((mixedContent || differentHost) && url.pathname) {
+            return `${originUrl.origin}${url.pathname}`;
+          }
+        }
+      } catch {
+        return candidate;
+      }
+      return candidate;
+    }
+    if (candidate.startsWith('/')) return origin ? `${origin}${candidate}` : candidate;
+    return candidate;
+  }, [rawAvatarUrl, rawAvatarPath]);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [resolvedAvatarUrl]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const setAppHeight = () => {
+      const nextHeight = window.visualViewport?.height ?? window.innerHeight;
+      root.style.setProperty('--app-height', `${nextHeight}px`);
+    };
+    setAppHeight();
+    const handleResize = () => setAppHeight();
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+    };
+  }, [locale]);
 
   const handleLogout = () => {
     dispatch(logoutUser());
@@ -25,92 +76,137 @@ export const Layout: React.FC = () => {
 
   // Функція для перевірки активного посилання
   const isActive = (path: string) => location.pathname === path ? 'active' : '';
-  const isBoardRoute = location.pathname.startsWith('/boards/');
-
-  const updateSearch = (value: string) => {
-    const params = new URLSearchParams(location.search);
-    if (value) params.set('q', value);
-    else params.delete('q');
-    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-  };
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   return (
-    <div className="app-container">
+    <div
+      className={`app-container${isBoardDetail ? ' app-container--board' : ''}`}
+      style={isBoardDetail ? ({ ['--top-nav-height' as any]: '0px' } as React.CSSProperties) : undefined}
+    >
+      {!isBoardDetail && (
       <nav className="top-nav">
         {/* ЛІВА ЧАСТИНА: Лого + Основне меню */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
           <Link to="/" className="nav-logo">Boardly</Link>
-          
-          {user && (
-            <div className="nav-links-desktop">
-              <Link to="/boards" className={`link ${isActive('/boards')}`}>
-                {t('nav.board')}
-              </Link>
-              <Link to="/my-cards" className={`link ${isActive('/my-cards')}`}>
-                {t('nav.myCards')}
-              </Link>
-            </div>
-          )}
+
+          <div className="nav-links-desktop">
+            {user && (
+              <>
+                <Link to="/boards" className={`link ${isActive('/boards')}`}>
+                  {t('nav.board')}
+                </Link>
+                <Link to="/my-cards" className={`link ${isActive('/my-cards')}`}>
+                  {t('nav.myCards')}
+                </Link>
+              </>
+            )}
+            <Link to="/help" className={`link ${isActive('/help')}`}>
+              {t('nav.help')}
+            </Link>
+            <Link to="/community" className={`link ${isActive('/community')}`}>
+              {t('nav.community')}
+            </Link>
+          </div>
         </div>
         
-        {/* ПРАВА ЧАСТИНА: Дії користувача */}
-        <div className={`nav-actions ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
-          {user ? (
-            <>
-              {/* Ці посилання будуть тут для мобільної версії */}
-              <div className="mobile-only-links">
-                 <Link to="/boards" className="link">{t('nav.board')}</Link>
-                 <Link to="/my-cards" className="link">{t('nav.myCards')}</Link>
+        <div className="nav-right">
+          {/* ПРАВА ЧАСТИНА: Дії користувача */}
+          <div className={`nav-actions ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+            {user ? (
+              <div className="nav-actions-content">
+                <div className="nav-actions-col nav-actions-primary">
+                  <div className="mobile-only-links">
+                    <Link to="/boards" className="link" onClick={closeMobileMenu}>{t('nav.board')}</Link>
+                    <Link to="/my-cards" className="link" onClick={closeMobileMenu}>{t('nav.myCards')}</Link>
+                    <Link to="/help" className="link" onClick={closeMobileMenu}>{t('nav.help')}</Link>
+                    <Link to="/community" className="link" onClick={closeMobileMenu}>{t('nav.community')}</Link>
+                  </div>
+
+                </div>
+
+                <div className="nav-actions-col nav-actions-secondary">
+                  <LanguageSelect className="nav-lang-select" compact onLocaleChange={closeMobileMenu} />
+                  
+                  <Link to="/profile" className={`link ${isActive('/profile')}`} style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={closeMobileMenu}>
+                    {/* Аватарка (кружечок) */}
+                    <div className="nav-profile-avatar" style={{width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold'}}>
+                      {resolvedAvatarUrl && !avatarFailed ? (
+                        <img src={resolvedAvatarUrl} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
+                      ) : (
+                        user.username.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <span>{t('nav.profile')}</span>
+                  </Link>
+
+                  <button 
+                    onClick={() => { handleLogout(); closeMobileMenu(); }}
+                    className="btn-link" 
+                    style={{ color: 'var(--text-secondary)', fontSize: '14px', marginLeft: '8px' }}
+                    title={t('nav.logout')}
+                  >
+                    {t('nav.logout')}
+                  </button>
+                </div>
               </div>
+            ) : (
+              <div className="nav-actions-content">
+                <div className="nav-actions-col nav-actions-primary">
+                  <div className="mobile-only-links">
+                    <Link to="/help" className="link" onClick={closeMobileMenu}>{t('nav.help')}</Link>
+                    <Link to="/community" className="link" onClick={closeMobileMenu}>{t('nav.community')}</Link>
+                  </div>
+                </div>
+                <div className="nav-actions-col nav-actions-secondary">
+                  <LanguageSelect className="nav-lang-select" compact onLocaleChange={closeMobileMenu} />
+                  <Link to="/auth" className="btn btn-primary" style={{ padding: '8px 16px', width: 'auto' }}>
+                    {t('auth.signIn')}
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
 
-              {isBoardRoute && (
-                <input
-                  className="form-input"
-                  placeholder="Пошук..."
-                  value={new URLSearchParams(location.search).get('q') || ''}
-                  onChange={(e) => updateSearch(e.target.value)}
-                  style={{ width: 200 }}
-                />
-              )}
-
-              <LanguageSelect className="nav-lang-select" compact />
-              
-              <Link to="/profile" className={`link ${isActive('/profile')}`} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                 {/* Аватарка (кружечок) */}
-                 <div className="nav-profile-avatar" style={{width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold'}}>
-                   {avatarUrl ? (
-                     <img src={avatarUrl} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-                   ) : (
-                     user.username.charAt(0).toUpperCase()
-                   )}
-                 </div>
-                 <span>{t('nav.profile')}</span>
+          {user ? (
+            <div className="nav-actions-mobile">
+              <LanguageSelect className="nav-lang-select nav-lang-select-mobile" compact />
+              <Link to="/profile" className="nav-mobile-profile" title={t('nav.profile')}>
+                <div className="nav-profile-avatar" style={{width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold'}}>
+                  {resolvedAvatarUrl && !avatarFailed ? (
+                    <img src={resolvedAvatarUrl} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
+                  ) : (
+                    user.username.charAt(0).toUpperCase()
+                  )}
+                </div>
               </Link>
-
-              <button 
-                onClick={handleLogout} 
-                className="btn-link" 
-                style={{ color: 'var(--text-secondary)', fontSize: '14px', marginLeft: '8px' }}
-                title={t('nav.logout')}
-              >
-                Вийти
+              <button className="btn-icon nav-mobile-logout" onClick={handleLogout} title={t('nav.logout')}>
+                ⎋
               </button>
-            </>
+            </div>
           ) : (
-            <Link to="/auth" className="btn btn-primary" style={{ padding: '8px 16px', width: 'auto' }}>
+            <Link to="/auth" className="btn btn-primary nav-mobile-signin">
               {t('auth.signIn')}
             </Link>
           )}
+          
+          {/* Мобільна кнопка меню */}
+          <button 
+            className="nav-menu-button" 
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            aria-label={t('nav.menu')}
+            aria-expanded={isMobileMenuOpen}
+          >
+            ☰
+          </button>
         </div>
-        
-        {/* Мобільна кнопка меню */}
-        <button 
-          className="nav-menu-button" 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        >
-          ☰
-        </button>
       </nav>
+      )}
+
+      {!isBoardDetail && isMobileMenuOpen && (
+        <div className="mobile-nav-backdrop" onClick={closeMobileMenu} />
+      )}
 
       <main className="content-page">
         <Outlet />

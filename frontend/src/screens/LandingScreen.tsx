@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 //import { useAuth } from '../context/AuthContext.tsx.bak';
 
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useI18n } from '../context/I18nContext';
 
 export const LandingScreen: React.FC = () => {
   const { isAuthenticated } = useAppSelector(state => state.auth);
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   useEffect(() => {
     document.body.classList.add('landing-no-scroll');
@@ -34,30 +36,30 @@ export const LandingScreen: React.FC = () => {
           <div className="landing-hero">
             <div className="landing-copy">
               <h1>
-                Фіксуйте,
+                {t('landing.hero.line1')}
                 <br />
-                упорядковуйте
+                {t('landing.hero.line2')}
                 <br />
-                й виконуйте завдання
+                {t('landing.hero.line3')}
                 <br />
-                будь-де.
+                {t('landing.hero.line4')}
               </h1>
               <p>
-                Залиште безлад і хаос позаду —
+                {t('landing.copy.line1')}
                 <br />
-                реалізуйте свій потенціал і
+                {t('landing.copy.line2')}
                 <br />
-                підвищте продуктивність завдяки Boardly.
+                {t('landing.copy.line3')}
               </p>
               
               {/* Умовний рендер кнопки */}
               {isAuthenticated ? (
                 <Link className="landing-cta" to="/boards">
-                  Перейти до роботи
+                  {t('landing.cta.openApp')}
                 </Link>
               ) : (
                 <Link className="landing-cta" to="/auth?mode=register">
-                  Sign up for free !
+                  {t('landing.cta.signUp')}
                 </Link>
               )}
             </div>

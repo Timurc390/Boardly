@@ -21,6 +21,7 @@ out/
 # Інше
 .DS_Store
 .env
+.logs/
 
 # Editor settings (local only)
 .vscode/

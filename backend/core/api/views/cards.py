@@ -1,7 +1,6 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from django.db import transaction
 from django.utils.dateparse import parse_date, parse_datetime
@@ -10,6 +9,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from core.models import List, Card, CardMember, Checklist, ChecklistItem, CardLabel, Membership, Label
 from core.api.serializers import ListSerializer, CardSerializer, MyCardSerializer
 from core.services.activity_logger import log_activity
+from core.services.permissions import ensure_board_admin
 
 class ListViewSet(viewsets.ModelViewSet):
     serializer_class = ListSerializer
@@ -23,6 +23,8 @@ class ListViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        board = serializer.validated_data.get('board')
+        ensure_board_admin(self.request.user, board, 'Only admins can create lists.')
         list_obj = serializer.save()
         log_activity(self.request.user, 'create_list', 'list', list_obj.id, {
             'board_id': list_obj.board_id,
@@ -35,6 +37,7 @@ class ListViewSet(viewsets.ModelViewSet):
         prev_title = previous.title
         prev_archived = previous.is_archived
         prev_order = previous.order
+        ensure_board_admin(self.request.user, previous.board, 'Only admins can update lists.')
         list_obj = serializer.save()
 
         if 'is_archived' in serializer.validated_data and list_obj.is_archived != prev_archived:
@@ -61,6 +64,7 @@ class ListViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def copy(self, request, pk=None):
         original_list = self.get_object()
+        ensure_board_admin(request.user, original_list.board, 'Only admins can copy lists.')
         new_title = request.data.get('title', f"{original_list.title} (Копія)")
         
         with transaction.atomic():
@@ -104,6 +108,10 @@ class ListViewSet(viewsets.ModelViewSet):
                 'title': new_list.title
             })
             return Response(ListSerializer(new_list).data)
+
+    def perform_destroy(self, instance):
+        ensure_board_admin(self.request.user, instance.board, 'Only admins can delete lists.')
+        instance.delete()
 
 class CardViewSet(viewsets.ModelViewSet):
     serializer_class = CardSerializer
@@ -162,16 +170,20 @@ class CardViewSet(viewsets.ModelViewSet):
     def _has_card_permission(self, card, user):
         board = card.list.board
         # Власник або Адмін дошки
-        if board.owner_id == user.id: return True
-        if Membership.objects.filter(board=board, user=user, role='admin').exists(): return True
-        # Учасник картки (виконавець)
-        if card.members.filter(id=user.id).exists(): return True
+        if board.owner_id == user.id:
+            return True
+        if Membership.objects.filter(board=board, user=user, role='admin').exists():
+            return True
         return False
 
     def perform_create(self, serializer):
+        list_obj = serializer.validated_data.get('list')
+        if list_obj:
+            ensure_board_admin(self.request.user, list_obj.board, 'Only admins can create cards.')
         card = serializer.save()
         Checklist.objects.get_or_create(card=card, title='Чек-лист')
-        # CardMember.objects.get_or_create(card=card, user=self.request.user) # Авто-призначення вимкнено за дефолтом
+        # Авто-призначаємо автора на картку, щоб "Мої картки" не були порожні.
+        CardMember.objects.get_or_create(card=card, user=self.request.user)
         board_id = card.list.board_id if card.list_id else None
         log_activity(self.request.user, 'create_card', 'card', card.id, {
             'list': card.list_id,
@@ -183,25 +195,9 @@ class CardViewSet(viewsets.ModelViewSet):
         })
 
     def perform_update(self, serializer):
+        card_instance = serializer.instance
+        ensure_board_admin(self.request.user, card_instance.list.board, 'Only admins can update cards.')
         card = serializer.instance
-        
-        # --- НОВЕ: Перевірка прав перед редагуванням ---
-        # 1. Чи є у картки виконавці?
-        has_members = card.members.exists()
-        # 2. Чи є поточний юзер виконавцем?
-        user_is_member = card.members.filter(id=self.request.user.id).exists()
-        
-        # 3. Чи є юзер босом (адмін/власник)?
-        board = card.list.board
-        is_boss = (board.owner_id == self.request.user.id) or Membership.objects.filter(board=board, user=self.request.user, role='admin').exists()
-
-        # Правило: Якщо картка закріплена за кимось, і я не виконавець і не бос -> Заборона
-        if has_members and not user_is_member and not is_boss:
-             raise PermissionDenied('Ви не можете редагувати цю картку, оскільки вона закріплена за іншим учасником.')
-
-        # Правило: Якщо картка приватна, і я не бос і не учасник -> Заборона
-        if not has_members and not is_boss and not card.is_public:
-             raise PermissionDenied('Ця картка приватна.')
 
         previous = serializer.instance
         prev_list_id = previous.list_id
@@ -288,8 +284,7 @@ class CardViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         # Забороняємо видалення без прав
-        if not self._has_card_permission(instance, self.request.user):
-            raise PermissionDenied('У вас немає прав на видалення цієї картки.')
+        ensure_board_admin(self.request.user, instance.list.board, 'Only admins can delete cards.')
         instance.delete()
 
     # --- НОВІ ACTIONS ---
@@ -297,24 +292,21 @@ class CardViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
         card = self.get_object()
-        if not card.is_public:
-             raise PermissionDenied('Картка приватна. Попросіть адміністратора призначити вас.')
+        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
         CardMember.objects.get_or_create(card=card, user=request.user)
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'])
     def leave(self, request, pk=None):
         card = self.get_object()
+        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
         CardMember.objects.filter(card=card, user=request.user).delete()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'], url_path='remove-member')
     def remove_member(self, request, pk=None):
         card = self.get_object()
-        board = card.list.board
-        is_boss = (board.owner_id == request.user.id) or Membership.objects.filter(board=board, user=request.user, role='admin').exists()
-        if not is_boss:
-            raise PermissionDenied('Тільки адміністратори можуть видаляти учасників.')
+        ensure_board_admin(request.user, card.list.board, 'Only admins can remove card members.')
 
         user_id = request.data.get('user_id')
         if not user_id:
@@ -326,11 +318,7 @@ class CardViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def toggle_public(self, request, pk=None):
         card = self.get_object()
-        board = card.list.board
-        is_boss = (board.owner_id == request.user.id) or Membership.objects.filter(board=board, user=request.user, role='admin').exists()
-        
-        if not is_boss:
-            raise PermissionDenied('Тільки адміністратори можуть змінювати статус приватності.')
+        ensure_board_admin(request.user, card.list.board, 'Only admins can change card visibility.')
             
         card.is_public = not card.is_public
         card.save()
@@ -342,6 +330,7 @@ class CardViewSet(viewsets.ModelViewSet):
         target_list_id = request.data.get('list_id', original_card.list_id)
         new_title = request.data.get('title', f"{original_card.title} (Копія)")
         target_list = List.objects.get(id=target_list_id)
+        ensure_board_admin(request.user, target_list.board, 'Only admins can copy cards.')
         
         with transaction.atomic():
             new_card = Card.objects.create(

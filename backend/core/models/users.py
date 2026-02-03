@@ -33,6 +33,19 @@ class Profile(models.Model):
     theme = models.CharField(max_length=50, choices=THEME_CHOICES, default='light', verbose_name="Тема інтерфейсу")
     language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default='uk', verbose_name="Language")
     notify_email = models.BooleanField(default=True, verbose_name="Email notifications")
+    notify_desktop = models.BooleanField(default=True, verbose_name="Desktop notifications")
+    notify_assigned = models.BooleanField(default=True, verbose_name="Assigned task notifications")
+    notify_due = models.BooleanField(default=True, verbose_name="Due date notifications")
+    notify_added = models.BooleanField(default=True, verbose_name="Added to board notifications")
+    default_board_view = models.CharField(
+        max_length=20,
+        choices=(('kanban', 'Kanban'), ('calendar', 'Calendar')),
+        default='kanban',
+        verbose_name="Default board view"
+    )
+    session_timeout = models.CharField(max_length=20, default='1h', verbose_name="Session timeout")
+    two_factor_enabled = models.BooleanField(default=False, verbose_name="Two-factor enabled")
+    require_login_verification = models.BooleanField(default=False, verbose_name="Require login verification")
     bio = models.TextField(blank=True, verbose_name="Bio")
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name="Avatar")
     

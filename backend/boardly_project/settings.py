@@ -236,7 +236,11 @@ REST_FRAMEWORK = {
 # EMAIL SETTINGS (Gmail SMTP)
 # ----------------------------------------------------------------------
 # Замінюємо консольний бекенд на реальний SMTP
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# У dev режимі використовуємо console backend, щоб реєстрація не падала без SMTP.
+if DEBUG:
+    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+else:
+    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -260,6 +264,12 @@ DJOSER = {
         'current_user': 'core.api.serializers.UserSerializer',
     },
 }
+
+# У dev не вимагаємо активацію, щоб можна було одразу логінитись.
+if DEBUG:
+    DJOSER['SEND_ACTIVATION_EMAIL'] = False
+    DJOSER['SEND_CONFIRMATION_EMAIL'] = False
+    ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 # ----------------------------------------------------------------------
 # ALLAUTH & SOCIAL ACCOUNT SETTINGS (NEW FIXES)

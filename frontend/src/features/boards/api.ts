@@ -34,6 +34,11 @@ export const removeMember = async (membershipId: number): Promise<void> => {
   await client.delete(`/board-members/${membershipId}/`);
 };
 
+export const updateMemberRole = async (membershipId: number, role: 'admin' | 'member'): Promise<any> => {
+  const res = await client.patch(`/board-members/${membershipId}/`, { role });
+  return res.data;
+};
+
 export const joinBoard = async (inviteLink: string): Promise<Board> => {
   const res = await client.post('/boards/join/', { invite_link: inviteLink });
   return res.data;
@@ -135,4 +140,9 @@ export const updateLabel = async (labelId: number, data: Partial<Label>): Promis
 
 export const deleteLabel = async (labelId: number): Promise<void> => {
   await client.delete(`/labels/${labelId}/`);
+};
+
+export const getBoardActivity = async (boardId: number, userId?: number): Promise<any[]> => {
+  const res = await client.get('/activity/', { params: { board_id: boardId, user_id: userId } });
+  return res.data;
 };

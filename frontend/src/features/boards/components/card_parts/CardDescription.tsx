@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
+import { useI18n } from '../../../../context/I18nContext';
 
 interface CardDescriptionProps {
   card: Card;
@@ -9,6 +10,7 @@ interface CardDescriptionProps {
 }
 
 export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit, onUpdateCard }) => {
+  const { t } = useI18n();
   const [description, setDescription] = useState(card.description || '');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -24,7 +26,7 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
 
   return (
     <div className="card-section">
-        <h4>Опис</h4>
+        <h4>{t('card.descriptionTitle')}</h4>
         {isEditing ? (
             <div>
                 <textarea 
@@ -32,12 +34,12 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
                     rows={5} 
                     value={description} 
                     onChange={e => setDescription(e.target.value)}
-                    placeholder="Додайте детальний опис..."
+                    placeholder={t('card.descriptionPlaceholder')}
                     style={{resize: 'vertical', width: '100%'}}
                 />
                 <div style={{marginTop: 8, display:'flex', gap:8}}>
-                    <Button size="sm" onClick={handleSave}>Зберегти</Button>
-                    <Button size="sm" className="btn-secondary" onClick={() => setIsEditing(false)}>Скасувати</Button>
+                    <Button size="sm" onClick={handleSave}>{t('common.save')}</Button>
+                    <Button size="sm" className="btn-secondary" onClick={() => setIsEditing(false)}>{t('common.cancel')}</Button>
                 </div>
             </div>
         ) : (
@@ -49,7 +51,7 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
                     opacity: canEdit || description ? 1 : 0.5 
                 }}
             >
-                {description || (canEdit ? "Додати детальний опис..." : "Опис відсутній.")}
+                {description || (canEdit ? t('card.descriptionPlaceholder') : t('card.descriptionEmpty'))}
             </div>
         )}
     </div>

@@ -1,5 +1,6 @@
 import { Middleware } from '@reduxjs/toolkit';
 import { applySocketUpdate, setSocketStatus } from '../slices/boardSlice';
+import { API_URL } from '../../api/client';
 
 let socket: WebSocket | null = null;
 let currentBoardId: number | null = null;
@@ -9,10 +10,28 @@ let manualClose = false;
 
 const getReconnectDelay = () => Math.min(1000 * (reconnectAttempts + 1), 10000);
 
-const buildWsUrl = (boardId: number, token: string) => {
+const normalizeBase = (value: string) => value.replace(/\/+$/, '');
+
+const getWsBase = () => {
+  const envWs = process.env.REACT_APP_WS_URL;
+  if (envWs) return normalizeBase(envWs);
+
+  if (API_URL && /^https?:\/\//i.test(API_URL)) {
+    const api = new URL(API_URL);
+    const wsProtocol = api.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${api.host}`;
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.hostname === 'localhost' ? 'localhost:8000' : window.location.host;
-  return `${protocol}//${host}/ws/board/${boardId}/?token=${token}`;
+  const hostname = window.location.hostname;
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  const host = isLocal ? 'localhost:8000' : window.location.host;
+  return `${protocol}//${host}`;
+};
+
+const buildWsUrl = (boardId: number, token: string) => {
+  const base = getWsBase();
+  return `${base}/ws/board/${boardId}/?token=${token}`;
 };
 
 const attachSocketHandlers = (store: any) => {
@@ -77,6 +96,15 @@ export const socketMiddleware: Middleware = (store) => (next) => (action: any) =
       return next(action);
     }
 
+    const alreadyConnected =
+      currentBoardId === boardId &&
+      socket &&
+      (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING);
+
+    if (alreadyConnected) {
+      return next(action);
+    }
+
     if (socket) {
       manualClose = true;
       socket.close();
@@ -112,7 +140,9 @@ export const socketMiddleware: Middleware = (store) => (next) => (action: any) =
     'board/addChecklistItem/fulfilled',
     'board/updateChecklistItem/fulfilled',
     'board/deleteChecklistItem/fulfilled',
-    'board/addComment/fulfilled'
+    'board/addComment/fulfilled',
+    'board/removeMember/fulfilled',
+    'board/updateMemberRole/fulfilled'
   ];
 
   const result = next(action);

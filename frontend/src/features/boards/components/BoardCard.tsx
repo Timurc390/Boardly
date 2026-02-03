@@ -8,17 +8,22 @@ interface BoardCardProps {
 
 export const BoardCard: React.FC<BoardCardProps> = ({ board }) => {
   const style: React.CSSProperties = {};
+  const defaultBoardBackground = '/board-backgrounds/board-default.jpg';
   
   if (board.background_url) {
     if (board.background_url.startsWith('#')) {
       style.backgroundColor = board.background_url;
+    } else if (board.background_url.startsWith('linear-gradient') || board.background_url.startsWith('radial-gradient')) {
+      style.backgroundImage = board.background_url;
     } else {
       style.backgroundImage = `url(${board.background_url})`;
       style.backgroundSize = 'cover';
       style.backgroundPosition = 'center';
     }
   } else {
-    style.background = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)';
+    style.backgroundImage = `url(${defaultBoardBackground})`;
+    style.backgroundSize = 'cover';
+    style.backgroundPosition = 'center';
   }
 
   return (

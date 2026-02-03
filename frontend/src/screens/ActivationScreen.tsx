@@ -3,11 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 // ВИПРАВЛЕНО: Імпортуємо Redux хуки та потрібну дію
 import { useAppDispatch } from '../store/hooks';
 import { activateUserAccount } from '../store/slices/authSlice';
+import { useI18n } from '../context/I18nContext';
 
 export const ActivationScreen: React.FC = () => {
   const { uid, token } = useParams<{ uid: string; token: string }>();
   const navigate = useNavigate();
   const dispatch = useAppDispatch(); // Отримуємо диспетчер
+  const { t } = useI18n();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
@@ -40,27 +42,27 @@ export const ActivationScreen: React.FC = () => {
 
         {status === 'loading' && (
           <div>
-            <h3>Активація акаунту...</h3>
-            <p>Будь ласка, зачекайте.</p>
+            <h3>{t('activation.loadingTitle')}</h3>
+            <p>{t('activation.loadingHint')}</p>
           </div>
         )}
 
         {status === 'success' && (
           <div>
-            <h3 style={{ color: 'var(--col-progress)' }}>Акаунт успішно активовано! 🎉</h3>
-            <p>Тепер ви можете увійти до системи.</p>
+            <h3 style={{ color: 'var(--col-progress)' }}>{t('activation.successTitle')}</h3>
+            <p>{t('activation.successHint')}</p>
             <Link to="/auth" className="btn btn-primary" style={{ marginTop: 20, display: 'inline-block', textDecoration: 'none' }}>
-              Увійти
+              {t('activation.signIn')}
             </Link>
           </div>
         )}
 
         {status === 'error' && (
           <div>
-            <h3 style={{ color: 'var(--danger)' }}>Помилка активації</h3>
-            <p>Посилання недійсне або термін його дії минув.</p>
+            <h3 style={{ color: 'var(--danger)' }}>{t('activation.errorTitle')}</h3>
+            <p>{t('activation.errorHint')}</p>
             <Link to="/auth" className="btn btn-secondary" style={{ marginTop: 20, display: 'inline-block', textDecoration: 'none' }}>
-              Повернутися
+              {t('activation.back')}
             </Link>
           </div>
         )}

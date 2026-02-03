@@ -20,6 +20,8 @@ import { FaqScreen } from './screens/FaqScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { ResetPasswordConfirmScreen } from './screens/ResetPasswordConfirmScreen';
 import { MyCardsScreen } from './screens/MyCardsScreen';
+import { HelpScreen } from './screens/HelpScreen';
+import { CommunityScreen } from './screens/CommunityScreen';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { isAuthenticated, loading } = useAppSelector(state => state.auth);
@@ -35,6 +37,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }
 // Компонент-обгортка для ініціалізації
 const AppContent = () => {
   const dispatch = useAppDispatch();
+  const { user } = useAppSelector(state => state.auth);
   
   useEffect(() => {
     // Якщо є токен, пробуємо завантажити профіль
@@ -43,6 +46,16 @@ const AppContent = () => {
       dispatch(fetchMe());
     }
   }, [dispatch]);
+
+  useEffect(() => {
+    const nextTheme = (user?.profile?.theme as string) || (typeof window !== 'undefined' ? window.localStorage.getItem('theme') : null) || 'dark';
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = nextTheme;
+    }
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('theme', nextTheme);
+    }
+  }, [user?.profile?.theme]);
 
   return (
     <I18nProvider>
@@ -58,6 +71,10 @@ const AppContent = () => {
 
         {/* Захищені маршрути */}
         <Route element={<Layout />}>
+          <Route path="/help" element={<HelpScreen />} />
+          <Route path="/support" element={<Navigate to="/help" replace />} />
+          <Route path="/community" element={<CommunityScreen />} />
+          <Route path="/get-started" element={<Navigate to="/community" replace />} />
           <Route 
             path="/boards" 
             element={

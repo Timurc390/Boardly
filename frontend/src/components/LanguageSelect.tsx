@@ -4,13 +4,15 @@ import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { updateUserProfile } from '../store/slices/authSlice';
 
 import { useI18n } from '../context/I18nContext';
+import { type Locale } from '../i18n/translations';
 
 type LanguageSelectProps = {
   compact?: boolean;
   className?: string;
+  onLocaleChange?: (next: Locale) => void;
 };
 
-export const LanguageSelect: React.FC<LanguageSelectProps> = ({ compact = false, className }) => {
+export const LanguageSelect: React.FC<LanguageSelectProps> = ({ compact = false, className, onLocaleChange }) => {
   const dispatch = useAppDispatch();
   const { user } = useAppSelector(state => state.auth);
   
@@ -19,6 +21,7 @@ export const LanguageSelect: React.FC<LanguageSelectProps> = ({ compact = false,
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value as typeof locale;
     setLocale(next);
+    onLocaleChange?.(next);
     
     // Якщо користувач залогінений, зберігаємо мову на сервері
     if (user?.profile?.language !== next && user) {

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Board, Card } from '../../../../types';
 import { Input } from '../../../../components/ui/Input';
+import { useI18n } from '../../../../context/I18nContext';
 
 interface CardChecklistsProps {
   board: Board;
@@ -15,6 +16,7 @@ interface CardChecklistsProps {
 export const CardChecklists: React.FC<CardChecklistsProps> = ({ 
   board, card, canEdit, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem
 }) => {
+  const { t } = useI18n();
   const checklist = card.checklists?.[0];
   const [sourceCardId, setSourceCardId] = useState<number | ''>('');
   const [copyMode, setCopyMode] = useState<'append' | 'replace'>('append');
@@ -62,7 +64,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
     <>
       {canEdit && checklist && (
         <div className="card-section">
-          <h4>Копіювати підзадачі</h4>
+          <h4>{t('checklist.copy.title')}</h4>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <select
               className="form-input"
@@ -70,7 +72,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
               onChange={(e) => setSourceCardId(e.target.value ? Number(e.target.value) : '')}
               style={{ minWidth: 220 }}
             >
-              <option value="">Оберіть картку</option>
+              <option value="">{t('checklist.copy.selectCard')}</option>
               {cardOptions.map(c => (
                 <option key={c.id} value={c.id}>{c.title}</option>
               ))}
@@ -81,11 +83,11 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
               onChange={(e) => setCopyMode(e.target.value as 'append' | 'replace')}
               style={{ minWidth: 180 }}
             >
-              <option value="append">Додати в кінець</option>
-              <option value="replace">Замінити всі</option>
+              <option value="append">{t('checklist.copy.append')}</option>
+              <option value="replace">{t('checklist.copy.replace')}</option>
             </select>
             <button type="button" className="btn-primary" onClick={handleCopyItems} disabled={!sourceCardId || isCopying}>
-              {isCopying ? 'Копіювання...' : 'Копіювати'}
+              {isCopying ? t('common.copying') : t('common.copy')}
             </button>
           </div>
         </div>
@@ -93,7 +95,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
       {checklist ? (
           <div key={checklist.id} className="card-section">
               <div style={{display:'flex', justifyContent:'space-between', marginBottom: 8}}>
-                  <h4>☑ {checklist.title}</h4>
+                  <h4>☑ {checklist.title || t('checklist.title')}</h4>
               </div>
               <div className="checklist-items">
                   {checklist.items?.map(item => (
@@ -136,7 +138,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                               type="button"
                               className="btn-icon"
                               onClick={() => onDeleteChecklistItem(item.id, checklist.id)}
-                              title="Видалити"
+                              title={t('common.delete')}
                               style={{ marginLeft: 'auto' }}
                             >
                               🗑️
@@ -148,7 +150,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
               {canEdit && (
                   <div style={{marginTop: 8}}>
                       <Input 
-                          placeholder="Додати елемент (Enter)..." 
+                          placeholder={t('checklist.itemPlaceholder')}
                           onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                               if(e.key === 'Enter') {
                                   onAddChecklistItem(checklist.id, e.currentTarget.value);
@@ -161,9 +163,9 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
           </div>
       ) : (
         <div className="card-section">
-          <h4>Чек-лист</h4>
+          <h4>{t('checklist.title')}</h4>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Чек-лист ще не створено.
+            {t('checklist.empty')}
           </div>
         </div>
       )}

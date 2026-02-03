@@ -56,7 +56,16 @@ export const FaqScreen: React.FC = () => {
         </div>
       </nav>
 
-      <div className="content-page" style={{ padding: '40px 20px', maxWidth: '800px', margin: '0 auto' }}>
+      <div
+        className="content-page"
+        style={{
+          padding: '40px 20px',
+          paddingTop: 'calc(40px + env(safe-area-inset-top))',
+          paddingBottom: 'calc(40px + env(safe-area-inset-bottom))',
+          maxWidth: '800px',
+          margin: '0 auto'
+        }}
+      >
         <h2 style={{ marginBottom: '32px', textAlign: 'center' }}>{t('faq.title')}</h2>
         <div className="faq-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="faq-item" style={{ background: 'var(--bg-surface)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>

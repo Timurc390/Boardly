@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Board } from '../../../../types';
+import { useI18n } from '../../../../context/I18nContext';
 
 interface CardLabelsProps {
   card: Card;
@@ -19,6 +20,7 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
   onUpdateLabel, onDeleteLabel,
   startEditingDueDate, isOverdue, overdueText
 }) => {
+  const { t, locale } = useI18n();
   
   const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
@@ -54,10 +56,19 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
       setEditingLabelId(null);
   };
 
+  const dueDate = card.due_date ? new Date(card.due_date) : null;
+  const dueText = dueDate && !Number.isNaN(dueDate.getTime())
+    ? dueDate.toLocaleString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const dueClass = [
+    'card-due-badge',
+    card.is_completed ? 'completed' : isOverdue ? 'overdue' : ''
+  ].filter(Boolean).join(' ');
+
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 16 }}>
         <div className="card-section" style={{ minWidth: 240, maxWidth: 320 }}>
-            <h4>Мітки</h4>
+            <h4>{t('labels.title')}</h4>
             <div className="card-labels-list" style={{ flexDirection: 'column', gap: 8 }}>
                 
                 {board.labels?.map(label => {
@@ -110,7 +121,7 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
                                     <button 
                                         className="btn-icon" 
                                         style={{width:24, height:24, fontSize:12, opacity:0.5}}
-                                        title="Редагувати"
+                                        title={t('common.edit')}
                                         onClick={(e) => startEditing(e, label)}
                                     >
                                         ✎
@@ -118,7 +129,7 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
                                     <button 
                                         className="btn-icon" 
                                         style={{width:24, height:24, fontSize:12, opacity:0.5, color: 'var(--danger)'}}
-                                        title="Видалити"
+                                        title={t('common.delete')}
                                         onClick={(e) => deleteLabel(e, label.id)}
                                     >
                                         🗑️
@@ -136,9 +147,9 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
                             width: '100%', padding: '6px', borderRadius: 4, cursor: 'pointer', fontSize: 12
                         }} onClick={(e) => {
                             e.stopPropagation();
-                            const name = prompt("Назва нової мітки:");
+                            const name = prompt(t('labels.newPrompt'));
                             if(name) onCreateLabel(name, '#'+Math.floor(Math.random()*16777215).toString(16));
-                        }}>+ Створити нову мітку</button>
+                        }}>{`+ ${t('labels.add')}`}</button>
                     </div>
                 )}
             </div>
@@ -146,17 +157,17 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
 
         {card.due_date && (
             <div className="card-section">
-                <h4>Дедлайн</h4>
+                <h4>{t('card.dueDate')}</h4>
                 <div onClick={canEdit ? startEditingDueDate : undefined}
                     style={{
-                        background: card.is_completed ? 'var(--success)' : (isOverdue ? 'var(--danger)' : 'rgba(255,255,255,0.1)'),
-                        color: '#fff', padding: '6px 12px', borderRadius: 4, fontSize: 13, cursor: canEdit ? 'pointer' : 'default',
+                        cursor: canEdit ? 'pointer' : 'default',
                         display: 'inline-flex', alignItems: 'center', gap: 8
                     }}
+                    className={dueClass}
                 >
-                    <span>{new Date(card.due_date).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{dueText}</span>
                     {overdueText && <span style={{fontWeight: 'bold'}}>{overdueText}</span>}
-                    {card.is_completed && <span style={{fontSize: 11, fontWeight: 'bold'}}>ВИКОНАНО</span>}
+                    {card.is_completed && <span style={{fontSize: 11, fontWeight: 'bold'}}>{t('card.completedBadge')}</span>}
                 </div>
             </div>
         )}

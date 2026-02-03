@@ -110,6 +110,14 @@ export const removeBoardMemberAction = createAsyncThunk(
   }
 );
 
+export const updateBoardMemberRoleAction = createAsyncThunk(
+  'board/updateMemberRole',
+  async ({ membershipId, role }: { membershipId: number; role: 'admin' | 'member' }) => {
+    const updated = await api.updateMemberRole(membershipId, role);
+    return updated;
+  }
+);
+
 // List Actions
 export const addListAction = createAsyncThunk(
   'board/addList',
@@ -292,6 +300,19 @@ const boardSlice = createSlice({
           state.currentBoard.lists = lists.filter(l => l.id !== payload);
           return;
         }
+        case 'board/removeMember/fulfilled': {
+          if (!state.currentBoard?.members) return;
+          state.currentBoard.members = state.currentBoard.members.filter(m => m.id !== payload);
+          return;
+        }
+        case 'board/updateMemberRole/fulfilled': {
+          if (!state.currentBoard?.members) return;
+          const idx = state.currentBoard.members.findIndex(m => m.id === payload.id);
+          if (idx !== -1) {
+            state.currentBoard.members[idx] = { ...state.currentBoard.members[idx], ...payload };
+          }
+          return;
+        }
         case 'board/addCard/fulfilled':
         case 'board/updateCard/fulfilled':
         case 'board/moveCard/fulfilled':
@@ -439,9 +460,12 @@ const boardSlice = createSlice({
         state.loading = false;
         state.currentBoard = action.payload;
       })
-      .addCase(fetchBoardById.pending, (state) => { 
+      .addCase(fetchBoardById.pending, (state, action) => { 
         state.loading = true; 
-        state.isLive = false; // Скидаємо статус при новому завантаженні
+        const nextId = action.meta.arg as number;
+        if (!state.currentBoard || state.currentBoard.id !== nextId) {
+          state.isLive = false; // Скидаємо статус лише при зміні дошки
+        }
       })
       .addCase(fetchBoardById.rejected, (state, action) => {
         state.loading = false;
@@ -471,6 +495,13 @@ const boardSlice = createSlice({
       .addCase(removeBoardMemberAction.fulfilled, (state, action) => {
         if (!state.currentBoard?.members) return;
         state.currentBoard.members = state.currentBoard.members.filter(m => m.id !== action.payload);
+      })
+      .addCase(updateBoardMemberRoleAction.fulfilled, (state, action) => {
+        if (!state.currentBoard?.members) return;
+        const idx = state.currentBoard.members.findIndex(m => m.id === action.payload.id);
+        if (idx !== -1) {
+          state.currentBoard.members[idx] = { ...state.currentBoard.members[idx], ...action.payload };
+        }
       })
       .addCase(copyListAction.fulfilled, (state, action) => {
           state.currentBoard?.lists?.push(action.payload);
