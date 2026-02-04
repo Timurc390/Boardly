@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { Board, List, Card, Checklist, ChecklistItem, Comment, Label } from '../../types';
+import { Board, List, Card, ChecklistItem, Label, Attachment } from '../../types';
 import * as api from '../../features/boards/api';
 
 interface BoardState {
@@ -35,6 +35,15 @@ const updateLabelInCards = (lists: List[], updated: Label) => {
   }
 };
 
+const removeLabelFromCards = (lists: List[], labelId: number) => {
+  for (const list of lists) {
+    for (const card of list.cards || []) {
+      if (!card.labels) continue;
+      card.labels = card.labels.filter(label => label.id !== labelId);
+    }
+  }
+};
+
 const findCardInLists = (lists: List[], cardId: number) => {
   for (const list of lists) {
     const card = list.cards?.find(c => c.id === cardId);
@@ -45,6 +54,14 @@ const findCardInLists = (lists: List[], cardId: number) => {
 
 const findChecklistInCard = (card: Card, checklistId: number) => {
   return card.checklists?.find(c => c.id === checklistId) || null;
+};
+
+const removeChecklistFromCard = (card: Card, checklistId: number) => {
+  if (!card.checklists) return false;
+  const idx = card.checklists.findIndex(checklist => checklist.id === checklistId);
+  if (idx === -1) return false;
+  card.checklists.splice(idx, 1);
+  return true;
 };
 
 const removeCardFromLists = (lists: List[], cardId: number) => {
@@ -189,6 +206,14 @@ export const addChecklistAction = createAsyncThunk(
   async ({ cardId, title }: { cardId: number; title: string }) => await api.createChecklist(cardId, title)
 );
 
+export const deleteChecklistAction = createAsyncThunk(
+  'board/deleteChecklist',
+  async ({ checklistId }: { checklistId: number; cardId?: number }) => {
+    await api.deleteChecklist(checklistId);
+    return checklistId;
+  }
+);
+
 export const addChecklistItemAction = createAsyncThunk(
   'board/addChecklistItem',
   async ({ checklistId, text }: { checklistId: number; text: string }) => await api.createChecklistItem(checklistId, text)
@@ -243,6 +268,27 @@ export const leaveCardAction = createAsyncThunk(
 export const removeCardMemberAction = createAsyncThunk(
   'board/removeCardMember',
   async ({ cardId, userId }: { cardId: number; userId: number }) => await api.removeCardMember(cardId, userId)
+);
+
+export const addCardMemberAction = createAsyncThunk(
+  'board/addCardMember',
+  async ({ cardId, userId }: { cardId: number; userId: number }) => await api.addCardMember(cardId, userId)
+);
+
+export const addAttachmentAction = createAsyncThunk(
+  'board/addAttachment',
+  async ({ cardId, file }: { cardId: number; file: File }) => {
+    const attachment = await api.createAttachment(cardId, file);
+    return { attachment, cardId };
+  }
+);
+
+export const deleteAttachmentAction = createAsyncThunk(
+  'board/deleteAttachment',
+  async ({ cardId, attachmentId }: { cardId: number; attachmentId: number }) => {
+    await api.deleteAttachment(attachmentId);
+    return { cardId, attachmentId };
+  }
 );
 
 const boardSlice = createSlice({
@@ -319,7 +365,8 @@ const boardSlice = createSlice({
         case 'board/copyCard/fulfilled':
         case 'board/joinCard/fulfilled':
         case 'board/leaveCard/fulfilled':
-        case 'board/removeCardMember/fulfilled': {
+        case 'board/removeCardMember/fulfilled':
+        case 'board/addCardMember/fulfilled': {
           if (!lists) return;
           const nextCard = payload?.card ?? payload;
           const wsMeta = payload?.ws_meta;
@@ -353,6 +400,30 @@ const boardSlice = createSlice({
         case 'board/deleteLabel/fulfilled': {
           if (!state.currentBoard.labels) return;
           state.currentBoard.labels = state.currentBoard.labels.filter(l => l.id !== payload);
+          return;
+        }
+        case 'board/addChecklist/fulfilled': {
+          if (!lists) return;
+          const checklist = payload?.checklist ?? payload;
+          const wsCardId = payload?.ws_meta?.cardId;
+          const targetCardId = wsCardId ?? checklist?.card ?? checklist?.card_id;
+          if (!targetCardId) return;
+          const card = findCardInLists(lists, targetCardId);
+          if (!card) return;
+          if (!card.checklists) card.checklists = [];
+          if (!card.checklists.some(item => item.id === checklist.id)) {
+            card.checklists.push({ ...checklist, items: checklist.items ?? [] });
+          }
+          return;
+        }
+        case 'board/deleteChecklist/fulfilled': {
+          if (!lists) return;
+          const checklistId = payload?.checklistId ?? payload;
+          for (const list of lists) {
+            for (const card of list.cards || []) {
+              if (removeChecklistFromCard(card, checklistId)) return;
+            }
+          }
           return;
         }
         case 'board/addChecklistItem/fulfilled': {
@@ -420,6 +491,13 @@ const boardSlice = createSlice({
         }
         default:
           return;
+      }
+    },
+    updateListOptimistic(state, action: PayloadAction<{ listId: number; data: Partial<List> }>) {
+      if (!state.currentBoard?.lists) return;
+      const idx = state.currentBoard.lists.findIndex(l => l.id === action.payload.listId);
+      if (idx !== -1) {
+        state.currentBoard.lists[idx] = { ...state.currentBoard.lists[idx], ...action.payload.data };
       }
     },
     moveListOptimistic(state, action: PayloadAction<{ sourceIndex: number, destIndex: number }>) {
@@ -548,12 +626,37 @@ const boardSlice = createSlice({
         if (state.currentBoard) {
           state.currentBoard.labels = state.currentBoard.labels?.filter(label => label.id !== action.payload);
         }
+        const lists = ensureLists(state);
+        if (lists) removeLabelFromCards(lists, action.payload);
       })
       .addCase(removeCardMemberAction.fulfilled, (state, action) => {
         const lists = ensureLists(state);
         if (!lists) return;
         const updatedCard = action.payload as Card;
         upsertCardIntoLists(lists, updatedCard);
+      })
+      .addCase(addCardMemberAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const updatedCard = action.payload as Card;
+        upsertCardIntoLists(lists, updatedCard);
+      })
+      .addCase(addAttachmentAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const { attachment, cardId } = action.payload as { attachment: Attachment; cardId: number };
+        const card = findCardInLists(lists, cardId);
+        if (!card) return;
+        if (!card.attachments) card.attachments = [];
+        card.attachments.push(attachment);
+      })
+      .addCase(deleteAttachmentAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const { cardId, attachmentId } = action.payload as { cardId: number; attachmentId: number };
+        const card = findCardInLists(lists, cardId);
+        if (!card?.attachments) return;
+        card.attachments = card.attachments.filter(att => att.id !== attachmentId);
       })
       .addCase(addChecklistAction.fulfilled, (state, action) => {
         const lists = ensureLists(state);
@@ -562,7 +665,21 @@ const boardSlice = createSlice({
         const card = findCardInLists(lists, cardId);
         if (!card) return;
         if (!card.checklists) card.checklists = [];
-        card.checklists.push({ ...action.payload, items: action.payload.items ?? [] });
+        if (!card.checklists.some(checklist => checklist.id === action.payload.id)) {
+          card.checklists.push({ ...action.payload, items: action.payload.items ?? [] });
+        }
+      })
+      .addCase(deleteChecklistAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const checklistId = action.payload;
+        for (const list of lists) {
+          for (const card of list.cards || []) {
+            if (removeChecklistFromCard(card, checklistId)) {
+              return;
+            }
+          }
+        }
       })
       .addCase(addChecklistItemAction.fulfilled, (state, action) => {
         const lists = ensureLists(state);
@@ -636,5 +753,5 @@ const boardSlice = createSlice({
   }
 });
 
-export const { updateBoardLocally, setSocketStatus, applySocketUpdate, moveCardOptimistic, moveListOptimistic, clearCurrentBoard } = boardSlice.actions;
+export const { updateBoardLocally, setSocketStatus, applySocketUpdate, updateListOptimistic, moveCardOptimistic, moveListOptimistic, clearCurrentBoard } = boardSlice.actions;
 export default boardSlice.reducer;

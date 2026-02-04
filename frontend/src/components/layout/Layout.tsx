@@ -15,6 +15,8 @@ export const Layout: React.FC = () => {
   const { t, locale } = useI18n();
   const location = useLocation();
   const isBoardDetail = /^\/boards\/[^/]+$/.test(location.pathname);
+  const isCommunityPage = location.pathname === '/community' || location.pathname === '/get-started';
+  const hideTopNav = isBoardDetail || isCommunityPage;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   
@@ -83,9 +85,9 @@ export const Layout: React.FC = () => {
   return (
     <div
       className={`app-container${isBoardDetail ? ' app-container--board' : ''}`}
-      style={isBoardDetail ? ({ ['--top-nav-height' as any]: '0px' } as React.CSSProperties) : undefined}
+      style={hideTopNav ? ({ ['--top-nav-height' as any]: '0px' } as React.CSSProperties) : undefined}
     >
-      {!isBoardDetail && (
+      {!hideTopNav && (
       <nav className="top-nav">
         {/* ЛІВА ЧАСТИНА: Лого + Основне меню */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
@@ -204,7 +206,7 @@ export const Layout: React.FC = () => {
       </nav>
       )}
 
-      {!isBoardDetail && isMobileMenuOpen && (
+      {!hideTopNav && isMobileMenuOpen && (
         <div className="mobile-nav-backdrop" onClick={closeMobileMenu} />
       )}
 

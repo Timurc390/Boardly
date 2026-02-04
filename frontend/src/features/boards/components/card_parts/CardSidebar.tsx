@@ -38,6 +38,13 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
   isCoverMenuOpen, onToggleCoverMenu, coverMode, onCoverModeChange, onOpenCover
 }) => {
   const { t, locale } = useI18n();
+  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const getAvatarSrc = (member: NonNullable<Card['members']>[number]) => {
+    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
+    if (!candidate) return fallbackAvatar;
+    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
+    return `/${candidate}`;
+  };
   const coverColors = [
     '#2e7d32',
     '#ef6c00',
@@ -67,12 +74,14 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
             <h4 className="card-sidebar-title">{t('card.sidebar.participation')}</h4>
             {isCardMember ? (
               <button type="button" className="sidebar-btn btn-danger" onClick={(e) => { e.preventDefault(); onLeaveCard(); }}>
-                🏃‍♂️ {t('card.sidebar.leave')}
+                <span className="sidebar-btn-icon">🏃‍♂️</span>
+                {t('card.sidebar.leave')}
               </button>
             ) : (
               (card.is_public || canManage) ? (
                 <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onJoinCard(); }}>
-                  🙋‍♂️ {t('card.sidebar.join')}
+                  <span className="sidebar-btn-icon">🙋‍♂️</span>
+                  {t('card.sidebar.join')}
                 </button>
               ) : (
                 <div style={{fontSize: 12, color: '#666', fontStyle: 'italic', marginBottom: 8}}>{t('card.private')}</div>
@@ -86,8 +95,21 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
             <h4 className="card-sidebar-title">{t('card.members')}</h4>
             {card.members.map(member => (
               <div key={member.id} className="card-member-row">
-                <div className="card-member-name">
-                  {member.username || member.email}
+                <div className="card-member-meta">
+                  <div className="member-avatar card-member-avatar-sm" title={member.username || member.email}>
+                    <img
+                      src={getAvatarSrc(member)}
+                      alt={member.username || member.email}
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = fallbackAvatar;
+                      }}
+                    />
+                  </div>
+                  <div className="card-member-name">
+                    {member.username || member.email}
+                  </div>
                 </div>
                 {canManage && (
                   <button
@@ -118,7 +140,8 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
                       }
                     }}
                   >
-                    🖼️ {t('card.cover.title')}
+                    <span className="sidebar-btn-icon">🖼️</span>
+                    {t('card.cover.title')}
                   </button>
                   {isCoverMenuOpen && (
                     <div className="card-cover-menu">
@@ -209,7 +232,8 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
                     </div>
                 ) : (
                     <button type="button" className="sidebar-btn" onClick={startEditingDueDate}>
-                      <span>🕒 {t('card.dueDate')}</span>
+                      <span className="sidebar-btn-icon">🕒</span>
+                      <span>{t('card.dueDate')}</span>
                       {dueText && (
                         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
                           {dueText}
@@ -223,13 +247,20 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
         {canEdit && (
           <div className="card-sidebar-section">
             <h4 className="card-sidebar-title">{t('card.sidebar.actions')}</h4>
-            <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onCopyCard(); }}>📋 {t('card.copy')}</button>
+            <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onCopyCard(); }}>
+              <span className="sidebar-btn-icon">📋</span>
+              {t('card.copy')}
+            </button>
             <button type="button" className="sidebar-btn" onClick={() => onUpdateCard({is_archived: !card.is_archived})}>
-                {card.is_archived ? `↩️ ${t('card.unarchive')}` : `📦 ${t('card.archive')}`}
+                <span className="sidebar-btn-icon">{card.is_archived ? '↩️' : '📦'}</span>
+                {card.is_archived ? t('card.unarchive') : t('card.archive')}
             </button>
             <button type="button" className="sidebar-btn btn-danger" style={{color: 'var(--danger)'}} onClick={() => {
                 if(window.confirm(t('confirm.deleteCard'))) onDeleteCard();
-            }}>🗑️ {t('common.delete')}</button>
+            }}>
+              <span className="sidebar-btn-icon">🗑️</span>
+              {t('common.delete')}
+            </button>
           </div>
         )}
     </div>

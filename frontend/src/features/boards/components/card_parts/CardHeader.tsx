@@ -13,16 +13,18 @@ interface CardHeaderProps {
   onArchiveToggle: () => void;
   onDeleteCard: () => void;
   onMoveCard?: (cardId: number, sourceListId: number, destListId: number, destIndex: number) => void;
-  onOpenCover?: () => void;
+  isCardMember?: boolean;
+  onJoinCard?: () => void;
+  onLeaveCard?: () => void;
 }
 
 export const CardHeader: React.FC<CardHeaderProps> = ({ 
-  card, board, canEdit, onUpdateCard, onCopyLink, onClose, onCopyCard, onArchiveToggle, onDeleteCard, onMoveCard, onOpenCover
+  card, board, canEdit, onUpdateCard, onCopyLink, onClose, onCopyCard, onArchiveToggle, onDeleteCard, onMoveCard,
+  isCardMember = false, onJoinCard, onLeaveCard
 }) => {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMoveOpen, setIsMoveOpen] = useState(false);
-  const [isWatching, setIsWatching] = useState(false);
   const activeLists = useMemo(() => board.lists?.filter(l => !l.is_archived) || [], [board.lists]);
   const currentList = activeLists.find(l => l.id === card.list);
   const currentIndex = currentList?.cards?.findIndex(c => c.id === card.id) ?? 0;
@@ -34,11 +36,13 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
     setMovePosition(currentIndex + 1);
   }, [card.id, card.list, currentIndex]);
   const listTitle = board.lists?.find(l => l.id === card.list)?.title || t('common.unknown');
-  const dueDate = card.due_date ? new Date(card.due_date) : null;
-  const dueText = dueDate && !Number.isNaN(dueDate.getTime())
-    ? dueDate.toLocaleString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : '';
-
+  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const getAvatarSrc = (member: NonNullable<Card['members']>[number]) => {
+    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
+    if (!candidate) return fallbackAvatar;
+    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
+    return `/${candidate}`;
+  };
   const selectedList = activeLists.find(l => l.id === moveListId) || currentList || activeLists[0];
   const maxPosition = Math.max(1, (selectedList?.cards?.filter(c => !c.is_archived).length || 1));
   const positions = Array.from({ length: maxPosition }, (_, idx) => idx + 1);
@@ -54,131 +58,172 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
     setIsMoveOpen(false);
     setIsMenuOpen(false);
   };
+
+  const renderMovePopover = (className = '') => (
+    <div className={`card-move-popover ${className}`.trim()}>
+      <div className="card-move-title">{t('card.move.title')}</div>
+      <label className="card-move-label">
+        {t('card.move.list')}
+        <select
+          className="form-input"
+          value={moveListId}
+          onChange={(e) => setMoveListId(Number(e.target.value))}
+        >
+          {activeLists.map(list => (
+            <option key={list.id} value={list.id}>{list.title}</option>
+          ))}
+        </select>
+      </label>
+      <label className="card-move-label">
+        {t('card.move.position')}
+        <select
+          className="form-input"
+          value={Math.min(movePosition, maxPosition)}
+          onChange={(e) => setMovePosition(Number(e.target.value))}
+        >
+          {positions.map(pos => (
+            <option key={pos} value={pos}>{pos}</option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="btn-primary btn-sm card-move-btn" onClick={handleMove}>
+        {t('card.move.button')}
+      </button>
+    </div>
+  );
+
   return (
     <div className="card-modal-header">
-      <div className="card-modal-header-main">
-        <input 
-            className="card-title-input"
-            value={card.title}
-            onChange={e => onUpdateCard({ title: e.target.value })}
-            disabled={!canEdit}
-            style={{ opacity: canEdit ? 1 : 0.7, cursor: canEdit ? 'text' : 'not-allowed' }}
-        />
-        <div className="card-meta-row">
-            {t('card.inList')}: <strong>{listTitle}</strong>
+      <div className="card-modal-header-top">
+        <div className="card-list-pill-wrapper">
+          <button
+            type="button"
+            className="card-list-pill"
+            title={listTitle}
+            onClick={() => {
+              setIsMenuOpen(false);
+              setIsMoveOpen(prev => !prev);
+            }}
+          >
+            {listTitle}
+            <span className="card-list-pill-caret">▾</span>
+          </button>
+          {isMoveOpen && !isMenuOpen && renderMovePopover('card-list-move-popover')}
         </div>
-        {dueText && (
-          <div className="card-meta-row">
-            {t('card.dueDate')}: <strong>{dueText}</strong>
-          </div>
+        {(isMenuOpen || isMoveOpen) && (
+          <div className="card-menu-overlay" onClick={() => { setIsMenuOpen(false); setIsMoveOpen(false); }} />
         )}
-        
-        <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
+        <div className="card-modal-header-actions">
+          <div className="card-menu-wrapper">
+            <button
+              className="btn-icon card-menu-trigger"
+              onClick={() => setIsMenuOpen(prev => !prev)}
+              aria-haspopup="true"
+              aria-expanded={isMenuOpen}
+              title={t('card.menu')}
+            >
+              •••
+            </button>
+            {isMenuOpen && (
+              <>
+                <div className="card-menu-dropdown">
+                  <button
+                    className="card-menu-item"
+                    onClick={() => {
+                      if (isCardMember) onLeaveCard?.();
+                      else onJoinCard?.();
+                      setIsMenuOpen(false);
+                      setIsMoveOpen(false);
+                    }}
+                  >
+                    <span className="card-menu-icon">🙋‍♂️</span>
+                    {isCardMember ? t('card.sidebar.leave') : t('card.sidebar.join')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => setIsMoveOpen(prev => !prev)}>
+                    <span className="card-menu-icon">➜</span>
+                    {t('card.menu.move')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => { onCopyCard(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
+                    <span className="card-menu-icon">📋</span>
+                    {t('card.menu.copy')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => { onCopyLink(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
+                    <span className="card-menu-icon">🪞</span>
+                    {t('card.menu.mirror')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => { onCopyCard(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
+                    <span className="card-menu-icon">📄</span>
+                    {t('card.menu.template')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => { onCopyLink(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
+                    <span className="card-menu-icon">🔗</span>
+                    {t('card.menu.share')}
+                  </button>
+                  <button className="card-menu-item" onClick={() => { onArchiveToggle(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
+                    <span className="card-menu-icon">📦</span>
+                    {t('card.menu.archive')}
+                  </button>
+                  <div className="card-menu-divider" />
+                  <button
+                    className="card-menu-item danger"
+                    onClick={() => {
+                      if (window.confirm(t('confirm.deleteCard'))) {
+                        onDeleteCard();
+                        setIsMenuOpen(false);
+                        setIsMoveOpen(false);
+                      }
+                    }}
+                  >
+                    <span className="card-menu-icon">🗑️</span>
+                    {t('card.menu.delete')}
+                  </button>
+                </div>
+                {isMoveOpen && renderMovePopover()}
+              </>
+            )}
+          </div>
+          <button className="btn-icon" onClick={onClose}>✕</button>
+        </div>
+      </div>
+      <div className="card-modal-header-main">
+        <div className="card-title-row">
+          <button
+            type="button"
+            className={`card-status-toggle ${card.is_completed ? 'done' : ''}`}
+            aria-label={card.is_completed ? t('card.uncomplete') : t('card.complete')}
+            onClick={() => canEdit && onUpdateCard({ is_completed: !card.is_completed })}
+            disabled={!canEdit}
+          >
+            {card.is_completed ? '✓' : '○'}
+          </button>
+          <input 
+              className="card-title-input"
+              value={card.title}
+              onChange={e => onUpdateCard({ title: e.target.value })}
+              disabled={!canEdit}
+              style={{ opacity: canEdit ? 1 : 0.7, cursor: canEdit ? 'text' : 'not-allowed' }}
+          />
+        </div>
+        <div className="card-member-row-inline">
             {card.members && card.members.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 4 }}>{t('card.members')}:</span>
                     {card.members.map(member => (
-                        <div key={member.id} className="member-avatar" style={{width: 24, height: 24, fontSize: 10}} title={member.username}>
-                            {member.username[0].toUpperCase()}
+                        <div key={member.id} className="member-avatar card-member-avatar-mini" title={member.username}>
+                            <img
+                              src={getAvatarSrc(member)}
+                              alt={member.username}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = fallbackAvatar;
+                              }}
+                            />
                         </div>
                     ))}
                 </div>
             )}
         </div>
-      </div>
-      <div className="card-modal-header-actions">
-        <button
-          className="btn-icon card-header-icon"
-          onClick={onOpenCover}
-          title={t('card.cover.title')}
-          aria-label={t('card.cover.title')}
-        >
-          🖼️
-        </button>
-        <button
-          className={`btn-icon card-header-icon ${isWatching ? 'active' : ''}`}
-          onClick={() => setIsWatching(prev => !prev)}
-          title={t('card.watch')}
-          aria-label={t('card.watch')}
-        >
-          👁️
-        </button>
-        <div className="card-menu-wrapper">
-          <button
-            className="btn-icon card-menu-trigger"
-            onClick={() => setIsMenuOpen(prev => !prev)}
-            aria-haspopup="true"
-            aria-expanded={isMenuOpen}
-            title={t('card.menu')}
-          >
-            •••
-          </button>
-          {isMenuOpen && (
-            <>
-              <div className="card-menu-overlay" onClick={() => { setIsMenuOpen(false); setIsMoveOpen(false); }} />
-              <div className="card-menu-dropdown">
-                <button className="card-menu-item" onClick={() => setIsMoveOpen(prev => !prev)}>
-                  ➜ {t('card.menu.move')}
-                </button>
-                <button className="card-menu-item" onClick={() => { onCopyCard(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
-                  📋 {t('card.menu.copy')}
-                </button>
-                <button className="card-menu-item" onClick={() => { onCopyLink(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
-                  🔗 {t('card.menu.share')}
-                </button>
-                <button className="card-menu-item" onClick={() => { onArchiveToggle(); setIsMenuOpen(false); setIsMoveOpen(false); }}>
-                  📦 {t('card.menu.archive')}
-                </button>
-                <div className="card-menu-divider" />
-                <button
-                  className="card-menu-item danger"
-                  onClick={() => {
-                    if (window.confirm(t('confirm.deleteCard'))) {
-                      onDeleteCard();
-                      setIsMenuOpen(false);
-                      setIsMoveOpen(false);
-                    }
-                  }}
-                >
-                  🗑️ {t('card.menu.delete')}
-                </button>
-              </div>
-              {isMoveOpen && (
-                <div className="card-move-popover">
-                  <div className="card-move-title">{t('card.move.title')}</div>
-                  <label className="card-move-label">
-                    {t('card.move.list')}
-                    <select
-                      className="form-input"
-                      value={moveListId}
-                      onChange={(e) => setMoveListId(Number(e.target.value))}
-                    >
-                      {activeLists.map(list => (
-                        <option key={list.id} value={list.id}>{list.title}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="card-move-label">
-                    {t('card.move.position')}
-                    <select
-                      className="form-input"
-                      value={Math.min(movePosition, maxPosition)}
-                      onChange={(e) => setMovePosition(Number(e.target.value))}
-                    >
-                      {positions.map(pos => (
-                        <option key={pos} value={pos}>{pos}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="button" className="btn-primary btn-sm card-move-btn" onClick={handleMove}>
-                    {t('card.move.button')}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <button className="btn-icon" onClick={onClose}>✕</button>
       </div>
     </div>
   );

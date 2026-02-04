@@ -26,30 +26,35 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
 
   return (
     <div className="card-section">
-        <h4>{t('card.descriptionTitle')}</h4>
+        <div className="card-section-header">
+          <h4 className="card-main-section-title">
+            <span className="card-main-section-icon">☰</span>
+            {t('card.descriptionTitle')}
+          </h4>
+          {!isEditing && canEdit && (
+            <button type="button" className="card-section-action" onClick={() => setIsEditing(true)}>
+              {t('common.edit')}
+            </button>
+          )}
+        </div>
         {isEditing ? (
-            <div>
+            <div className="card-description-editor">
                 <textarea 
-                    className="form-input" 
+                    className="form-input card-description-textarea" 
                     rows={5} 
                     value={description} 
                     onChange={e => setDescription(e.target.value)}
                     placeholder={t('card.descriptionPlaceholder')}
-                    style={{resize: 'vertical', width: '100%'}}
                 />
-                <div style={{marginTop: 8, display:'flex', gap:8}}>
+                <div className="card-description-actions">
                     <Button size="sm" onClick={handleSave}>{t('common.save')}</Button>
                     <Button size="sm" className="btn-secondary" onClick={() => setIsEditing(false)}>{t('common.cancel')}</Button>
                 </div>
             </div>
         ) : (
             <div 
-                className="card-desc-preview" 
+                className={`card-desc-preview ${canEdit ? 'editable' : ''}`}
                 onClick={() => canEdit && setIsEditing(true)}
-                style={{
-                    cursor: canEdit ? 'pointer' : 'default',
-                    opacity: canEdit || description ? 1 : 0.5 
-                }}
             >
                 {description || (canEdit ? t('card.descriptionPlaceholder') : t('card.descriptionEmpty'))}
             </div>

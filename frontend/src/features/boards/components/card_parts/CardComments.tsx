@@ -14,7 +14,15 @@ export const CardComments: React.FC<CardCommentsProps> = ({ card, user, onAddCom
   const { t, locale } = useI18n();
   const [newComment, setNewComment] = useState('');
   const [showDetails, setShowDetails] = useState(true);
+  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
   const avatarInitial = (user?.username?.[0] || user?.email?.[0] || '?').toUpperCase();
+  const getAvatarSrc = (member?: User | null) => {
+    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
+    if (!candidate) return fallbackAvatar;
+    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
+    return `/${candidate}`;
+  };
+  const userAvatar = getAvatarSrc(user);
 
   return (
     <div className="card-section card-comments-panel">
@@ -32,17 +40,25 @@ export const CardComments: React.FC<CardCommentsProps> = ({ card, user, onAddCom
             </button>
         </div>
         {canEdit && (
-          <div className="comment-input-area" style={{display: 'flex', gap: 12, marginBottom: 12}}>
-              <div className="user-avatar" style={{width: 32, height: 32, borderRadius: '50%', background: '#555', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-                  {avatarInitial}
+          <div className="comment-input-area comment-input-layout">
+              <div className="user-avatar comment-input-avatar">
+                <img
+                  src={userAvatar}
+                  alt={user?.username || user?.email || 'user'}
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = fallbackAvatar;
+                  }}
+                />
+                <span className="comment-avatar-fallback">{avatarInitial}</span>
               </div>
-              <div style={{flex:1}}>
+              <div className="comment-input-body">
                   <textarea 
-                      className="form-input" 
+                      className="form-input comment-textarea" 
                       placeholder={t('comment.placeholder')}
                       value={newComment}
                       onChange={e => setNewComment(e.target.value)}
-                      style={{marginBottom: 8, width: '100%', resize: 'none', height: '56px'}}
                   />
                   <Button size="sm" disabled={!newComment} onClick={() => {onAddComment(newComment); setNewComment('');}}>
                       {t('comments.add')}
@@ -56,12 +72,33 @@ export const CardComments: React.FC<CardCommentsProps> = ({ card, user, onAddCom
                 <div className="empty-state">{t('comments.empty')}</div>
               )}
               {card.comments?.map(comment => (
-                  <div key={comment.id} className="comment-item" style={{marginBottom: 12}}>
-                      <div className="comment-header">
-                          <strong style={{color: 'var(--text-primary)', marginRight: 8}}>{comment.author?.username}</strong>
-                          {new Date(comment.created_at).toLocaleString(locale)}
+                  <div key={comment.id} className="comment-item">
+                      <div className="comment-avatar">
+                        <img
+                          src={getAvatarSrc(comment.author)}
+                          alt={comment.author?.username || comment.author?.email || 'author'}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = fallbackAvatar;
+                          }}
+                        />
+                        <span className="comment-avatar-fallback">
+                          {(comment.author?.username?.[0] || comment.author?.email?.[0] || '?').toUpperCase()}
+                        </span>
                       </div>
-                      <div className="comment-text">{comment.text}</div>
+                      <div className="comment-content">
+                        <div className="comment-header">
+                            <strong className="comment-author">{comment.author?.username}</strong>
+                            <span className="comment-date">{new Date(comment.created_at).toLocaleString(locale)}</span>
+                        </div>
+                        <div className="comment-text">{comment.text}</div>
+                        <div className="comment-actions">
+                          <span className="comment-action">{t('common.edit')}</span>
+                          <span>•</span>
+                          <span className="comment-action">{t('common.delete')}</span>
+                        </div>
+                      </div>
                   </div>
               ))}
           </div>

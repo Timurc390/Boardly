@@ -43,6 +43,7 @@ export interface Card {
   
   // Details
   card_color?: string;
+  cover_size?: 'full' | 'header';
   due_date?: string | null;
   is_completed?: boolean;
   is_archived?: boolean;
@@ -68,6 +69,7 @@ export interface List {
   board: number;
   order: number;
   is_archived?: boolean;
+  color?: string | null;
   cards?: Card[];
 }
 

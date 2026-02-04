@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Board, Card } from '../../../../types';
+import { Card } from '../../../../types';
 import { Input } from '../../../../components/ui/Input';
 import { useI18n } from '../../../../context/I18nContext';
 
 interface CardChecklistsProps {
-  board: Board;
   card: Card;
   canEdit: boolean;
+  onDeleteChecklist: (checklistId: number) => Promise<any> | void;
   onAddChecklistItem: (checklistId: number, text: string) => Promise<any> | void;
   onDeleteChecklistItem: (itemId: number, checklistId?: number) => Promise<any> | void;
   onToggleChecklistItem: (itemId: number, isChecked: boolean) => Promise<any> | void;
@@ -14,41 +14,15 @@ interface CardChecklistsProps {
 }
 
 export const CardChecklists: React.FC<CardChecklistsProps> = ({ 
-  board, card, canEdit, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem
+  card, canEdit, onDeleteChecklist, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem
 }) => {
   const { t } = useI18n();
-  const checklist = card.checklists?.[0];
-  const [sourceCardId, setSourceCardId] = useState<number | ''>('');
-  const [copyMode, setCopyMode] = useState<'append' | 'replace'>('append');
-  const [isCopying, setIsCopying] = useState(false);
+  const checklists = useMemo(() => card.checklists || [], [card.checklists]);
+  const [expandedAddChecklistId, setExpandedAddChecklistId] = useState<number | null>(null);
+  const [newItemText, setNewItemText] = useState('');
+  const [hideCompleted, setHideCompleted] = useState<Record<number, boolean>>({});
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
-
-  const cardOptions = useMemo(() => {
-    const allCards = board.lists?.flatMap(l => l.cards || []) || [];
-    return allCards.filter(c => c.id !== card.id);
-  }, [board.lists, card.id]);
-
-  const handleCopyItems = async () => {
-    if (!checklist || !sourceCardId) return;
-    const sourceCard = cardOptions.find(c => c.id === sourceCardId);
-    const sourceChecklist = sourceCard?.checklists?.[0];
-    if (!sourceChecklist || !sourceChecklist.items?.length) return;
-
-    setIsCopying(true);
-    try {
-      if (copyMode === 'replace' && checklist.items?.length) {
-        for (const item of [...checklist.items]) {
-          await onDeleteChecklistItem(item.id, checklist.id);
-        }
-      }
-      for (const item of sourceChecklist.items) {
-        await onAddChecklistItem(checklist.id, item.text);
-      }
-    } finally {
-      setIsCopying(false);
-    }
-  };
 
   const commitEdit = async (itemId: number) => {
     const next = editingText.trim();
@@ -60,110 +34,184 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
     setEditingItemId(null);
   };
 
+  const submitNewChecklistItem = async (checklistId: number) => {
+    const next = newItemText.trim();
+    if (!next) return;
+    await onAddChecklistItem(checklistId, next);
+    setNewItemText('');
+    setExpandedAddChecklistId(checklistId);
+  };
+
+  const handleDeleteChecklist = async (checklistId: number) => {
+    if (!canEdit) return;
+    if (!window.confirm(t('checklist.deleteConfirm'))) return;
+    await onDeleteChecklist(checklistId);
+    if (expandedAddChecklistId === checklistId) {
+      setExpandedAddChecklistId(null);
+      setNewItemText('');
+    }
+  };
+
   return (
     <>
-      {canEdit && checklist && (
-        <div className="card-section">
-          <h4>{t('checklist.copy.title')}</h4>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <select
-              className="form-input"
-              value={sourceCardId}
-              onChange={(e) => setSourceCardId(e.target.value ? Number(e.target.value) : '')}
-              style={{ minWidth: 220 }}
-            >
-              <option value="">{t('checklist.copy.selectCard')}</option>
-              {cardOptions.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              value={copyMode}
-              onChange={(e) => setCopyMode(e.target.value as 'append' | 'replace')}
-              style={{ minWidth: 180 }}
-            >
-              <option value="append">{t('checklist.copy.append')}</option>
-              <option value="replace">{t('checklist.copy.replace')}</option>
-            </select>
-            <button type="button" className="btn-primary" onClick={handleCopyItems} disabled={!sourceCardId || isCopying}>
-              {isCopying ? t('common.copying') : t('common.copy')}
-            </button>
-          </div>
-        </div>
-      )}
-      {checklist ? (
-          <div key={checklist.id} className="card-section">
-              <div style={{display:'flex', justifyContent:'space-between', marginBottom: 8}}>
-                  <h4>☑ {checklist.title || t('checklist.title')}</h4>
+      {checklists.length ? (
+        checklists.map(checklist => {
+          const items = checklist.items || [];
+          const totalCount = items.length;
+          const doneCount = items.filter(item => item.is_checked).length;
+          const progress = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+          const showOnlyUnchecked = !!hideCompleted[checklist.id];
+          const visibleItems = showOnlyUnchecked
+            ? items.filter(item => !item.is_checked)
+            : items;
+          const isDoneOnlyHidden = showOnlyUnchecked && doneCount > 0 && visibleItems.length === 0;
+
+          return (
+            <div key={checklist.id} className="card-section checklist-block">
+              <div className="checklist-top">
+                <h4 className="card-main-section-title checklist-title">
+                  <span className="card-main-section-icon">☑</span>
+                  {checklist.title || t('checklist.title')}
+                </h4>
+                <div className="checklist-header-actions">
+                  {doneCount > 0 && (
+                    <button
+                      type="button"
+                      className="card-section-action"
+                      onClick={() =>
+                        setHideCompleted(prev => ({ ...prev, [checklist.id]: !prev[checklist.id] }))
+                      }
+                    >
+                      {showOnlyUnchecked ? t('checklist.showCompleted') : t('checklist.hideCompleted')}
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="card-section-action checklist-delete"
+                      onClick={() => handleDeleteChecklist(checklist.id)}
+                    >
+                      {t('common.delete')}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              <div className="checklist-progress">
+                <span className="checklist-progress-value">{progress}%</span>
+                <div className="checklist-progress-track" role="progressbar">
+                  <div className="checklist-progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+
               <div className="checklist-items">
-                  {checklist.items?.map(item => (
-                      <div key={item.id} className="checklist-item" style={{display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4}}>
-                          <input 
-                              type="checkbox" 
-                              checked={item.is_checked} 
-                              onChange={e => canEdit && onToggleChecklistItem(item.id, e.target.checked)}
-                              disabled={!canEdit}
-                              style={{width: 16, height: 16, cursor: canEdit ? 'pointer' : 'not-allowed'}}
-                          />
-                          {editingItemId === item.id ? (
-                            <Input
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onBlur={() => commitEdit(item.id)}
-                              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                                if (e.key === 'Enter') commitEdit(item.id);
-                                if (e.key === 'Escape') setEditingItemId(null);
-                              }}
-                            />
-                          ) : (
-                            <span
-                              onDoubleClick={() => {
-                                if (!canEdit) return;
-                                setEditingItemId(item.id);
-                                setEditingText(item.text);
-                              }}
-                              style={{
-                                textDecoration: item.is_checked ? 'line-through' : 'none',
-                                color: item.is_checked ? 'var(--text-secondary)' : 'var(--text-primary)',
-                                cursor: canEdit ? 'text' : 'default'
-                              }}
-                            >
-                              {item.text}
-                            </span>
-                          )}
-                          {canEdit && (
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              onClick={() => onDeleteChecklistItem(item.id, checklist.id)}
-                              title={t('common.delete')}
-                              style={{ marginLeft: 'auto' }}
-                            >
-                              🗑️
-                            </button>
-                          )}
-                      </div>
-                  ))}
+                {visibleItems.map(item => (
+                  <div key={item.id} className="checklist-item">
+                    <input 
+                      type="checkbox" 
+                      checked={item.is_checked} 
+                      onChange={e => canEdit && onToggleChecklistItem(item.id, e.target.checked)}
+                      disabled={!canEdit}
+                    />
+                    {editingItemId === item.id ? (
+                      <Input
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onBlur={() => commitEdit(item.id)}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                          if (e.key === 'Enter') commitEdit(item.id);
+                          if (e.key === 'Escape') setEditingItemId(null);
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className="checklist-item-text"
+                        onDoubleClick={() => {
+                          if (!canEdit) return;
+                          setEditingItemId(item.id);
+                          setEditingText(item.text);
+                        }}
+                        data-checked={item.is_checked ? 'true' : 'false'}
+                        data-editable={canEdit ? 'true' : 'false'}
+                      >
+                        {item.text}
+                      </span>
+                    )}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="btn-icon checklist-item-delete"
+                        onClick={() => onDeleteChecklistItem(item.id, checklist.id)}
+                        title={t('common.delete')}
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {isDoneOnlyHidden && <div className="card-muted">{t('checklist.hiddenDoneOnly')}</div>}
               </div>
               {canEdit && (
-                  <div style={{marginTop: 8}}>
-                      <Input 
-                          placeholder={t('checklist.itemPlaceholder')}
-                          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                              if(e.key === 'Enter') {
-                                  onAddChecklistItem(checklist.id, e.currentTarget.value);
-                                  e.currentTarget.value = '';
-                              }
-                          }}
+                <div className="checklist-add-row">
+                  {expandedAddChecklistId === checklist.id ? (
+                    <>
+                      <Input
+                        autoFocus
+                        placeholder={t('checklist.itemPlaceholder')}
+                        value={newItemText}
+                        onChange={(e) => setNewItemText(e.target.value)}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                          if (e.key === 'Enter') {
+                            void submitNewChecklistItem(checklist.id);
+                          } else if (e.key === 'Escape') {
+                            setExpandedAddChecklistId(null);
+                            setNewItemText('');
+                          }
+                        }}
                       />
-                  </div>
+                      <div className="checklist-add-actions">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => void submitNewChecklistItem(checklist.id)}
+                        >
+                          {t('common.add')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => {
+                            setExpandedAddChecklistId(null);
+                            setNewItemText('');
+                          }}
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="checklist-add-trigger"
+                      onClick={() => {
+                        setExpandedAddChecklistId(checklist.id);
+                        setNewItemText('');
+                      }}
+                    >
+                      + {t('checklist.addItem')}
+                    </button>
+                  )}
+                </div>
               )}
-          </div>
+            </div>
+          );
+        })
       ) : (
         <div className="card-section">
-          <h4>{t('checklist.title')}</h4>
+          <h4 className="card-main-section-title">
+            <span className="card-main-section-icon">☑</span>
+            {t('checklist.title')}
+          </h4>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {t('checklist.empty')}
           </div>

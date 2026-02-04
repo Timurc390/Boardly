@@ -29,7 +29,7 @@ class CardMemberInline(admin.TabularInline):
 class ListInline(admin.TabularInline):
     model = List
     extra = 1
-    fields = ('title', 'order', 'is_archived')
+    fields = ('title', 'order', 'color', 'is_archived')
 
 # Мітки Дошки (для BoardAdmin)
 class LabelInline(admin.TabularInline):
@@ -80,7 +80,7 @@ class BoardAdmin(admin.ModelAdmin):
 
 @admin.register(List)
 class ListAdmin(admin.ModelAdmin):
-    list_display = ('title', 'board', 'order', 'is_archived')
+    list_display = ('title', 'board', 'order', 'color', 'is_archived')
     list_filter = ('board', 'is_archived')
     search_fields = ('title',)
     list_editable = ('order',) 

@@ -9,7 +9,7 @@ import { BoardFiltersModal } from './components/BoardFiltersModal';
 import { BoardActivityModal } from './components/BoardActivityModal';
 import { Button } from '../../components/ui/Button';
 import { useI18n } from '../../context/I18nContext';
-import { Card, ActivityLog, Board } from '../../types';
+import { Card, ActivityLog, Board, List } from '../../types';
 import { getBoardActivity } from './api';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -21,6 +21,7 @@ import {
   removeBoardMemberAction,
   addListAction,
   updateListAction,
+  updateListOptimistic,
   deleteListAction,
   copyListAction,
   moveListAction,
@@ -32,6 +33,7 @@ import {
   moveCardOptimistic,
   moveListOptimistic,
   addChecklistAction,
+  deleteChecklistAction,
   addChecklistItemAction,
   updateChecklistItemAction,
   deleteChecklistItemAction,
@@ -42,6 +44,9 @@ import {
   joinCardAction,
   leaveCardAction,
   removeCardMemberAction,
+  addCardMemberAction,
+  addAttachmentAction,
+  deleteAttachmentAction,
   clearCurrentBoard,
   updateBoardMemberRoleAction
 } from '../../store/slices/boardSlice';
@@ -139,13 +144,16 @@ export const BoardDetailScreen: React.FC = () => {
     if (board) setBoardTitle(board.title);
   }, [board]);
 
+  const selectedCardId = selectedCard?.id;
+
   useEffect(() => {
-    if (selectedCard && board?.lists) {
-        const allCards = board.lists.flatMap(l => l.cards || []);
-        const foundCard = allCards.find(c => c.id === selectedCard.id);
-        if (foundCard) setSelectedCard(foundCard);
+    if (!selectedCardId || !board?.lists) return;
+    const allCards = board.lists.flatMap(l => l.cards || []);
+    const foundCard = allCards.find(c => c.id === selectedCardId);
+    if (foundCard) {
+      setSelectedCard(foundCard);
     }
-  }, [board, selectedCard]);
+  }, [board, selectedCardId]);
 
   useEffect(() => {
     setHeaderMemberId(null);
@@ -215,14 +223,21 @@ export const BoardDetailScreen: React.FC = () => {
     return true;
   }, [filterCompleted, filterDue, filterLabelId, filterMemberId, filterQuery]);
 
-  const filteredLists = useMemo(
-    () =>
-      activeLists.map(list => ({
-        ...list,
-        cards: (list.cards || []).filter(c => !c.is_archived && matchesFilters(c))
-      })),
-    [activeLists, matchesFilters]
+  const isFiltering = !!(
+    filterQuery ||
+    filterMemberId ||
+    filterLabelId ||
+    filterDue !== 'all' ||
+    filterCompleted !== 'all'
   );
+
+  const filteredLists = useMemo(() => {
+    if (!isFiltering) return activeLists;
+    return activeLists.map(list => ({
+      ...list,
+      cards: (list.cards || []).filter(c => !c.is_archived && matchesFilters(c))
+    }));
+  }, [activeLists, isFiltering, matchesFilters]);
 
   const handleCreateList = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,8 +254,51 @@ export const BoardDetailScreen: React.FC = () => {
     if (!selectedCard) return;
     const { label_ids, ...rest } = data;
     setSelectedCard(prev => (prev ? { ...prev, ...rest } : prev));
-    dispatch(updateCardAction({ cardId: selectedCard.id, data }));
-  }, [dispatch, selectedCard]);
+    dispatch(updateCardAction({ cardId: selectedCard.id, data }))
+      .unwrap()
+      .catch(() => {
+        alert(t('common.actionFailed'));
+        if (id) {
+          dispatch(fetchBoardById(Number(id)));
+        }
+      });
+  }, [dispatch, id, selectedCard, t]);
+
+  const handleAddCard = useCallback((listId: number, title: string) => {
+    const list = board?.lists?.find(item => item.id === listId);
+    const order = (list?.cards?.length || 0) + 1;
+    dispatch(addCardAction({ listId, title, order }));
+  }, [board?.lists, dispatch]);
+
+  const handleUpdateList = useCallback((listId: number, data: Partial<List>) => {
+    dispatch(updateListOptimistic({ listId, data }));
+    dispatch(updateListAction({ listId, data }));
+  }, [dispatch]);
+
+  const handleDeleteList = useCallback((listId: number) => {
+    if (window.confirm(t('common.confirmDelete'))) {
+      dispatch(deleteListAction(listId));
+    }
+  }, [dispatch, t]);
+
+  const handleCopyList = useCallback((listId: number) => {
+    dispatch(copyListAction({ listId }));
+  }, [dispatch]);
+
+  const handleArchiveAllCardsInList = useCallback((listId: number) => {
+    const list = board?.lists?.find(item => item.id === listId);
+    if (!list) return;
+    if (!window.confirm(t('list.archiveAllCardsConfirm'))) return;
+    (list.cards || [])
+      .filter(card => !card.is_archived)
+      .forEach(card => {
+        dispatch(updateCardAction({ cardId: card.id, data: { is_archived: true } }));
+      });
+  }, [board?.lists, dispatch, t]);
+
+  const handleToggleCardComplete = useCallback((cardId: number, next: boolean) => {
+    dispatch(updateCardAction({ cardId, data: { is_completed: next } }));
+  }, [dispatch]);
 
   const handleTitleBlur = useCallback(() => {
     if (!boardId || !board) return;
@@ -317,6 +375,22 @@ export const BoardDetailScreen: React.FC = () => {
     dispatch(moveCardOptimistic({ cardId, sourceListId, destListId, newIndex: destIndex }));
     dispatch(moveCardAction({ cardId, listId: destListId, order: destIndex + 1 }));
   }, [canEditBoard, dispatch]);
+
+  const runBoardAction = useCallback(async (action: any) => {
+    try {
+      return await dispatch(action).unwrap();
+    } catch {
+      alert(t('common.actionFailed'));
+      return null;
+    }
+  }, [dispatch, t]);
+
+  const handleUpdateCardLabels = useCallback((labelIds: number[]) => {
+    if (!selectedCard) return;
+    const nextLabels = (board?.labels || []).filter(label => labelIds.includes(label.id));
+    setSelectedCard(prev => (prev ? { ...prev, labels: nextLabels } : prev));
+    void runBoardAction(updateCardAction({ cardId: selectedCard.id, data: { label_ids: labelIds } }));
+  }, [board?.labels, runBoardAction, selectedCard]);
 
   const toggleListCollapse = useCallback((listId: number) => {
     setCollapsedLists(prev => 
@@ -537,21 +611,18 @@ export const BoardDetailScreen: React.FC = () => {
                   list={list} 
                   index={index} 
                   listIndex={index}
+                  listOptions={filteredLists.map(item => ({ id: item.id, title: item.title }))}
                   prevList={index > 0 ? filteredLists[index - 1] : null}
                   nextList={index < filteredLists.length - 1 ? filteredLists[index + 1] : null}
                   isTouch={isTouch}
                   canEdit={canEditBoard}
-                  onAddCard={(lid, title) => {
-                      const order = (list.cards?.length || 0) + 1;
-                      dispatch(addCardAction({ listId: lid, title, order }));
-                  }}
-                  onUpdateList={(lid, data) => dispatch(updateListAction({ listId: lid, data }))}
-                  onDeleteList={(lid) => {
-                      if(window.confirm(t('common.confirmDelete'))) dispatch(deleteListAction(lid));
-                  }}
-                  onCopyList={(lid) => dispatch(copyListAction({ listId: lid }))}
+                  onAddCard={handleAddCard}
+                  onUpdateList={handleUpdateList}
+                  onDeleteList={handleDeleteList}
+                  onCopyList={handleCopyList}
+                  onArchiveAllCards={handleArchiveAllCardsInList}
                   onCardClick={setSelectedCard}
-                  onToggleCardComplete={(cardId, next) => dispatch(updateCardAction({ cardId, data: { is_completed: next } }))}
+                  onToggleCardComplete={handleToggleCardComplete}
                   isCollapsed={collapsedLists.includes(list.id)}
                   onToggleCollapse={() => toggleListCollapse(list.id)}
                   onMoveList={handleMoveList}
@@ -586,28 +657,50 @@ export const BoardDetailScreen: React.FC = () => {
              board={board}
              isOpen={!!selectedCard}
              onClose={() => setSelectedCard(null)}
-             onCopyLink={() => {
+             onCopyLink={async () => {
                const url = `${window.location.origin}/boards/${board.id}?card=${selectedCard.id}`;
-               navigator.clipboard.writeText(url);
+               try {
+                 await navigator.clipboard.writeText(url);
+               } catch {
+                 window.prompt(t('card.menu.copyLinkPrompt'), url);
+               }
              }}
              onUpdateCard={handleUpdateSelectedCard}
-             onDeleteCard={() => dispatch(deleteCardAction(selectedCard.id))}
-             onCopyCard={() => dispatch(copyCardAction({ cardId: selectedCard.id, listId: selectedCard.list }))}
+             onDeleteCard={() => { void runBoardAction(deleteCardAction(selectedCard.id)); }}
+             onCopyCard={() => { void runBoardAction(copyCardAction({ cardId: selectedCard.id, listId: selectedCard.list })); }}
              onMoveCard={handleMoveCard}
-             onAddChecklist={(title) => dispatch(addChecklistAction({ cardId: selectedCard.id, title }))}
-             onAddChecklistItem={(checklistId, text) => dispatch(addChecklistItemAction({ checklistId, text }))}
-             onDeleteChecklistItem={(itemId, checklistId) => dispatch(deleteChecklistItemAction({ itemId, checklistId }))}
-             onToggleChecklistItem={(itemId, is_checked) => dispatch(updateChecklistItemAction({ itemId, data: { is_checked } }))}
-             onUpdateChecklistItem={(itemId, text) => dispatch(updateChecklistItemAction({ itemId, data: { text } }))}
-             onAddComment={(text) => dispatch(addCommentAction({ cardId: selectedCard.id, text }))}
-             onUpdateLabels={(label_ids) => dispatch(updateCardAction({ cardId: selectedCard.id, data: { label_ids } }))}
-             onCreateLabel={(name, color) => dispatch(createLabelAction({ boardId: board.id, name, color }))}
-             onUpdateLabel={(id, name, color) => dispatch(updateLabelAction({ id, data: { name, color } }))}
-             onDeleteLabel={(id) => dispatch(deleteLabelAction(id))}
-             onJoinCard={() => dispatch(joinCardAction(selectedCard.id))}
-             onLeaveCard={() => dispatch(leaveCardAction(selectedCard.id))}
-             onRemoveMember={(userId) => dispatch(removeCardMemberAction({ cardId: selectedCard.id, userId }))}
-          />
+             onAddChecklist={(title) => runBoardAction(addChecklistAction({ cardId: selectedCard.id, title }))}
+             onDeleteChecklist={(checklistId) => runBoardAction(deleteChecklistAction({ checklistId, cardId: selectedCard.id }))}
+             onAddChecklistItem={(checklistId, text) => runBoardAction(addChecklistItemAction({ checklistId, text }))}
+             onDeleteChecklistItem={(itemId, checklistId) => runBoardAction(deleteChecklistItemAction({ itemId, checklistId }))}
+             onToggleChecklistItem={(itemId, is_checked) => runBoardAction(updateChecklistItemAction({ itemId, data: { is_checked } }))}
+             onUpdateChecklistItem={(itemId, text) => runBoardAction(updateChecklistItemAction({ itemId, data: { text } }))}
+             onAddComment={(text) => { void runBoardAction(addCommentAction({ cardId: selectedCard.id, text })); }}
+             onUpdateLabels={handleUpdateCardLabels}
+             onCreateLabel={async (name, color) => {
+               const created = await runBoardAction(createLabelAction({ boardId: board.id, name, color }));
+               if (!created?.id) return created;
+               const currentIds = (selectedCard.labels || []).map(label => label.id);
+               if (!currentIds.includes(created.id)) {
+                 await runBoardAction(updateCardAction({
+                   cardId: selectedCard.id,
+                   data: { label_ids: [...currentIds, created.id] }
+                 }));
+               }
+               return created;
+             }}
+             onUpdateLabel={(id, name, color) => { void runBoardAction(updateLabelAction({ id, data: { name, color } })); }}
+             onDeleteLabel={(id) => {
+               setSelectedCard(prev => (prev ? { ...prev, labels: (prev.labels || []).filter(label => label.id !== id) } : prev));
+               void runBoardAction(deleteLabelAction(id));
+             }}
+              onJoinCard={() => { void runBoardAction(joinCardAction(selectedCard.id)); }}
+              onLeaveCard={() => { void runBoardAction(leaveCardAction(selectedCard.id)); }}
+              onRemoveMember={(userId) => { void runBoardAction(removeCardMemberAction({ cardId: selectedCard.id, userId })); }}
+              onAddMember={(userId) => { void runBoardAction(addCardMemberAction({ cardId: selectedCard.id, userId })); }}
+              onAddAttachment={(file) => runBoardAction(addAttachmentAction({ cardId: selectedCard.id, file }))}
+              onDeleteAttachment={(attachmentId) => { void runBoardAction(deleteAttachmentAction({ cardId: selectedCard.id, attachmentId })); }}
+            />
       )}
 
       <BoardFiltersModal

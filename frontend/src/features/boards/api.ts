@@ -99,6 +99,11 @@ export const removeCardMember = async (cardId: number, userId: number): Promise<
   return res.data;
 };
 
+export const addCardMember = async (cardId: number, userId: number): Promise<Card> => {
+  const res = await client.post(`/cards/${cardId}/add-member/`, { user_id: userId });
+  return res.data;
+};
+
 export const toggleCardPublic = async (cardId: number): Promise<Card> => {
   const res = await client.post(`/cards/${cardId}/toggle_public/`);
   return res.data;
@@ -107,6 +112,10 @@ export const toggleCardPublic = async (cardId: number): Promise<Card> => {
 export const createChecklist = async (cardId: number, title: string): Promise<Checklist> => {
   const res = await client.post('/checklists/', { card: cardId, title });
   return res.data;
+};
+
+export const deleteChecklist = async (checklistId: number): Promise<void> => {
+  await client.delete(`/checklists/${checklistId}/`);
 };
 
 export const createChecklistItem = async (checklistId: number, text: string): Promise<ChecklistItem> => {
@@ -126,6 +135,18 @@ export const deleteChecklistItem = async (itemId: number): Promise<void> => {
 export const createComment = async (cardId: number, text: string): Promise<Comment> => {
   const res = await client.post('/comments/', { card: cardId, text });
   return res.data;
+};
+
+export const createAttachment = async (cardId: number, file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append('card', String(cardId));
+  formData.append('file', file);
+  const res = await client.post('/attachments/', formData);
+  return res.data;
+};
+
+export const deleteAttachment = async (attachmentId: number): Promise<void> => {
+  await client.delete(`/attachments/${attachmentId}/`);
 };
 
 export const createLabel = async (boardId: number, name: string, color: string): Promise<Label> => {

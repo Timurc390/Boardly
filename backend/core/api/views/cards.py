@@ -72,7 +72,8 @@ class ListViewSet(viewsets.ModelViewSet):
             new_list = List.objects.create(
                 board=original_list.board,
                 title=new_title,
-                order=original_list.order + 1
+                order=original_list.order + 1,
+                color=original_list.color
             )
             
             # 2. Копіюємо всі активні картки
@@ -83,6 +84,7 @@ class ListViewSet(viewsets.ModelViewSet):
                     title=card.title,
                     description=card.description,
                     card_color=card.card_color,
+                    cover_size=card.cover_size,
                     order=card.order,
                     due_date=card.due_date,
                     is_completed=card.is_completed,
@@ -315,6 +317,18 @@ class CardViewSet(viewsets.ModelViewSet):
         CardMember.objects.filter(card=card, user_id=user_id).delete()
         return Response(CardSerializer(card).data)
 
+    @action(detail=True, methods=['post'], url_path='add-member')
+    def add_member(self, request, pk=None):
+        card = self.get_object()
+        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'detail': 'user_id_required'}, status=400)
+
+        CardMember.objects.get_or_create(card=card, user_id=user_id)
+        return Response(CardSerializer(card).data)
+
     @action(detail=True, methods=['post'])
     def toggle_public(self, request, pk=None):
         card = self.get_object()
@@ -338,6 +352,7 @@ class CardViewSet(viewsets.ModelViewSet):
                 title=new_title,
                 description=original_card.description,
                 card_color=original_card.card_color,
+                cover_size=original_card.cover_size,
                 order=original_card.order + 1,
                 due_date=original_card.due_date,
                 is_public=original_card.is_public

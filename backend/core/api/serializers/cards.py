@@ -7,7 +7,7 @@ from .boards import BoardBriefSerializer, LabelSerializer
 class ListBriefSerializer(serializers.ModelSerializer):
     class Meta:
         model = List
-        fields = ('id', 'title')
+        fields = ('id', 'title', 'color')
 
 class CardSerializer(serializers.ModelSerializer):
     due_date = serializers.DateTimeField(required=False, allow_null=True, input_formats=['%Y-%m-%d', 'iso-8601'])
@@ -23,7 +23,7 @@ class CardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Card
         fields = (
-            'id', 'title', 'description', 'card_color', 'order', 'due_date',
+            'id', 'title', 'description', 'card_color', 'cover_size', 'order', 'due_date',
             'is_completed', 'is_archived', 'is_public', # <-- ДОДАНО
             'list', 'board', 'board_title',
             'members', 'labels', 'label_ids',
@@ -70,7 +70,7 @@ class MyCardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Card
         # Додано is_public
-        fields = ('id', 'title', 'description', 'card_color', 'due_date', 'is_archived', 'board', 'list', 'labels', 'is_public')
+        fields = ('id', 'title', 'description', 'card_color', 'cover_size', 'due_date', 'is_archived', 'board', 'list', 'labels', 'is_public')
 
     def get_labels(self, obj):
         labels = Label.objects.filter(cardlabel__card=obj)
@@ -80,4 +80,4 @@ class ListSerializer(serializers.ModelSerializer):
     cards = CardSerializer(many=True, read_only=True)
     class Meta:
         model = List
-        fields = ('id', 'title', 'order', 'is_archived', 'board', 'cards')
+        fields = ('id', 'title', 'order', 'is_archived', 'color', 'board', 'cards')
