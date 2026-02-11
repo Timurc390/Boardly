@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from django.db import transaction
 from django.utils.dateparse import parse_date, parse_datetime
@@ -9,7 +10,16 @@ from django.utils.dateparse import parse_date, parse_datetime
 from core.models import List, Card, CardMember, Checklist, ChecklistItem, CardLabel, Membership, Label
 from core.api.serializers import ListSerializer, CardSerializer, MyCardSerializer
 from core.services.activity_logger import log_activity
-from core.services.permissions import ensure_board_admin
+from core.services.permissions import (
+    ensure_board_admin,
+    ensure_card_edit,
+    ensure_card_archive,
+    ensure_card_move,
+    can_create_card,
+    can_create_list,
+    can_manage_card_members,
+    can_join_card,
+)
 
 class ListViewSet(viewsets.ModelViewSet):
     serializer_class = ListSerializer
@@ -24,7 +34,8 @@ class ListViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         board = serializer.validated_data.get('board')
-        ensure_board_admin(self.request.user, board, 'Only admins can create lists.')
+        if not can_create_list(self.request.user, board):
+            raise PermissionDenied('Only admins can create lists.')
         list_obj = serializer.save()
         log_activity(self.request.user, 'create_list', 'list', list_obj.id, {
             'board_id': list_obj.board_id,
@@ -180,8 +191,8 @@ class CardViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         list_obj = serializer.validated_data.get('list')
-        if list_obj:
-            ensure_board_admin(self.request.user, list_obj.board, 'Only admins can create cards.')
+        if list_obj and not can_create_card(self.request.user, list_obj):
+            raise PermissionDenied('Only admins or allowed developers can create cards in this list.')
         card = serializer.save()
         Checklist.objects.get_or_create(card=card, title='Чек-лист')
         # Авто-призначаємо автора на картку, щоб "Мої картки" не були порожні.
@@ -198,7 +209,13 @@ class CardViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         card_instance = serializer.instance
-        ensure_board_admin(self.request.user, card_instance.list.board, 'Only admins can update cards.')
+        if 'list' in serializer.validated_data:
+            target_list = serializer.validated_data.get('list')
+            ensure_card_move(self.request.user, card_instance, target_list, 'Only admins or allowed developers can move cards to this list.')
+        if 'is_archived' in serializer.validated_data:
+            ensure_card_archive(self.request.user, card_instance, 'Only admins or allowed developers can archive cards.')
+        else:
+            ensure_card_edit(self.request.user, card_instance, 'Only card members or admins can update cards.')
         card = serializer.instance
 
         previous = serializer.instance
@@ -294,21 +311,24 @@ class CardViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
         card = self.get_object()
-        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
+        if not can_join_card(request.user, card):
+            raise PermissionDenied('Only admins can manage card members.')
         CardMember.objects.get_or_create(card=card, user=request.user)
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'])
     def leave(self, request, pk=None):
         card = self.get_object()
-        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
+        if not CardMember.objects.filter(card=card, user=request.user).exists():
+            raise PermissionDenied('Not a card member.')
         CardMember.objects.filter(card=card, user=request.user).delete()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'], url_path='remove-member')
     def remove_member(self, request, pk=None):
         card = self.get_object()
-        ensure_board_admin(request.user, card.list.board, 'Only admins can remove card members.')
+        if not can_manage_card_members(request.user, card.list.board):
+            raise PermissionDenied('Only admins can remove card members.')
 
         user_id = request.data.get('user_id')
         if not user_id:
@@ -320,11 +340,18 @@ class CardViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='add-member')
     def add_member(self, request, pk=None):
         card = self.get_object()
-        ensure_board_admin(request.user, card.list.board, 'Only admins can manage card members.')
+        if not can_manage_card_members(request.user, card.list.board):
+            raise PermissionDenied('Only admins can manage card members.')
 
         user_id = request.data.get('user_id')
         if not user_id:
             return Response({'detail': 'user_id_required'}, status=400)
+
+        membership = Membership.objects.filter(board=card.list.board, user_id=user_id).first()
+        if not membership:
+            return Response({'detail': 'user_not_board_member'}, status=400)
+        if membership.role == 'viewer':
+            return Response({'detail': 'viewer_cannot_be_assigned'}, status=400)
 
         CardMember.objects.get_or_create(card=card, user_id=user_id)
         return Response(CardSerializer(card).data)

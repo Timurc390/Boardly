@@ -80,4 +80,4 @@ class ListSerializer(serializers.ModelSerializer):
     cards = CardSerializer(many=True, read_only=True)
     class Meta:
         model = List
-        fields = ('id', 'title', 'order', 'is_archived', 'color', 'board', 'cards')
+        fields = ('id', 'title', 'order', 'is_archived', 'color', 'allow_dev_add_cards', 'board', 'cards')

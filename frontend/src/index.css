@@ -1522,6 +1522,9 @@ ul { list-style: none; }
 .member-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .member-info { flex: 1; }
 .members-panel { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px; }
+.permission-row { display: flex; }
+.permission-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); font-size: 13px; }
+.permission-label input { transform: scale(1.05); }
 .members-search { height: 36px; font-size: 13px; }
 .members-empty { font-size: 13px; color: var(--text-secondary); padding: 8px 4px; }
 .members-list { display: flex; flex-direction: column; gap: 10px; position: relative; }

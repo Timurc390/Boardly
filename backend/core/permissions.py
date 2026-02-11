@@ -1,6 +1,6 @@
 from rest_framework import permissions
 
-from .models import Membership
+from core.services.permissions import is_board_admin
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
@@ -17,6 +17,6 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
 
         if request.method in ('PUT', 'PATCH'):
-            return Membership.objects.filter(board=obj, user=request.user, role='admin').exists()
+            return is_board_admin(request.user, obj)
 
         return False

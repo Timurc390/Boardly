@@ -17,6 +17,12 @@ class Board(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_boards', verbose_name="Власник")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата створення")
     invite_link = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Посилання-запрошення")
+    # Налаштування прав для Developer
+    dev_can_create_cards = models.BooleanField(default=True, verbose_name="Dev може створювати картки")
+    dev_can_edit_assigned_cards = models.BooleanField(default=True, verbose_name="Dev може редагувати призначені картки")
+    dev_can_archive_assigned_cards = models.BooleanField(default=True, verbose_name="Dev може архівувати призначені картки")
+    dev_can_join_card = models.BooleanField(default=False, verbose_name="Dev може приєднуватися до чужих карток")
+    dev_can_create_lists = models.BooleanField(default=False, verbose_name="Dev може створювати списки")
     
     # Зв'язок M:M через Membership
     members = models.ManyToManyField(User, through='Membership', related_name='boards', verbose_name="Учасники")
@@ -36,12 +42,13 @@ class Membership(models.Model):
     """
     ROLE_CHOICES = (
         ('admin', 'Адміністратор'),
-        ('member', 'Учасник'),
+        ('developer', 'Developer'),
+        ('viewer', 'Viewer'),
     )
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Користувач")
     board = models.ForeignKey(Board, on_delete=models.CASCADE, verbose_name="Дошка")
-    role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='member', verbose_name="Роль")
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='viewer', verbose_name="Роль")
     
     # Персональне налаштування "Обране" для кожного учасника
     is_favorite = models.BooleanField(default=False, verbose_name="В обраному")

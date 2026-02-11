@@ -2,7 +2,12 @@ from rest_framework import viewsets, permissions
 from core.models import Checklist, ChecklistItem, Attachment, Comment
 from core.api.serializers import ChecklistSerializer, ChecklistItemSerializer, AttachmentSerializer, CommentSerializer
 from core.services.activity_logger import log_activity
-from core.services.permissions import ensure_board_admin
+from core.services.permissions import (
+    ensure_card_edit,
+    ensure_comment_create,
+    ensure_comment_edit,
+    ensure_comment_delete,
+)
 
 class ChecklistViewSet(viewsets.ModelViewSet):
     serializer_class = ChecklistSerializer
@@ -18,16 +23,16 @@ class ChecklistViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         card = serializer.validated_data.get('card')
         if card:
-            ensure_board_admin(self.request.user, card.list.board, 'Only admins can create checklists.')
+            ensure_card_edit(self.request.user, card, 'Only card members or admins can create checklists.')
         serializer.save()
 
     def perform_update(self, serializer):
         checklist = serializer.instance
-        ensure_board_admin(self.request.user, checklist.card.list.board, 'Only admins can update checklists.')
+        ensure_card_edit(self.request.user, checklist.card, 'Only card members or admins can update checklists.')
         serializer.save()
 
     def perform_destroy(self, instance):
-        ensure_board_admin(self.request.user, instance.card.list.board, 'Only admins can delete checklists.')
+        ensure_card_edit(self.request.user, instance.card, 'Only card members or admins can delete checklists.')
         instance.delete()
 
 class ChecklistItemViewSet(viewsets.ModelViewSet):
@@ -38,7 +43,7 @@ class ChecklistItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         checklist = serializer.validated_data.get('checklist')
         if checklist:
-            ensure_board_admin(self.request.user, checklist.card.list.board, 'Only admins can update checklist items.')
+            ensure_card_edit(self.request.user, checklist.card, 'Only card members or admins can update checklist items.')
         item = serializer.save()
         card = item.checklist.card
         log_activity(
@@ -60,7 +65,7 @@ class ChecklistItemViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         item_instance = serializer.instance
-        ensure_board_admin(self.request.user, item_instance.checklist.card.list.board, 'Only admins can update checklist items.')
+        ensure_card_edit(self.request.user, item_instance.checklist.card, 'Only card members or admins can update checklist items.')
         previous = serializer.instance
         prev_checked = previous.is_checked
         prev_text = previous.text
@@ -118,16 +123,16 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         card = serializer.validated_data.get('card')
         if card:
-            ensure_board_admin(self.request.user, card.list.board, 'Only admins can add attachments.')
+            ensure_card_edit(self.request.user, card, 'Only card members or admins can add attachments.')
         serializer.save()
 
     def perform_update(self, serializer):
         attachment = serializer.instance
-        ensure_board_admin(self.request.user, attachment.card.list.board, 'Only admins can update attachments.')
+        ensure_card_edit(self.request.user, attachment.card, 'Only card members or admins can update attachments.')
         serializer.save()
 
     def perform_destroy(self, instance):
-        ensure_board_admin(self.request.user, instance.card.list.board, 'Only admins can delete attachments.')
+        ensure_card_edit(self.request.user, instance.card, 'Only card members or admins can delete attachments.')
         instance.delete()
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -144,7 +149,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         card = serializer.validated_data.get('card')
         if card:
-            ensure_board_admin(self.request.user, card.list.board, 'Only admins can add comments.')
+            ensure_comment_create(self.request.user, card, 'Only board members can add comments.')
         comment = serializer.save(author=self.request.user)
         card = comment.card
         log_activity(
@@ -164,9 +169,9 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         comment = serializer.instance
-        ensure_board_admin(self.request.user, comment.card.list.board, 'Only admins can update comments.')
+        ensure_comment_edit(self.request.user, comment, 'Only author or admins can edit comments.')
         serializer.save()
 
     def perform_destroy(self, instance):
-        ensure_board_admin(self.request.user, instance.card.list.board, 'Only admins can delete comments.')
+        ensure_comment_delete(self.request.user, instance, 'Only admins can delete comments.')
         instance.delete()

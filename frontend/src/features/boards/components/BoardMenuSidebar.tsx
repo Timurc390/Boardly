@@ -16,8 +16,8 @@ type BackgroundOption = {
 interface BoardMenuSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'main' | 'background' | 'members' | 'archived';
-  onTabChange: (tab: 'main' | 'background' | 'members' | 'archived') => void;
+  activeTab: 'main' | 'background' | 'members' | 'archived' | 'permissions';
+  onTabChange: (tab: 'main' | 'background' | 'members' | 'archived' | 'permissions') => void;
   board: Board;
   inviteLink: string;
   onInvite: () => void;
@@ -29,6 +29,7 @@ interface BoardMenuSidebarProps {
   onDeleteBoard: () => void;
   onLeaveBoard: () => void;
   onLogout: () => void;
+  onUpdateBoardSettings: (data: Partial<Board>) => void;
   colorOptions: BackgroundOption[];
   gradientOptions: BackgroundOption[];
   imageOptions: BackgroundOption[];
@@ -45,7 +46,7 @@ interface BoardMenuSidebarProps {
   getAvatarSrc: (profile?: { avatar_url?: string | null; avatar?: string | null }) => string;
   fallbackAvatar: string;
   onOpenMemberActivity: (member: BoardMember) => void;
-  onToggleMemberRole: (member: BoardMember) => void;
+  onToggleMemberRole: (member: BoardMember, role: 'admin' | 'developer' | 'viewer') => void;
   onRemoveMember: (membershipId: number) => void;
   currentUserId?: number;
   archivedLists: List[];
@@ -72,6 +73,7 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
   onDeleteBoard,
   onLeaveBoard,
   onLogout,
+  onUpdateBoardSettings,
   colorOptions,
   gradientOptions,
   imageOptions,
@@ -125,6 +127,12 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                   <span>{t('board.menu.members')}</span>
                 </li>
                 {canEditBoard && (
+                  <li className="menu-list-item" onClick={() => onTabChange('permissions')}>
+                    <span className="menu-item-icon">🛡️</span>
+                    <span>{t('permissions.title')}</span>
+                  </li>
+                )}
+                {canEditBoard && (
                   <li className="menu-list-item" onClick={() => onTabChange('archived')}>
                     <span className="menu-item-icon">🗄️</span>
                     <span>{t('board.menu.archived')}</span>
@@ -136,10 +144,20 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                 <h4 className="menu-section-title">{t('board.menu.inviteTitle')}</h4>
                 <div className="menu-invite-row">
                   <input className="form-input" readOnly value={inviteLink} style={{ fontSize: '12px', padding: '6px' }} />
-                  <button className="btn-primary" style={{ width: 'auto', padding: '6px 12px' }} onClick={onInvite} disabled={!inviteLink}>
+                  <button
+                    className="btn-primary"
+                    style={{ width: 'auto', padding: '6px 12px' }}
+                    onClick={onInvite}
+                    disabled={!inviteLink || !canManageMembers}
+                  >
                     {t('board.menu.inviteTitle')}
                   </button>
                 </div>
+                {!canManageMembers && (
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                    {t('members.permissionsHint')}
+                  </div>
+                )}
               </div>
               <div className="menu-divider"></div>
               {(canEditBoard || canLeaveBoard) && (
@@ -196,6 +214,61 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                 </div>
               </div>
             </>
+          )}
+          {activeTab === 'permissions' && (
+            <div className="members-panel">
+              <h4 className="menu-section-title">{t('permissions.title')}</h4>
+              <div className="permission-row">
+                <label className="permission-label">
+                  <span>{t('permissions.devCreateCards')}</span>
+                  <input
+                    type="checkbox"
+                    checked={!!board.dev_can_create_cards}
+                    onChange={(e) => onUpdateBoardSettings({ dev_can_create_cards: e.target.checked })}
+                  />
+                </label>
+              </div>
+              <div className="permission-row">
+                <label className="permission-label">
+                  <span>{t('permissions.devEditAssigned')}</span>
+                  <input
+                    type="checkbox"
+                    checked={!!board.dev_can_edit_assigned_cards}
+                    onChange={(e) => onUpdateBoardSettings({ dev_can_edit_assigned_cards: e.target.checked })}
+                  />
+                </label>
+              </div>
+              <div className="permission-row">
+                <label className="permission-label">
+                  <span>{t('permissions.devArchiveAssigned')}</span>
+                  <input
+                    type="checkbox"
+                    checked={!!board.dev_can_archive_assigned_cards}
+                    onChange={(e) => onUpdateBoardSettings({ dev_can_archive_assigned_cards: e.target.checked })}
+                  />
+                </label>
+              </div>
+              <div className="permission-row">
+                <label className="permission-label">
+                  <span>{t('permissions.devJoinCard')}</span>
+                  <input
+                    type="checkbox"
+                    checked={!!board.dev_can_join_card}
+                    onChange={(e) => onUpdateBoardSettings({ dev_can_join_card: e.target.checked })}
+                  />
+                </label>
+              </div>
+              <div className="permission-row">
+                <label className="permission-label">
+                  <span>{t('permissions.devCreateLists')}</span>
+                  <input
+                    type="checkbox"
+                    checked={!!board.dev_can_create_lists}
+                    onChange={(e) => onUpdateBoardSettings({ dev_can_create_lists: e.target.checked })}
+                  />
+                </label>
+              </div>
+            </div>
           )}
           {activeTab === 'background' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -334,7 +407,9 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                     ? t('members.roleOwner')
                     : isAdminMember
                     ? t('members.roleAdmin')
-                    : t('members.roleMember');
+                    : member.role === 'developer'
+                    ? t('members.roleDeveloper')
+                    : t('members.roleViewer');
                   const isActive = activeMemberId === member.id;
                   return (
                     <div key={member.id} className="member-row">
@@ -393,13 +468,18 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                             {t('members.viewActivity')}
                           </button>
                           {canManageMembers && !isOwnerMember && (
-                            <button
-                              type="button"
-                              className="member-popover-action"
-                              onClick={() => onToggleMemberRole(member)}
-                            >
-                              {member.role === 'admin' ? t('members.removeAdmin') : t('members.makeAdmin')}
-                            </button>
+                            <label className="member-popover-action" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('members.roleLabel')}</span>
+                              <select
+                                className="form-input"
+                                value={member.role}
+                                onChange={(e) => onToggleMemberRole(member, e.target.value as 'admin' | 'developer' | 'viewer')}
+                              >
+                                <option value="admin">{t('members.roleAdmin')}</option>
+                                <option value="developer">{t('members.roleDeveloper')}</option>
+                                <option value="viewer">{t('members.roleViewer')}</option>
+                              </select>
+                            </label>
                           )}
                           {canManageMembers && member.user.id !== currentUserId && !isOwnerMember && (
                             <button

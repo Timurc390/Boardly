@@ -44,7 +44,10 @@ class BoardSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'description', 'background_url', 
             'is_archived', 'is_favorite', 'owner', 'created_at', 
-            'invite_link', 'members', 'lists', 'labels'
+            'invite_link', 'members', 'lists', 'labels',
+            'dev_can_create_cards', 'dev_can_edit_assigned_cards',
+            'dev_can_archive_assigned_cards', 'dev_can_join_card',
+            'dev_can_create_lists'
         )
         read_only_fields = ('owner', 'invite_link', 'created_at')
 

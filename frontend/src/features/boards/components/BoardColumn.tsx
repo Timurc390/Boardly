@@ -55,7 +55,9 @@ interface BoardColumnProps {
   prevList?: List | null;
   nextList?: List | null;
   isTouch?: boolean;
-  canEdit?: boolean;
+  canEditList?: boolean;
+  canAddCards?: boolean;
+  canEditCard?: (card: Card) => boolean;
   onAddCard: (listId: number, title: string) => void;
   onUpdateList: (listId: number, data: Partial<List>) => void;
   onDeleteList: (listId: number) => void;
@@ -78,7 +80,9 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   prevList,
   nextList,
   isTouch,
-  canEdit = true,
+  canEditList = true,
+  canAddCards = true,
+  canEditCard,
   onAddCard, 
   onUpdateList, 
   onDeleteList,
@@ -173,9 +177,10 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     }
   };
 
-  const handleMenuAction = (action: 'add' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'sort' | 'subscribe' | 'automation' | 'collapse' | 'delete') => {
+  const handleMenuAction = (action: 'add' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'sort' | 'subscribe' | 'automation' | 'collapse' | 'delete' | 'toggleDevAddCards') => {
       setIsMenuOpen(false);
       if (action === 'add') {
+        if (!canAddCards) return;
         setIsAdding(true);
         setTimeout(() => newCardInputRef.current?.focus(), 0);
         return;
@@ -238,6 +243,10 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
         window.alert(t('list.menu.comingSoon'));
         return;
       }
+      if (action === 'toggleDevAddCards') {
+        onUpdateList(list.id, { allow_dev_add_cards: !list.allow_dev_add_cards });
+        return;
+      }
       if (action === 'delete') onDeleteList(list.id);
       if (action === 'collapse') onToggleCollapse();
   };
@@ -286,7 +295,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
 
   if (isCollapsed) {
       return (
-    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEdit}>
+    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
             {(provided) => (
                 <div 
                     className="kanban-column collapsed"
@@ -315,7 +324,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   }
 
   return (
-    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEdit}>
+    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
       {(provided) => (
         <div
           className={`kanban-column ${hasListColor ? 'has-color' : ''}`}
@@ -336,7 +345,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
             ) : (
               <>
                 <span 
-                  onClick={() => { if (canEdit) setIsEditingTitle(true); }}
+                  onClick={() => { if (canEditList) setIsEditingTitle(true); }}
                   style={{ cursor: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8, flex: 1, color: headerMeta?.text }}
                   title={list.title}
                 >
@@ -344,7 +353,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
                     <span className="count-badge" style={headerBadgeStyle}>{visibleCount}</span>
-                    {isTouch && canEdit && (
+                    {isTouch && canEditList && (
                       <>
                         <button
                           className="btn-icon"
@@ -367,7 +376,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                       </>
                     )}
                     
-                    {canEdit && (
+                    {canEditList && (
                       <>
                         <button 
                           className="list-menu-trigger btn-icon"
@@ -385,10 +394,12 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                             ></div>
                             <div className="list-menu-dropdown">
                                 <div className="list-menu-section">
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('add')}>
+                                  {canAddCards && (
+                                    <button className="list-menu-item" onClick={() => handleMenuAction('add')}>
                                       <span className="list-menu-icon">＋</span>
                                       {t('list.menu.addCard')}
-                                  </button>
+                                    </button>
+                                  )}
                                   <button className="list-menu-item" onClick={() => handleMenuAction('copy')}>
                                       <span className="list-menu-icon">📋</span>
                                       {t('list.copy')}
@@ -410,6 +421,11 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                                       {isSubscribed ? t('list.menu.unsubscribe') : t('list.menu.subscribe')}
                                   </button>
                                 </div>
+                                <div className="list-menu-divider" />
+                                <button className="list-menu-item" onClick={() => handleMenuAction('toggleDevAddCards')}>
+                                    <span className="list-menu-icon">{list.allow_dev_add_cards ? '✅' : '🚫'}</span>
+                                    {list.allow_dev_add_cards ? t('list.menu.devCanAddCards') : t('list.menu.devCannotAddCards')}
+                                </button>
                                 <div className="list-menu-divider" />
                                 <div className={`list-color-section ${isColorOpen ? 'open' : ''}`}>
                                   <button
@@ -504,7 +520,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                       onClick={handleCardClick}
                       onToggleComplete={handleToggleComplete}
                       isTouch={isTouch}
-                      canEdit={canEdit}
+                      canEdit={canEditCard ? canEditCard(card) : canEditList}
                       canMoveLeft={!!prevList}
                       canMoveRight={!!nextList}
                       canMoveUp={idx > 0}
@@ -520,7 +536,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
               )}
             </Droppable>
 
-            {canEdit && (
+            {canAddCards && (
               <div className="add-card-wrapper">
               {isAdding ? (
                   <form onSubmit={handleSubmit}>

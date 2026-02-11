@@ -6,8 +6,12 @@ import { useI18n } from '../../../../context/I18nContext';
 interface CardSidebarProps {
   card: Card;
   canEdit: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
   isCardMember: boolean | undefined;
-  canManage: boolean;
+  canManageMembers: boolean;
+  canJoinCard: boolean;
+  canLeaveCard: boolean;
   onJoinCard: () => void;
   onLeaveCard: () => void;
   onRemoveMember: (userId: number) => void;
@@ -31,7 +35,7 @@ interface CardSidebarProps {
 }
 
 export const CardSidebar: React.FC<CardSidebarProps> = ({ 
-  card, canEdit, isCardMember, canManage,
+  card, canEdit, canArchive, canDelete, isCardMember, canManageMembers, canJoinCard, canLeaveCard,
   onJoinCard, onLeaveCard, onRemoveMember, startEditingDueDate,
   onCopyCard, onUpdateCard, onDeleteCard,
   isEditingDueDate, dueDateDate, dueDateTime, setDueDateDate, setDueDateTime, saveDueDate, removeDueDate, closeDueDateEdit,
@@ -65,24 +69,29 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
   const previewText = previewDate
     ? previewDate.toLocaleString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '';
-  if (!canEdit && !canManage) return null;
+  const canShowSidebar = canEdit || canManageMembers || canJoinCard || canLeaveCard;
+  if (!canShowSidebar) return null;
 
   return (
     <div className="card-sidebar">
-        {canManage && (
+        {(canManageMembers || canJoinCard || canLeaveCard) && (
           <div className="card-sidebar-section">
             <h4 className="card-sidebar-title">{t('card.sidebar.participation')}</h4>
             {isCardMember ? (
-              <button type="button" className="sidebar-btn btn-danger" onClick={(e) => { e.preventDefault(); onLeaveCard(); }}>
-                <span className="sidebar-btn-icon">🏃‍♂️</span>
-                {t('card.sidebar.leave')}
-              </button>
-            ) : (
-              (card.is_public || canManage) ? (
-                <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onJoinCard(); }}>
-                  <span className="sidebar-btn-icon">🙋‍♂️</span>
-                  {t('card.sidebar.join')}
+              canLeaveCard ? (
+                <button type="button" className="sidebar-btn btn-danger" onClick={(e) => { e.preventDefault(); onLeaveCard(); }}>
+                  <span className="sidebar-btn-icon">🏃‍♂️</span>
+                  {t('card.sidebar.leave')}
                 </button>
+              ) : null
+            ) : (
+              (card.is_public || canManageMembers) ? (
+                canJoinCard ? (
+                  <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onJoinCard(); }}>
+                    <span className="sidebar-btn-icon">🙋‍♂️</span>
+                    {t('card.sidebar.join')}
+                  </button>
+                ) : null
               ) : (
                 <div style={{fontSize: 12, color: '#666', fontStyle: 'italic', marginBottom: 8}}>{t('card.private')}</div>
               )
@@ -111,7 +120,7 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
                     {member.username || member.email}
                   </div>
                 </div>
-                {canManage && (
+                {canManageMembers && (
                   <button
                     type="button"
                     className="btn-secondary btn-sm"
@@ -251,16 +260,20 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
               <span className="sidebar-btn-icon">📋</span>
               {t('card.copy')}
             </button>
-            <button type="button" className="sidebar-btn" onClick={() => onUpdateCard({is_archived: !card.is_archived})}>
-                <span className="sidebar-btn-icon">{card.is_archived ? '↩️' : '📦'}</span>
-                {card.is_archived ? t('card.unarchive') : t('card.archive')}
-            </button>
-            <button type="button" className="sidebar-btn btn-danger" style={{color: 'var(--danger)'}} onClick={() => {
-                if(window.confirm(t('confirm.deleteCard'))) onDeleteCard();
-            }}>
-              <span className="sidebar-btn-icon">🗑️</span>
-              {t('common.delete')}
-            </button>
+            {canArchive && (
+              <button type="button" className="sidebar-btn" onClick={() => onUpdateCard({is_archived: !card.is_archived})}>
+                  <span className="sidebar-btn-icon">{card.is_archived ? '↩️' : '📦'}</span>
+                  {card.is_archived ? t('card.unarchive') : t('card.archive')}
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" className="sidebar-btn btn-danger" style={{color: 'var(--danger)'}} onClick={() => {
+                  if(window.confirm(t('confirm.deleteCard'))) onDeleteCard();
+              }}>
+                <span className="sidebar-btn-icon">🗑️</span>
+                {t('common.delete')}
+              </button>
+            )}
           </div>
         )}
     </div>

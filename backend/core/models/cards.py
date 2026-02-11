@@ -13,6 +13,7 @@ class List(models.Model):
     order = models.DecimalField(max_digits=10, decimal_places=5, default=0, verbose_name="Позиція")
     is_archived = models.BooleanField(default=False, verbose_name="Архівувати Список")
     color = models.CharField(max_length=20, null=True, blank=True, verbose_name="Колір колонки")
+    allow_dev_add_cards = models.BooleanField(default=True, verbose_name="Dev може додавати картки")
 
     class Meta:
         verbose_name = "Список"

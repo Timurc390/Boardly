@@ -89,7 +89,7 @@ class BoardViewSet(viewsets.ModelViewSet):
         if Membership.objects.filter(board=board, user=request.user).exists():
              return Response({'detail': 'already_member'}, status=400)
 
-        Membership.objects.create(board=board, user=request.user, role='member')
+        Membership.objects.create(board=board, user=request.user, role='viewer')
         serializer = self.get_serializer(board)
         return Response(serializer.data)
 

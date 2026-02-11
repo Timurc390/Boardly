@@ -38,6 +38,8 @@ import {
   updateChecklistItemAction,
   deleteChecklistItemAction,
   addCommentAction,
+  updateCommentAction,
+  deleteCommentAction,
   createLabelAction,
   updateLabelAction,
   deleteLabelAction,
@@ -66,7 +68,7 @@ export const BoardDetailScreen: React.FC = () => {
   const [isAddingList, setIsAddingList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeMenuTab, setActiveMenuTab] = useState<'main' | 'background' | 'members' | 'archived'>('main');
+  const [activeMenuTab, setActiveMenuTab] = useState<'main' | 'background' | 'members' | 'archived' | 'permissions'>('main');
   const [boardTitle, setBoardTitle] = useState('');
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [collapsedLists, setCollapsedLists] = useState<number[]>([]);
@@ -177,11 +179,26 @@ export const BoardDetailScreen: React.FC = () => {
 
   const boardId = board?.id ?? 0;
   const isOwner = board?.owner?.id === user?.id;
-  const isAdmin = !!board?.members?.some(m => m.user.id === user?.id && m.role === 'admin');
   const currentMembership = board?.members?.find(m => m.user.id === user?.id);
+  const role = currentMembership?.role;
+  const isAdmin = role === 'admin';
+  const isDeveloper = role === 'developer';
   const canManageMembers = isOwner || isAdmin;
   const canEditBoard = isOwner || isAdmin;
+  const canCreateList = canEditBoard || (isDeveloper && !!board?.dev_can_create_lists);
   const canLeaveBoard = !!currentMembership && !isOwner;
+  const canAddCardToList = useCallback((list: List) => {
+    if (canEditBoard) return true;
+    if (isDeveloper && board?.dev_can_create_cards && list.allow_dev_add_cards) return true;
+    return false;
+  }, [board?.dev_can_create_cards, canEditBoard, isDeveloper]);
+  const canEditCard = useCallback((card: Card) => {
+    if (canEditBoard) return true;
+    if (isDeveloper && board?.dev_can_edit_assigned_cards && card.members?.some(m => m.id === user?.id)) {
+      return true;
+    }
+    return false;
+  }, [board?.dev_can_edit_assigned_cards, canEditBoard, isDeveloper, user?.id]);
   const activeLists = useMemo(() => board?.lists?.filter(l => !l.is_archived) || [], [board?.lists]);
   const archivedLists = useMemo(() => board?.lists?.filter(l => l.is_archived) || [], [board?.lists]);
   const archivedCards = useMemo(
@@ -241,14 +258,14 @@ export const BoardDetailScreen: React.FC = () => {
 
   const handleCreateList = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEditBoard) return;
+    if (!canCreateList) return;
     if (!newListTitle.trim()) return;
     if (!boardId) return;
     const order = board?.lists ? board.lists.length + 1 : 1;
     dispatch(addListAction({ boardId, title: newListTitle, order }));
     setNewListTitle('');
     setIsAddingList(false);
-  }, [board?.lists, boardId, canEditBoard, dispatch, newListTitle]);
+  }, [board?.lists, boardId, canCreateList, dispatch, newListTitle]);
 
   const handleUpdateSelectedCard = useCallback((data: Partial<Card> & { label_ids?: number[] }) => {
     if (!selectedCard) return;
@@ -266,9 +283,10 @@ export const BoardDetailScreen: React.FC = () => {
 
   const handleAddCard = useCallback((listId: number, title: string) => {
     const list = board?.lists?.find(item => item.id === listId);
+    if (!list || !canAddCardToList(list)) return;
     const order = (list?.cards?.length || 0) + 1;
     dispatch(addCardAction({ listId, title, order }));
-  }, [board?.lists, dispatch]);
+  }, [board?.lists, canAddCardToList, dispatch]);
 
   const handleUpdateList = useCallback((listId: number, data: Partial<List>) => {
     dispatch(updateListOptimistic({ listId, data }));
@@ -332,12 +350,12 @@ export const BoardDetailScreen: React.FC = () => {
   }, [handleCopyInvite, inviteLink, t]);
 
   const onDragEnd = useCallback((result: DropResult) => {
-    if (!canEditBoard) return;
     const { destination, source, type, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     if (type === 'list') {
+      if (!canEditBoard) return;
       dispatch(moveListOptimistic({ sourceIndex: source.index, destIndex: destination.index }));
       const listId = Number(draggableId.replace('list-', ''));
       dispatch(moveListAction({ listId, order: destination.index + 1 }));
@@ -347,6 +365,11 @@ export const BoardDetailScreen: React.FC = () => {
     const cardId = Number(draggableId.replace('card-', ''));
     const sourceListId = Number(source.droppableId.replace('list-', ''));
     const destListId = Number(destination.droppableId.replace('list-', ''));
+    const card = board?.lists?.flatMap(l => l.cards || []).find(c => c.id === cardId);
+    const targetList = board?.lists?.find(l => l.id === destListId);
+    if (!card || !targetList) return;
+    if (!canEditCard(card)) return;
+    if (!canAddCardToList(targetList)) return;
 
     dispatch(moveCardOptimistic({
       cardId,
@@ -360,7 +383,7 @@ export const BoardDetailScreen: React.FC = () => {
       listId: destListId,
       order: destination.index + 1
     }));
-  }, [canEditBoard, dispatch]);
+  }, [board?.lists, canAddCardToList, canEditBoard, canEditCard, dispatch]);
 
   const handleMoveList = useCallback((listId: number, fromIndex: number, toIndex: number) => {
     if (!canEditBoard) return;
@@ -370,11 +393,17 @@ export const BoardDetailScreen: React.FC = () => {
   }, [canEditBoard, dispatch, filteredLists.length]);
 
   const handleMoveCard = useCallback((cardId: number, sourceListId: number, destListId: number, destIndex: number) => {
-    if (!canEditBoard) return;
+    if (!canEditBoard) {
+      const card = board?.lists?.flatMap(l => l.cards || []).find(c => c.id === cardId);
+      const targetList = board?.lists?.find(l => l.id === destListId);
+      if (!card || !targetList) return;
+      if (!canEditCard(card)) return;
+      if (!canAddCardToList(targetList)) return;
+    }
     if (destIndex < 0) return;
     dispatch(moveCardOptimistic({ cardId, sourceListId, destListId, newIndex: destIndex }));
     dispatch(moveCardAction({ cardId, listId: destListId, order: destIndex + 1 }));
-  }, [canEditBoard, dispatch]);
+  }, [board?.lists, canAddCardToList, canEditBoard, canEditCard, dispatch]);
 
   const runBoardAction = useCallback(async (action: any) => {
     try {
@@ -527,11 +556,10 @@ export const BoardDetailScreen: React.FC = () => {
     reader.readAsDataURL(file);
   }, [handleBackgroundSelect, t]);
 
-  const handleToggleMemberRole = useCallback((member: BoardMember) => {
+  const handleToggleMemberRole = useCallback((member: BoardMember, role: 'admin' | 'developer' | 'viewer') => {
     if (!canManageMembers) return;
     if (member.user.id === board?.owner?.id) return;
-    const nextRole = member.role === 'admin' ? 'member' : 'admin';
-    dispatch(updateBoardMemberRoleAction({ membershipId: member.id, role: nextRole }));
+    dispatch(updateBoardMemberRoleAction({ membershipId: member.id, role }));
   }, [board?.owner?.id, canManageMembers, dispatch]);
 
   const handleLeaveBoard = useCallback(async () => {
@@ -615,7 +643,9 @@ export const BoardDetailScreen: React.FC = () => {
                   prevList={index > 0 ? filteredLists[index - 1] : null}
                   nextList={index < filteredLists.length - 1 ? filteredLists[index + 1] : null}
                   isTouch={isTouch}
-                  canEdit={canEditBoard}
+                  canEditList={canEditBoard}
+                  canAddCards={canAddCardToList(list)}
+                  canEditCard={canEditCard}
                   onAddCard={handleAddCard}
                   onUpdateList={handleUpdateList}
                   onDeleteList={handleDeleteList}
@@ -631,7 +661,7 @@ export const BoardDetailScreen: React.FC = () => {
               ))}
               {provided.placeholder}
 
-              {canEditBoard && (
+              {canCreateList && (
                 <div className="add-list-wrapper">
                   {isAddingList ? (
                     <form onSubmit={handleCreateList}>
@@ -676,6 +706,8 @@ export const BoardDetailScreen: React.FC = () => {
              onToggleChecklistItem={(itemId, is_checked) => runBoardAction(updateChecklistItemAction({ itemId, data: { is_checked } }))}
              onUpdateChecklistItem={(itemId, text) => runBoardAction(updateChecklistItemAction({ itemId, data: { text } }))}
              onAddComment={(text) => { void runBoardAction(addCommentAction({ cardId: selectedCard.id, text })); }}
+             onUpdateComment={(commentId, text) => { void runBoardAction(updateCommentAction({ commentId, text })); }}
+             onDeleteComment={(commentId) => { void runBoardAction(deleteCommentAction({ commentId })); }}
              onUpdateLabels={handleUpdateCardLabels}
              onCreateLabel={async (name, color) => {
                const created = await runBoardAction(createLabelAction({ boardId: board.id, name, color }));
@@ -747,6 +779,7 @@ export const BoardDetailScreen: React.FC = () => {
         }}
         onLeaveBoard={handleLeaveBoard}
         onLogout={() => dispatch(logoutUser())}
+        onUpdateBoardSettings={(data) => dispatch(updateBoardAction({ id: board.id, data }))}
         colorOptions={colorOptions}
         gradientOptions={gradientOptions}
         imageOptions={imageOptions}

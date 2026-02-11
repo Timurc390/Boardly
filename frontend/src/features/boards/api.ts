@@ -34,7 +34,7 @@ export const removeMember = async (membershipId: number): Promise<void> => {
   await client.delete(`/board-members/${membershipId}/`);
 };
 
-export const updateMemberRole = async (membershipId: number, role: 'admin' | 'member'): Promise<any> => {
+export const updateMemberRole = async (membershipId: number, role: 'admin' | 'developer' | 'viewer'): Promise<any> => {
   const res = await client.patch(`/board-members/${membershipId}/`, { role });
   return res.data;
 };
@@ -135,6 +135,15 @@ export const deleteChecklistItem = async (itemId: number): Promise<void> => {
 export const createComment = async (cardId: number, text: string): Promise<Comment> => {
   const res = await client.post('/comments/', { card: cardId, text });
   return res.data;
+};
+
+export const updateComment = async (commentId: number, text: string): Promise<Comment> => {
+  const res = await client.patch(`/comments/${commentId}/`, { text });
+  return res.data;
+};
+
+export const deleteComment = async (commentId: number): Promise<void> => {
+  await client.delete(`/comments/${commentId}/`);
 };
 
 export const createAttachment = async (cardId: number, file: File): Promise<any> => {

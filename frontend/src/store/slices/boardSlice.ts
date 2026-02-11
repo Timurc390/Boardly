@@ -129,7 +129,7 @@ export const removeBoardMemberAction = createAsyncThunk(
 
 export const updateBoardMemberRoleAction = createAsyncThunk(
   'board/updateMemberRole',
-  async ({ membershipId, role }: { membershipId: number; role: 'admin' | 'member' }) => {
+  async ({ membershipId, role }: { membershipId: number; role: 'admin' | 'developer' | 'viewer' }) => {
     const updated = await api.updateMemberRole(membershipId, role);
     return updated;
   }
@@ -235,6 +235,19 @@ export const deleteChecklistItemAction = createAsyncThunk(
 export const addCommentAction = createAsyncThunk(
   'board/addComment',
   async ({ cardId, text }: { cardId: number; text: string }) => await api.createComment(cardId, text)
+);
+
+export const updateCommentAction = createAsyncThunk(
+  'board/updateComment',
+  async ({ commentId, text }: { commentId: number; text: string }) => await api.updateComment(commentId, text)
+);
+
+export const deleteCommentAction = createAsyncThunk(
+  'board/deleteComment',
+  async ({ commentId }: { commentId: number }) => {
+    await api.deleteComment(commentId);
+    return commentId;
+  }
 );
 
 export const createLabelAction = createAsyncThunk(
@@ -737,6 +750,34 @@ const boardSlice = createSlice({
         if (!card) return;
         if (!card.comments) card.comments = [];
         card.comments.push(action.payload);
+      })
+      .addCase(updateCommentAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const updated = action.payload;
+        const card = lists
+          .flatMap(list => list.cards || [])
+          .find(c => c.comments?.some(comment => comment.id === updated.id));
+        if (!card || !card.comments) return;
+        const idx = card.comments.findIndex(comment => comment.id === updated.id);
+        if (idx !== -1) {
+          card.comments[idx] = { ...card.comments[idx], ...updated };
+        }
+      })
+      .addCase(deleteCommentAction.fulfilled, (state, action) => {
+        const lists = ensureLists(state);
+        if (!lists) return;
+        const deletedId = action.payload;
+        for (const list of lists) {
+          for (const card of list.cards || []) {
+            if (!card.comments) continue;
+            const idx = card.comments.findIndex(comment => comment.id === deletedId);
+            if (idx !== -1) {
+              card.comments.splice(idx, 1);
+              return;
+            }
+          }
+        }
       })
       .addMatcher(
         (action) => action.type.endsWith('Card/fulfilled'),

@@ -27,6 +27,8 @@ interface CardModalProps {
   onToggleChecklistItem: (itemId: number, isChecked: boolean) => Promise<any> | void;
   onUpdateChecklistItem: (itemId: number, text: string) => Promise<any> | void;
   onAddComment: (text: string) => void;
+  onUpdateComment: (commentId: number, text: string) => void;
+  onDeleteComment: (commentId: number) => void;
   onUpdateLabels: (labelIds: number[]) => void;
   onCreateLabel: (name: string, color: string) => Promise<{ id?: number } | void> | void;
   onUpdateLabel: (id: number, name: string, color: string) => void;
@@ -55,6 +57,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   onCopyLink, onUpdateCard, onDeleteCard, onCopyCard,
   onMoveCard,
   onAddChecklist, onDeleteChecklist, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem, onAddComment,
+  onUpdateComment, onDeleteComment,
   onUpdateLabels, onCreateLabel, onUpdateLabel, onDeleteLabel,
   onJoinCard, onLeaveCard, onRemoveMember, onAddMember, onAddAttachment, onDeleteAttachment
 }) => {
@@ -91,12 +94,21 @@ export const CardModal: React.FC<CardModalProps> = ({
     '#344563'
   ];
 
+  const membership = board.members?.find(m => m.user.id === user?.id);
+  const role = membership?.role;
   const isOwner = board.owner?.id === user?.id;
-  const isAdmin = board.members?.some(m => m.user.id === user?.id && m.role === 'admin');
+  const isAdmin = role === 'admin';
+  const isDeveloper = role === 'developer';
+  const isViewer = role === 'viewer';
   const isCardMember = card.members?.some(u => u.id === user?.id);
-  const canEdit = !!(isOwner || isAdmin);
-  const canManage = canEdit;
-  const quickActionsDisabled = !canEdit;
+  const canEditCard = !!(isOwner || isAdmin || (isDeveloper && board.dev_can_edit_assigned_cards && isCardMember));
+  const canArchiveCard = !!(isOwner || isAdmin || (isDeveloper && board.dev_can_archive_assigned_cards && isCardMember));
+  const canDeleteCard = !!(isOwner || isAdmin);
+  const canManageMembers = !!(isOwner || isAdmin);
+  const canJoinCard = !!(canManageMembers || (isDeveloper && board.dev_can_join_card));
+  const canLeaveCard = !!isCardMember;
+  const canComment = !!(isOwner || isAdmin || isDeveloper || isViewer);
+  const quickActionsDisabled = !canEditCard;
   const coverColor = card.card_color?.trim();
   const hasCover = !!coverColor;
   const coverMode = card.cover_size === 'full' ? 'full' : 'header';
@@ -274,7 +286,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   }, [allMembers, isMembersOpen, memberQuery]);
 
   const handleToggleLabel = (labelId: number) => {
-    if (!canEdit) return;
+    if (!canEditCard) return;
     const currentIds = (card.labels || []).map(l => l.id);
     const nextIds = currentIds.includes(labelId)
       ? currentIds.filter(id => id !== labelId)
@@ -358,16 +370,16 @@ export const CardModal: React.FC<CardModalProps> = ({
         <CardHeader 
           card={card} 
           board={board} 
-          canEdit={canEdit} 
+          canEdit={canEditCard} 
           onUpdateCard={onUpdateCard} 
           onCopyLink={onCopyLink}
           onCopyCard={onCopyCard}
-          onArchiveToggle={() => onUpdateCard({ is_archived: !card.is_archived })}
-          onDeleteCard={() => { onDeleteCard(); onClose(); }}
+          onArchiveToggle={() => { if (canArchiveCard) onUpdateCard({ is_archived: !card.is_archived }); }}
+          onDeleteCard={() => { if (canDeleteCard) { onDeleteCard(); onClose(); } }}
           onMoveCard={onMoveCard}
           isCardMember={isCardMember}
-          onJoinCard={onJoinCard}
-          onLeaveCard={onLeaveCard}
+          onJoinCard={() => { if (canJoinCard) onJoinCard(); }}
+          onLeaveCard={() => { if (canLeaveCard) onLeaveCard(); }}
           onClose={onClose} 
         />
 
@@ -459,7 +471,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                         <span className="card-popover-check">{labelIds.has(label.id) ? '✓' : ''}</span>
                         <span className="label-chip" style={{ background: label.color }}>{label.name}</span>
                       </button>
-                      {canEdit && (
+                      {canEditCard && (
                         <button
                           type="button"
                           className="btn-icon card-popover-delete"
@@ -580,13 +592,18 @@ export const CardModal: React.FC<CardModalProps> = ({
                     const isAssigned = card.members?.some(m => m.id === member.id);
                     const label = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.username || member.email;
                     const initial = (label?.[0] || '?').toUpperCase();
+                    const memberRole = board.members?.find(m => m.user.id === member.id)?.role;
                     return (
                       <button
                         key={member.id}
                         type="button"
                         className={`card-popover-item ${isAssigned ? 'active' : ''}`}
                         onClick={() => {
-                          if (!canManage) return;
+                          if (!canManageMembers) return;
+                          if (!isAssigned && memberRole === 'viewer') {
+                            window.alert(t('members.viewerCannotBeAssigned'));
+                            return;
+                          }
                           if (isAssigned) onRemoveMember(member.id);
                           else onAddMember(member.id);
                         }}
@@ -620,7 +637,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                   <input
                     type="file"
                     onChange={e => handleAttachmentUpload(e.target.files?.[0])}
-                    disabled={!canEdit || isUploadingAttachment}
+                    disabled={!canEditCard || isUploadingAttachment}
                   />
                   <span>{t('attachments.add')}</span>
                 </label>
@@ -633,7 +650,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     return (
                       <div key={att.id} className="card-attachment-row">
                         <span className="card-attachment-name">{fileName}</span>
-                        {canEdit && (
+                        {canEditCard && (
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
@@ -652,24 +669,24 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div ref={labelsSectionRef}>
               <CardLabels 
                 card={card} 
-                canEdit={canEdit}
+                canEdit={canEditCard}
                 startEditingDueDate={startEditingDueDate}
                 isOverdue={isOverdue}
                 overdueText={overdueText}
-                onOpenLabelsPopover={canEdit ? () => { setIsCoverMenuOpen(false); setActivePopover('labels'); } : undefined}
+                onOpenLabelsPopover={canEditCard ? () => { setIsCoverMenuOpen(false); setActivePopover('labels'); } : undefined}
               />
             </div>
 
             <CardDescription 
               card={card} 
-              canEdit={canEdit} 
+              canEdit={canEditCard} 
               onUpdateCard={onUpdateCard} 
             />
 
             <div ref={checklistsSectionRef}>
               <CardChecklists 
                 card={card} 
-                canEdit={canEdit} 
+                canEdit={canEditCard} 
                 onDeleteChecklist={onDeleteChecklist}
                 onAddChecklistItem={onAddChecklistItem} 
                 onDeleteChecklistItem={onDeleteChecklistItem}
@@ -684,22 +701,30 @@ export const CardModal: React.FC<CardModalProps> = ({
               card={card} 
               user={user} 
               onAddComment={onAddComment} 
-              canEdit={canEdit}
+              onUpdateComment={onUpdateComment}
+              onDeleteComment={onDeleteComment}
+              canEditComment={(comment) => comment.author?.id === user?.id}
+              canDeleteComment={() => canDeleteCard}
+              canEdit={canComment}
             />
 
             <div ref={coverSectionRef}>
               <CardSidebar 
                 card={card} 
-                canEdit={canEdit} 
+                canEdit={canEditCard} 
+                canArchive={canArchiveCard}
+                canDelete={canDeleteCard}
+                canManageMembers={canManageMembers}
+                canJoinCard={canJoinCard}
+                canLeaveCard={canLeaveCard}
                 isCardMember={isCardMember} 
-                canManage={canManage}
                 onJoinCard={onJoinCard} 
                 onLeaveCard={onLeaveCard} 
                 onRemoveMember={onRemoveMember}
                 startEditingDueDate={startEditingDueDate}
                 onCopyCard={onCopyCard}
                 onUpdateCard={onUpdateCard}
-                onDeleteCard={() => { onDeleteCard(); onClose(); }} 
+                onDeleteCard={() => { if (canDeleteCard) { onDeleteCard(); onClose(); } }} 
                 isEditingDueDate={isEditingDueDate}
                 dueDateDate={dueDateDate}
                 dueDateTime={dueDateTime}

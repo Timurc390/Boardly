@@ -61,9 +61,9 @@ export const loginUser = createAsyncThunk(
 
 export const googleLoginUser = createAsyncThunk(
   'auth/googleLogin',
-  async (code: string, { dispatch, rejectWithValue }) => {
+  async (payload: { code?: string; access_token?: string }, { dispatch, rejectWithValue }) => {
     try {
-      const res = await client.post('/auth/google/', { code });
+      const res = await client.post('/auth/google/', payload);
       const token = res.data.key || res.data.auth_token;
       localStorage.setItem('authToken', token);
       dispatch(fetchMe());

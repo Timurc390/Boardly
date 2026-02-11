@@ -9,7 +9,7 @@ import { useI18n } from '../context/I18nContext';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loginUser, registerUser, googleLoginUser, clearError } from '../store/slices/authSlice';
 
-const GOOGLE_CLIENT_ID = '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
 declare global {
   interface Window {
@@ -70,14 +70,17 @@ export const AuthScreen: React.FC = () => {
 
   const handleGoogleClick = () => {
     if (!window.google) return;
-    const client = window.google.accounts.oauth2.initCodeClient({
+    if (!GOOGLE_CLIENT_ID) {
+      setLocalError(t('auth.googleError'));
+      return;
+    }
+    const client = window.google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: 'email profile',
-      ux_mode: 'popup',
       callback: async (response: any) => {
-        if (response.code) {
+        if (response.access_token) {
           try {
-            await dispatch(googleLoginUser(response.code)).unwrap();
+            await dispatch(googleLoginUser({ access_token: response.access_token })).unwrap();
           } catch (err: any) {
             console.error("Google Auth Error:", err);
             setLocalError(t('auth.googleError'));
@@ -85,7 +88,7 @@ export const AuthScreen: React.FC = () => {
         }
       },
     });
-    client.requestCode();
+    client.requestAccessToken();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

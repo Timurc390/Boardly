@@ -35,7 +35,7 @@ interface BoardHeaderProps {
   ownerId?: number;
   currentUserId?: number;
   onOpenMemberActivity: (member: BoardMember) => void;
-  onToggleMemberRole: (member: BoardMember) => void;
+  onToggleMemberRole: (member: BoardMember, role: 'admin' | 'developer' | 'viewer') => void;
   onRemoveMember: (membershipId: number) => void;
   filterQuery: string;
   onSearchChange: (value: string) => void;
@@ -169,7 +169,9 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                   ? t('members.roleOwner')
                   : membership?.role === 'admin'
                   ? t('members.roleAdmin')
-                  : t('members.roleMember');
+                  : membership?.role === 'developer'
+                  ? t('members.roleDeveloper')
+                  : t('members.roleViewer');
                 const isActive = headerMemberId === member.id;
                 return (
                   <div className="board-member-button" key={`member-${member.id}`}>
@@ -232,16 +234,21 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                               {t('members.viewActivity')}
                             </button>
                             {canManageMembers && member.id !== ownerId && (
-                              <button
-                                type="button"
-                                className="member-popover-action"
-                                onClick={() => {
-                                  onToggleMemberRole(membership);
-                                  onCloseHeaderMember();
-                                }}
-                              >
-                                {membership.role === 'admin' ? t('members.removeAdmin') : t('members.makeAdmin')}
-                              </button>
+                              <label className="member-popover-action" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('members.roleLabel')}</span>
+                                <select
+                                  className="form-input"
+                                  value={membership.role}
+                                  onChange={(e) => {
+                                    onToggleMemberRole(membership, e.target.value as 'admin' | 'developer' | 'viewer');
+                                    onCloseHeaderMember();
+                                  }}
+                                >
+                                  <option value="admin">{t('members.roleAdmin')}</option>
+                                  <option value="developer">{t('members.roleDeveloper')}</option>
+                                  <option value="viewer">{t('members.roleViewer')}</option>
+                                </select>
+                              </label>
                             )}
                             {canManageMembers && member.id !== currentUserId && member.id !== ownerId && (
                               <button

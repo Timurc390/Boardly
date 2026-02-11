@@ -70,6 +70,7 @@ export interface List {
   order: number;
   is_archived?: boolean;
   color?: string | null;
+  allow_dev_add_cards?: boolean;
   cards?: Card[];
 }
 
@@ -86,11 +87,18 @@ export interface Board {
   members?: Array<{
     id: number;
     user: User;
-    role: 'admin' | 'member';
+    role: 'admin' | 'developer' | 'viewer';
+    is_favorite?: boolean;
   }>;
   
   lists?: List[];
   labels?: Label[];
+
+  dev_can_create_cards?: boolean;
+  dev_can_edit_assigned_cards?: boolean;
+  dev_can_archive_assigned_cards?: boolean;
+  dev_can_join_card?: boolean;
+  dev_can_create_lists?: boolean;
   
   created_at?: string;
   updated_at?: string;

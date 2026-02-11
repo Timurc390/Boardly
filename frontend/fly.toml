@@ -1,0 +1,24 @@
+# fly.toml app configuration file generated for boardly-frontend on 2026-02-06T10:46:11+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'boardly-frontend'
+primary_region = 'fra'
+
+[build]
+  [build.args]
+    REACT_APP_API_URL = "https://boardly-backend.fly.dev/api"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024
