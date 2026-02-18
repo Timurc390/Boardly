@@ -2,8 +2,10 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8000",
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@reduxjs/toolkit": "^2.11.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -14,23 +16,53 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.13.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.26.1",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "react-router-dom": "^7.11.0",
+    "react-icons": "^5.5.0",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.12.0",
     "react-scripts": "5.0.1",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "browserstack-node-sdk": "^1.49.2"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
+    "qa:public": "npm run lint && npm run test:mobile:public && npm run test:desktop:smoke && npm run build",
+    "qa:local": "npm run lint && npm run test:mobile:smoke && npm run test:desktop:smoke && npm run build",
     "test": "react-scripts test",
+    "test:mobile": "playwright test",
+    "test:mobile:public": "playwright test tests/public-mobile-pages.spec.ts --workers=1",
+    "test:mobile:smoke": "playwright test tests/public-mobile-pages.spec.ts tests/mobile-ui.spec.ts --workers=1",
+    "test:desktop:smoke": "playwright test tests/desktop-smoke.spec.ts tests/auth-smoke.spec.ts --workers=1 --project=desktop-1920",
+    "test:mobile:report": "playwright show-report",
+    "test:mobile:bs": "browserstack-node-sdk playwright test --config=playwright.config.ts",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
       "react-app/jest"
+    ],
+    "overrides": [
+      {
+        "files": [
+          "tests/**/*.ts"
+        ],
+        "rules": {
+          "testing-library/prefer-screen-queries": "off",
+          "jest/no-conditional-expect": "off",
+          "jest/valid-title": "off"
+        }
+      }
     ]
   },
   "browserslist": {

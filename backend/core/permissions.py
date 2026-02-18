@@ -1,5 +1,7 @@
 from rest_framework import permissions
 
+from core.services.permissions import is_board_admin
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     Кастомний дозвіл. Дозволяє повний доступ (запис/редагування) лише власнику об'єкта.
@@ -11,4 +13,10 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
 
         # Дозволи на запис (PUT, POST, DELETE) дозволені лише власнику об'єкта
-        return obj.owner == request.user
+        if obj.owner == request.user:
+            return True
+
+        if request.method in ('PUT', 'PATCH'):
+            return is_board_admin(request.user, obj)
+
+        return False

@@ -1,89 +1,143 @@
-// src/App.tsx
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
-import { AuthScreen } from './screens/AuthScreen';
-import { ProfileScreen } from './screens/ProfileScreen';
-import { BoardsScreen } from './screens/BoardsScreen';
-import { BoardScreen } from './screens/BoardScreen';
-import { globalStyles } from './styles';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { I18nProvider } from './context/I18nContext';
+import { Layout } from './components/layout/Layout';
 
-// Компонент-перемикач: вирішує, який екран показати
-const Protected: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+// Redux
+import { useAppDispatch, useAppSelector } from './store/hooks';
+import { fetchMe } from './store/slices/authSlice';
+
+// Screens
+import { AuthScreen } from './screens/AuthScreen';
+import { LandingScreen } from './screens/LandingScreen';
+import { PrivacyPolicyScreen } from './screens/PrivacyPolicyScreen';
+import { ActivationScreen } from './screens/ActivationScreen';
+import { BoardListScreen } from './features/boards/BoardListScreen';
+import { BoardDetailScreen } from './features/boards/BoardDetailScreen';
+import { InviteScreen } from './features/boards/InviteScreen'; 
+import { ProfileScreen } from './screens/ProfileScreen';
+import { FaqScreen } from './screens/FaqScreen';
+import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { ResetPasswordConfirmScreen } from './screens/ResetPasswordConfirmScreen';
+import { MyCardsScreen } from './screens/MyCardsScreen';
+import { HelpScreen } from './screens/HelpScreen';
+import { CommunityScreen } from './screens/CommunityScreen';
+
+const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const { isAuthenticated, loading } = useAppSelector(state => state.auth);
+  const location = useLocation(); 
+  
+  if (loading && !isAuthenticated) return <div className="loading-state">Loading...</div>; 
+  
+  if (!isAuthenticated) return <Navigate to="/auth" state={{ from: location }} replace />;
+
+  return children;
 };
 
-const Header: React.FC = () => {
-  const { isAuthenticated, logout, user } = useAuth();
-  if (!isAuthenticated) return null;
+// Компонент-обгортка для ініціалізації
+const AppContent = () => {
+  const dispatch = useAppDispatch();
+  const { user, isAuthenticated } = useAppSelector(state => state.auth);
+  const homePath = isAuthenticated ? '/boards' : '/community';
+  
+  useEffect(() => {
+    // Якщо є токен, пробуємо завантажити профіль
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      dispatch(fetchMe());
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    const nextTheme = (user?.profile?.theme as string) || (typeof window !== 'undefined' ? window.localStorage.getItem('theme') : null) || 'dark';
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = nextTheme;
+    }
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('theme', nextTheme);
+    }
+  }, [user?.profile?.theme]);
+
   return (
-    <header style={{ background: '#026AA7', padding: '10px 0' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <Link to="/boards" style={{ color: 'white', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span role="img" aria-label="logo">📋</span> Boardly
-        </Link>
-        {/* залишаємо лише один пункт меню, щоб не дублювати “Дошки” */}
-        <nav style={{ display: 'flex', gap: 14 }}>
-          <Link to="/profile" style={{ color: 'white', fontWeight: 700, textDecoration: 'none' }}>Профіль</Link>
-        </nav>
-        <div style={{ marginLeft: 'auto', color: 'white', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontWeight: 600 }}>{user?.username}</span>
-          <button
-            onClick={logout}
-            style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
-          >
-            Вийти
-          </button>
-        </div>
-      </div>
-    </header>
+    <I18nProvider>
+      <Routes>
+        {/* Публічні маршрути */}
+        <Route path="/" element={<Navigate to={homePath} replace />} />
+        <Route path="/landing" element={<LandingScreen />} />
+        <Route path="/auth" element={<AuthScreen />} />
+        <Route path="/login" element={<Navigate to="/auth" replace />} />
+        <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+        <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyScreen />} />
+        <Route path="/activate/:uid/:token" element={<ActivationScreen />} />
+
+        {/* Захищені маршрути */}
+        <Route element={<Layout />}>
+          <Route path="/help" element={<HelpScreen />} />
+          <Route path="/support" element={<Navigate to="/help" replace />} />
+          <Route path="/community" element={<CommunityScreen />} />
+          <Route path="/get-started" element={<Navigate to="/community" replace />} />
+          <Route 
+            path="/boards" 
+            element={
+              <ProtectedRoute>
+                <BoardListScreen />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/boards/:id" 
+            element={
+              <ProtectedRoute>
+                <BoardDetailScreen />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/invite/:link" 
+            element={
+              <ProtectedRoute>
+                <InviteScreen />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/my-cards" 
+            element={
+              <ProtectedRoute>
+                <MyCardsScreen />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/faq" 
+            element={
+              <ProtectedRoute>
+                <FaqScreen />
+              </ProtectedRoute>
+            } 
+          />
+        </Route>
+
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <ProfileScreen />
+            </ProtectedRoute>
+          } 
+        />
+
+        <Route path="*" element={<Navigate to={homePath} replace />} />
+      </Routes>
+    </I18nProvider>
   );
 };
 
 export default function App() {
   return (
-    <>
-      {/* Підключаємо глобальні стилі */}
-      <style>{globalStyles}</style>
-
-      <ThemeProvider>
-        <AuthProvider>
-          <BrowserRouter>
-            <Header />
-            <Routes>
-              <Route path="/login" element={<AuthScreen />} />
-              <Route
-                path="/profile"
-                element={
-                  <Protected>
-                    <ProfileScreen />
-                  </Protected>
-                }
-              />
-              <Route
-                path="/boards"
-                element={
-                  <Protected>
-                    <BoardsScreen />
-                  </Protected>
-                }
-              />
-              <Route
-                path="/boards/:id"
-                element={
-                  <Protected>
-                    <BoardScreen />
-                  </Protected>
-                }
-              />
-              <Route path="*" element={<Navigate to="/boards" replace />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
-      </ThemeProvider>
-    </>
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
