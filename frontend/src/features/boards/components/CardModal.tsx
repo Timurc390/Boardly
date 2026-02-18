@@ -1,11 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, Board, User } from '../../../types';
 import { CardHeader } from './card_parts/CardHeader';
-import { CardLabels } from './card_parts/CardLabels';
 import { CardDescription } from './card_parts/CardDescription';
 import { CardChecklists } from './card_parts/CardChecklists';
 import { CardComments } from './card_parts/CardComments';
-import { CardSidebar } from './card_parts/CardSidebar';
 
 import { useAppSelector } from '../../../store/hooks';
 import { useI18n } from '../../../context/I18nContext';
@@ -52,6 +50,35 @@ const formatDateForInput = (isoString?: string | null) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
+const COLORBLIND_STORAGE_KEY = 'boardly_card_colorblind_mode';
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+const getFocusableElements = (container: HTMLElement | null) => {
+  if (!container) return [] as HTMLElement[];
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
+};
+
+const COLORBLIND_COVER_MAP: Record<string, string> = {
+  '#216e4e': '#1d70b8',
+  '#7f5f01': '#b26a00',
+  '#9e4c00': '#8b3fb9',
+  '#ae2e24': '#005ea5',
+  '#803fa5': '#b25d00',
+  '#1558bc': '#006b6b',
+  '#206a83': '#5f3dc4',
+  '#4c6b1f': '#0b7a75',
+  '#943d73': '#7a2b8f',
+  '#63666b': '#2b6cb0'
+};
+
 export const CardModal: React.FC<CardModalProps> = ({ 
   card, board, isOpen, onClose, 
   onCopyLink, onUpdateCard, onDeleteCard, onCopyCard,
@@ -64,12 +91,16 @@ export const CardModal: React.FC<CardModalProps> = ({
   const { user } = useAppSelector(state => state.auth);
   const { t } = useI18n();
   
-  const [isEditingDueDate, setIsEditingDueDate] = useState(false);
   const [dueDateDate, setDueDateDate] = useState('');
   const [dueDateTime, setDueDateTime] = useState('');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [isCoverMenuOpen, setIsCoverMenuOpen] = useState(false);
-  const [activePopover, setActivePopover] = useState<'labels' | 'members' | 'attachments' | 'checklist' | null>(null);
+  const [isColorblindMode, setIsColorblindMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(COLORBLIND_STORAGE_KEY) === '1';
+  });
+  const [activePopover, setActivePopover] = useState<'labels' | 'members' | 'attachments' | 'checklist' | 'dueDate' | null>(null);
   const [labelQuery, setLabelQuery] = useState('');
   const [memberQuery, setMemberQuery] = useState('');
   const [newLabelName, setNewLabelName] = useState('');
@@ -78,9 +109,10 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [checklistCopyFromId, setChecklistCopyFromId] = useState<number | null>(null);
   const [isCreatingChecklist, setIsCreatingChecklist] = useState(false);
-  const labelsSectionRef = useRef<HTMLDivElement | null>(null);
+  const [headerCloseSignal, setHeaderCloseSignal] = useState(0);
   const checklistsSectionRef = useRef<HTMLDivElement | null>(null);
-  const coverSectionRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
   const labelColorOptions = [
     '#61bd4f',
     '#f2d600',
@@ -93,6 +125,18 @@ export const CardModal: React.FC<CardModalProps> = ({
     '#ff78cb',
     '#344563'
   ];
+  const coverColorOptions = [
+    '#216E4E',
+    '#7F5F01',
+    '#9E4C00',
+    '#AE2E24',
+    '#803FA5',
+    '#1558BC',
+    '#206A83',
+    '#4C6B1F',
+    '#943D73',
+    '#63666B'
+  ];
 
   const membership = board.members?.find(m => m.user.id === user?.id);
   const role = membership?.role;
@@ -101,45 +145,164 @@ export const CardModal: React.FC<CardModalProps> = ({
   const isDeveloper = role === 'developer';
   const isViewer = role === 'viewer';
   const isCardMember = card.members?.some(u => u.id === user?.id);
-  const canEditCard = !!(isOwner || isAdmin || (isDeveloper && board.dev_can_edit_assigned_cards && isCardMember));
-  const canArchiveCard = !!(isOwner || isAdmin || (isDeveloper && board.dev_can_archive_assigned_cards && isCardMember));
+  const developerCanEdit = board.dev_can_edit_assigned_cards ?? true;
+  const developerCanArchive = board.dev_can_archive_assigned_cards ?? true;
+  const developerCanJoin = board.dev_can_join_card ?? true;
+  const canEditTarget = isCardMember || !card.members || card.members.length === 0;
+  const canEditCard = !!(isOwner || isAdmin || (isDeveloper && developerCanEdit && canEditTarget));
+  const canArchiveCard = !!(isOwner || isAdmin || (isDeveloper && developerCanArchive && canEditTarget));
   const canDeleteCard = !!(isOwner || isAdmin);
   const canManageMembers = !!(isOwner || isAdmin);
-  const canJoinCard = !!(canManageMembers || (isDeveloper && board.dev_can_join_card));
+  const canJoinCard = !!(canManageMembers || (isDeveloper && developerCanJoin));
   const canLeaveCard = !!isCardMember;
   const canComment = !!(isOwner || isAdmin || isDeveloper || isViewer);
-  const quickActionsDisabled = !canEditCard;
+  const quickActionsDisabled = !(canEditCard || isOwner || isAdmin || isDeveloper);
   const coverColor = card.card_color?.trim();
   const hasCover = !!coverColor;
   const coverMode = card.cover_size === 'full' ? 'full' : 'header';
 
+  const resolveCoverColor = (color?: string | null) => {
+    const normalized = (color || '').trim().toLowerCase();
+    if (!normalized) return color || '';
+    if (!isColorblindMode) return color || normalized;
+    return COLORBLIND_COVER_MAP[normalized] || color || normalized;
+  };
+  const displayCoverColor = resolveCoverColor(coverColor);
+
   useEffect(() => {
     if (!isOpen) {
       setIsQuickAddOpen(false);
+      setIsCommentsOpen(false);
       setIsCoverMenuOpen(false);
       setActivePopover(null);
       return;
     }
+    lastActiveElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     document.body.classList.add('modal-open');
     return () => {
       document.body.classList.remove('modal-open');
+      lastActiveElementRef.current?.focus();
+      lastActiveElementRef.current = null;
     };
   }, [isOpen]);
 
-  const startEditingDueDate = () => {
-    setIsCoverMenuOpen(false);
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialogNode = dialogRef.current;
+    if (!dialogNode) return;
+    const raf = window.requestAnimationFrame(() => {
+      const [firstFocusable] = getFocusableElements(dialogNode);
+      (firstFocusable || dialogNode).focus();
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialogNode = dialogRef.current;
+      const focusable = getFocusableElements(dialogNode);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogNode?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    const hasOpenPopover = isQuickAddOpen || isCoverMenuOpen || !!activePopover;
+    if (!hasOpenPopover) return;
+
+    const handleClickOutsidePopover = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      const interactiveSelector = [
+        '.card-add-popover',
+        '.card-detail-popover',
+        '.card-cover-menu',
+        '.card-quick-btn',
+        '.card-header-icon',
+        '.card-list-pill',
+        '.card-menu-dropdown',
+        '.card-menu-trigger',
+        '.checklist-create-popover .btn-primary'
+      ].join(', ');
+
+      if (target.closest(interactiveSelector)) return;
+
+      setIsQuickAddOpen(false);
+      setIsCoverMenuOpen(false);
+      setActivePopover(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutsidePopover);
+    document.addEventListener('touchstart', handleClickOutsidePopover);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsidePopover);
+      document.removeEventListener('touchstart', handleClickOutsidePopover);
+    };
+  }, [activePopover, isCoverMenuOpen, isQuickAddOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(COLORBLIND_STORAGE_KEY, isColorblindMode ? '1' : '0');
+  }, [isColorblindMode]);
+
+  const closeAllCardOverlays = useCallback((options: { keepComments?: boolean; keepHeaderMenus?: boolean } = {}) => {
     setIsQuickAddOpen(false);
+    setIsCoverMenuOpen(false);
     setActivePopover(null);
+    if (!options.keepComments) {
+      setIsCommentsOpen(false);
+    }
+    if (!options.keepHeaderMenus) {
+      setHeaderCloseSignal((value) => value + 1);
+    }
+  }, []);
+
+  const startEditingDueDate = () => {
+    closeAllCardOverlays();
     const formatted = formatDateForInput(card.due_date);
     if (formatted) {
       const [datePart, timePart] = formatted.split('T');
       setDueDateDate(datePart || '');
       setDueDateTime(timePart || '');
     } else {
-      setDueDateDate('');
-      setDueDateTime('');
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      setDueDateDate(`${year}-${month}-${day}`);
+      setDueDateTime(`${hours}:${minutes}`);
     }
-    setIsEditingDueDate(true);
+    setActivePopover('dueDate');
   };
 
   const saveDueDate = () => {
@@ -150,34 +313,15 @@ export const CardModal: React.FC<CardModalProps> = ({
     const time = dueDateTime || '12:00';
     const date = new Date(`${dueDateDate}T${time}`);
     onUpdateCard({ due_date: date.toISOString(), is_completed: false });
-    setIsEditingDueDate(false);
+    setActivePopover(null);
   };
 
   const removeDueDate = () => {
     onUpdateCard({ due_date: null, is_completed: false });
     setDueDateDate('');
     setDueDateTime('');
-    setIsEditingDueDate(false);
+    setActivePopover(null);
   };
-
-  const getOverdueText = (isoString?: string | null) => {
-    if (!isoString) return null;
-    const now = new Date();
-    const due = new Date(isoString);
-    if (now <= due) return null;
-
-    const diffMs = now.getTime() - due.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffDays > 0) return t('card.overdue.days', { count: String(diffDays) });
-    if (diffHours > 0) return t('card.overdue.hours', { count: String(diffHours) });
-    return t('card.overdue.minutes', { count: String(diffMins) });
-  };
-
-  const overdueText = !card.is_completed ? getOverdueText(card.due_date) : null;
-  const isOverdue = !!overdueText;
 
   const handleCoverModeChange = (mode: 'full' | 'header') => {
     if (!card.card_color) {
@@ -205,35 +349,29 @@ export const CardModal: React.FC<CardModalProps> = ({
   };
 
   const openCoverMenu = () => {
-    setIsEditingDueDate(false);
+    closeAllCardOverlays();
     setIsCoverMenuOpen(true);
-    setIsQuickAddOpen(false);
-    setActivePopover(null);
-    window.setTimeout(() => coverSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0);
   };
 
   const openChecklistPopover = () => {
-    setIsCoverMenuOpen(false);
-    setIsQuickAddOpen(false);
+    closeAllCardOverlays();
     setActivePopover('checklist');
     setNewChecklistTitle(getNextChecklistTitle());
     setChecklistCopyFromId(null);
   };
 
-  const closePopovers = () => {
-    setIsQuickAddOpen(false);
-    setIsCoverMenuOpen(false);
-    setActivePopover(null);
-  };
-
   const handleQuickAdd = () => {
-    setIsQuickAddOpen(prev => !prev);
-    setIsCoverMenuOpen(false);
-    setActivePopover(null);
+    setIsQuickAddOpen(prev => {
+      const next = !prev;
+      if (next) {
+        closeAllCardOverlays();
+      }
+      return next;
+    });
   };
 
   const handleQuickAddItem = (action: 'labels' | 'checklist' | 'members' | 'attachments') => {
-    setIsCoverMenuOpen(false);
+    closeAllCardOverlays();
     switch (action) {
       case 'labels':
         setActivePopover('labels');
@@ -250,12 +388,25 @@ export const CardModal: React.FC<CardModalProps> = ({
       default:
         break;
     }
-    setIsQuickAddOpen(false);
+  };
+
+  const handleToggleComments = () => {
+    setIsCommentsOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsQuickAddOpen(false);
+        setIsCoverMenuOpen(false);
+        setActivePopover(null);
+        setHeaderCloseSignal((value) => value + 1);
+      }
+      return next;
+    });
   };
 
   const labelIds = useMemo(() => new Set((card.labels || []).map(l => l.id)), [card.labels]);
   const isLabelsOpen = activePopover === 'labels';
   const isMembersOpen = activePopover === 'members';
+  const isDueDateOpen = activePopover === 'dueDate';
   const filteredLabels = useMemo(() => {
     if (!isLabelsOpen) return [];
     const q = labelQuery.trim().toLowerCase();
@@ -347,44 +498,106 @@ export const CardModal: React.FC<CardModalProps> = ({
     }
   };
 
-  const modalClassName = `modal-content card-modal ${hasCover ? `has-cover cover-${coverMode}` : ''}`;
-
+  const modalClassName = `modal-content card-modal ${hasCover ? `has-cover cover-${coverMode}` : ''} ${isColorblindMode ? 'colorblind' : ''}`;
+  const mainCardStyle = useMemo<React.CSSProperties>(
+    () => ({ ['--open-card-cover' as any]: displayCoverColor || '#2e79af' }),
+    [displayCoverColor]
+  );
   if (!isOpen || !user) return null;
 
   return (
     <div className="modal-overlay card-modal-overlay" onClick={onClose}>
-      <div className={modalClassName} onClick={e => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className={modalClassName}
+        role="dialog"
+        aria-modal="true"
+        aria-label={card.title}
+        tabIndex={-1}
+        onClick={e => e.stopPropagation()}
+      >
         {hasCover && (
-          <div className="card-cover-bar" style={{ background: coverColor }} />
+          <div className="card-cover-bar" style={{ background: displayCoverColor }} />
         )}
 
-        {(isQuickAddOpen || activePopover) && (
-          <button
-            type="button"
-            className="card-popover-overlay"
-            aria-label={t('common.close')}
-            onClick={closePopovers}
-          />
-        )}
-        
-        <CardHeader 
-          card={card} 
-          board={board} 
-          canEdit={canEditCard} 
-          onUpdateCard={onUpdateCard} 
-          onCopyLink={onCopyLink}
-          onCopyCard={onCopyCard}
-          onArchiveToggle={() => { if (canArchiveCard) onUpdateCard({ is_archived: !card.is_archived }); }}
-          onDeleteCard={() => { if (canDeleteCard) { onDeleteCard(); onClose(); } }}
-          onMoveCard={onMoveCard}
-          isCardMember={isCardMember}
-          onJoinCard={() => { if (canJoinCard) onJoinCard(); }}
-          onLeaveCard={() => { if (canLeaveCard) onLeaveCard(); }}
-          onClose={onClose} 
-        />
-
-        <div className="card-modal-body">
-          <div className="card-main-col">
+        <div className={`card-modal-body ${isCoverMenuOpen ? 'has-cover-menu' : ''} ${isCommentsOpen ? 'has-comments' : ''}`}>
+          {isCoverMenuOpen && (
+            <div className="card-cover-menu card-cover-floating">
+              <div className="card-cover-menu-header">
+                <span className="card-popover-title">{t('card.cover.title')}</span>
+                <button
+                  type="button"
+                  className="btn-icon card-popover-close"
+                  onClick={() => setIsCoverMenuOpen(false)}
+                  aria-label={t('common.close')}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="card-cover-section">
+                <div className="card-cover-section-title">{t('card.cover.size')}</div>
+                <div className="card-cover-size-options">
+                  <button
+                    type="button"
+                    className={`card-cover-size ${coverMode === 'full' ? 'active' : ''}`}
+                    onClick={() => handleCoverModeChange('full')}
+                  >
+                    <span className="card-cover-preview full" style={{ background: resolveCoverColor(card.card_color || '#6d6d6d') }} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`card-cover-size ${coverMode === 'header' ? 'active' : ''}`}
+                    onClick={() => handleCoverModeChange('header')}
+                  >
+                    <span className="card-cover-preview header" style={{ background: resolveCoverColor(card.card_color || '#6d6d6d') }} />
+                  </button>
+                </div>
+              </div>
+              <div className="card-cover-section">
+                <div className="card-cover-section-title">{t('card.cover.colors')}</div>
+                <div className="card-cover-swatches card-cover-swatches-wide">
+                  {coverColorOptions.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`card-cover-swatch ${card.card_color === color ? 'active' : ''}`}
+                      style={{ background: resolveCoverColor(color) }}
+                      onClick={() => onUpdateCard({ card_color: color })}
+                      aria-label={color}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`card-cover-accessibility ${isColorblindMode ? 'active' : ''}`}
+                onClick={() => setIsColorblindMode(prev => !prev)}
+              >
+                {isColorblindMode ? t('card.cover.colorblind.disable') : t('card.cover.colorblind.enable')}
+              </button>
+            </div>
+          )}
+          <div className="card-main-col" style={mainCardStyle}>
+            <CardHeader
+              card={card}
+              board={board}
+              canEdit={canEditCard}
+              onUpdateCard={onUpdateCard}
+              onCopyLink={onCopyLink}
+              onCopyCard={onCopyCard}
+              onArchiveToggle={() => { if (canArchiveCard) onUpdateCard({ is_archived: !card.is_archived }); }}
+              onDeleteCard={() => { if (canDeleteCard) { onDeleteCard(); onClose(); } }}
+              onMoveCard={onMoveCard}
+              isCardMember={isCardMember}
+              onJoinCard={() => { if (canJoinCard) onJoinCard(); }}
+              onLeaveCard={() => { if (canLeaveCard) onLeaveCard(); }}
+              onOpenCover={openCoverMenu}
+              closeSignal={headerCloseSignal}
+              onOpenHeaderMenu={() => {
+                closeAllCardOverlays({ keepHeaderMenus: true });
+              }}
+              onClose={onClose}
+            />
             <div className="card-quick-actions">
               <button
                 type="button"
@@ -395,6 +608,10 @@ export const CardModal: React.FC<CardModalProps> = ({
                 <span className="card-quick-icon">＋</span>
                 {t('card.quick.add')}
               </button>
+              <button type="button" className={`card-quick-btn ${isDueDateOpen ? 'active' : ''}`} onClick={startEditingDueDate} disabled={quickActionsDisabled}>
+                <span className="card-quick-icon">◷</span>
+                {t('card.quick.dates')}
+              </button>
               <button type="button" className="card-quick-btn" onClick={openChecklistPopover} disabled={quickActionsDisabled}>
                 <span className="card-quick-icon">☑</span>
                 {t('card.quick.checklist')}
@@ -402,7 +619,10 @@ export const CardModal: React.FC<CardModalProps> = ({
               <button
                 type="button"
                 className="card-quick-btn"
-                onClick={() => { setIsCoverMenuOpen(false); setActivePopover('members'); }}
+                onClick={() => {
+                  closeAllCardOverlays();
+                  setActivePopover('members');
+                }}
                 disabled={quickActionsDisabled}
               >
                 <span className="card-quick-icon">👥</span>
@@ -534,7 +754,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     className="form-input"
                     value={newChecklistTitle}
                     onChange={e => setNewChecklistTitle(e.target.value)}
-                    placeholder={t('checklist.titlePlaceholder')}
+                    placeholder={t('checklist.nameLabel')}
                     autoFocus
                   />
                 </label>
@@ -568,10 +788,54 @@ export const CardModal: React.FC<CardModalProps> = ({
                 </button>
               </div>
             )}
-            {activePopover === 'members' && (
-              <div className="card-detail-popover">
+            {isDueDateOpen && (
+              <div className="card-detail-popover card-due-date-popover">
                 <div className="card-popover-header">
-                  <div className="card-popover-title">{t('members.title')}</div>
+                  <div className="card-popover-title">{t('card.dueDate')}</div>
+                  <button
+                    type="button"
+                    className="btn-icon card-popover-close"
+                    onClick={() => setActivePopover(null)}
+                    aria-label={t('common.close')}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <label className="checklist-create-field">
+                  <span className="checklist-create-label">{t('card.dueDate')}</span>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={dueDateDate}
+                    onChange={e => setDueDateDate(e.target.value)}
+                  />
+                </label>
+                <label className="checklist-create-field">
+                  <span className="checklist-create-label">{t('card.quick.dates')}</span>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={dueDateTime}
+                    onChange={e => setDueDateTime(e.target.value)}
+                  />
+                </label>
+                <div className="card-due-date-actions">
+                  <button type="button" className="btn-primary btn-sm" onClick={saveDueDate}>
+                    {t('common.save')}
+                  </button>
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => setActivePopover(null)}>
+                    {t('common.cancel')}
+                  </button>
+                  <button type="button" className="btn-secondary btn-sm" onClick={removeDueDate}>
+                    {t('card.dueDateRemove')}
+                  </button>
+                </div>
+              </div>
+            )}
+            {activePopover === 'members' && (
+              <div className="card-detail-popover card-members-popover">
+                <div className="card-popover-header">
+                  <div className="card-popover-title">{t('members.addListTitle')}</div>
                   <button
                     type="button"
                     className="btn-icon card-popover-close"
@@ -582,22 +846,31 @@ export const CardModal: React.FC<CardModalProps> = ({
                   </button>
                 </div>
                 <input
-                  className="form-input card-popover-search"
-                  placeholder={t('filters.membersLabel')}
+                  className="form-input card-popover-search card-members-popover-search"
+                  placeholder={t('members.searchParticipants')}
                   value={memberQuery}
                   onChange={e => setMemberQuery(e.target.value)}
                 />
-                <div className="card-popover-list">
+                <div className="card-members-popover-section-title">{t('members.boardMembersTitle')}</div>
+                <div className="card-popover-list card-members-popover-list">
                   {filteredMembers.map(member => {
                     const isAssigned = card.members?.some(m => m.id === member.id);
                     const label = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.username || member.email;
                     const initial = (label?.[0] || '?').toUpperCase();
                     const memberRole = board.members?.find(m => m.user.id === member.id)?.role;
+                    const rawAvatar = member.profile?.avatar_url || member.profile?.avatar || '';
+                    const avatarSrc = rawAvatar
+                      ? (rawAvatar.startsWith('http') || rawAvatar.startsWith('data:')
+                        ? rawAvatar
+                        : rawAvatar.startsWith('/')
+                          ? rawAvatar
+                          : `/${rawAvatar}`)
+                      : '';
                     return (
                       <button
                         key={member.id}
                         type="button"
-                        className={`card-popover-item ${isAssigned ? 'active' : ''}`}
+                        className={`card-popover-item card-members-popover-item ${isAssigned ? 'active' : ''}`}
                         onClick={() => {
                           if (!canManageMembers) return;
                           if (!isAssigned && memberRole === 'viewer') {
@@ -608,12 +881,25 @@ export const CardModal: React.FC<CardModalProps> = ({
                           else onAddMember(member.id);
                         }}
                       >
-                        <span className="card-popover-avatar">{initial}</span>
+                        <span className="card-popover-avatar card-members-popover-avatar">
+                          {avatarSrc ? (
+                            <img
+                              src={avatarSrc}
+                              alt={label}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=525867&color=ffffff&size=64`;
+                              }}
+                            />
+                          ) : (
+                            initial
+                          )}
+                        </span>
                         <div className="card-popover-member">
                           <div className="card-popover-member-name">{label}</div>
-                          {member.email && <div className="card-popover-member-email">{member.email}</div>}
                         </div>
-                        <span className="card-popover-check">{isAssigned ? '✓' : ''}</span>
                       </button>
                     );
                   })}
@@ -666,17 +952,6 @@ export const CardModal: React.FC<CardModalProps> = ({
               </div>
             )}
 
-            <div ref={labelsSectionRef}>
-              <CardLabels 
-                card={card} 
-                canEdit={canEditCard}
-                startEditingDueDate={startEditingDueDate}
-                isOverdue={isOverdue}
-                overdueText={overdueText}
-                onOpenLabelsPopover={canEditCard ? () => { setIsCoverMenuOpen(false); setActivePopover('labels'); } : undefined}
-              />
-            </div>
-
             <CardDescription 
               card={card} 
               canEdit={canEditCard} 
@@ -694,53 +969,34 @@ export const CardModal: React.FC<CardModalProps> = ({
                 onUpdateChecklistItem={onUpdateChecklistItem}
               />
             </div>
-          </div>
-
-          <div className="card-right-col">
-            <CardComments 
-              card={card} 
-              user={user} 
-              onAddComment={onAddComment} 
-              onUpdateComment={onUpdateComment}
-              onDeleteComment={onDeleteComment}
-              canEditComment={(comment) => comment.author?.id === user?.id}
-              canDeleteComment={() => canDeleteCard}
-              canEdit={canComment}
-            />
-
-            <div ref={coverSectionRef}>
-              <CardSidebar 
-                card={card} 
-                canEdit={canEditCard} 
-                canArchive={canArchiveCard}
-                canDelete={canDeleteCard}
-                canManageMembers={canManageMembers}
-                canJoinCard={canJoinCard}
-                canLeaveCard={canLeaveCard}
-                isCardMember={isCardMember} 
-                onJoinCard={onJoinCard} 
-                onLeaveCard={onLeaveCard} 
-                onRemoveMember={onRemoveMember}
-                startEditingDueDate={startEditingDueDate}
-                onCopyCard={onCopyCard}
-                onUpdateCard={onUpdateCard}
-                onDeleteCard={() => { if (canDeleteCard) { onDeleteCard(); onClose(); } }} 
-                isEditingDueDate={isEditingDueDate}
-                dueDateDate={dueDateDate}
-                dueDateTime={dueDateTime}
-                setDueDateDate={setDueDateDate}
-                setDueDateTime={setDueDateTime}
-                saveDueDate={saveDueDate}
-                removeDueDate={removeDueDate}
-                closeDueDateEdit={() => setIsEditingDueDate(false)}
-                isCoverMenuOpen={isCoverMenuOpen}
-                onToggleCoverMenu={() => setIsCoverMenuOpen(prev => !prev)}
-                coverMode={coverMode}
-                onCoverModeChange={handleCoverModeChange}
-                onOpenCover={openCoverMenu}
-              />
+            <div className="card-main-footer">
+              <button
+                type="button"
+                className={`card-comments-launch ${isCommentsOpen ? 'active' : ''}`}
+                onClick={handleToggleComments}
+              >
+                <span className="card-comments-launch-icon">💬</span>
+                <span>{t('comments.title')}</span>
+                <span aria-hidden="true">→</span>
+              </button>
             </div>
           </div>
+
+          {isCommentsOpen && (
+            <div className="card-comments-col">
+              <CardComments
+                card={card}
+                user={user}
+                onAddComment={onAddComment}
+                onUpdateComment={onUpdateComment}
+                onDeleteComment={onDeleteComment}
+                canEditComment={(comment) => comment.author?.id === user?.id}
+                canDeleteComment={() => canDeleteCard}
+                canEdit={canComment}
+                onClose={() => setIsCommentsOpen(false)}
+              />
+            </div>
+          )}
         </div>
 
       </div>

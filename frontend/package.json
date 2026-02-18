@@ -35,8 +35,14 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
+    "qa:public": "npm run lint && npm run test:mobile:public && npm run test:desktop:smoke && npm run build",
+    "qa:local": "npm run lint && npm run test:mobile:smoke && npm run test:desktop:smoke && npm run build",
     "test": "react-scripts test",
     "test:mobile": "playwright test",
+    "test:mobile:public": "playwright test tests/public-mobile-pages.spec.ts --workers=1",
+    "test:mobile:smoke": "playwright test tests/public-mobile-pages.spec.ts tests/mobile-ui.spec.ts --workers=1",
+    "test:desktop:smoke": "playwright test tests/desktop-smoke.spec.ts tests/auth-smoke.spec.ts --workers=1 --project=desktop-1920",
     "test:mobile:report": "playwright show-report",
     "test:mobile:bs": "browserstack-node-sdk playwright test --config=playwright.config.ts",
     "eject": "react-scripts eject"
@@ -45,6 +51,18 @@
     "extends": [
       "react-app",
       "react-app/jest"
+    ],
+    "overrides": [
+      {
+        "files": [
+          "tests/**/*.ts"
+        ],
+        "rules": {
+          "testing-library/prefer-screen-queries": "off",
+          "jest/no-conditional-expect": "off",
+          "jest/valid-title": "off"
+        }
+      }
     ]
   },
   "browserslist": {

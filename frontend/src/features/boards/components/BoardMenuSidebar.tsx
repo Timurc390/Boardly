@@ -1,10 +1,26 @@
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { LanguageSelect } from '../../../components/LanguageSelect';
 import { useI18n } from '../../../context/I18nContext';
 import { Board, Card, List } from '../../../types';
 
 type BoardMember = NonNullable<Board['members']>[number];
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+const getFocusableElements = (container: HTMLElement | null) => {
+  if (!container) return [] as HTMLElement[];
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
+};
 
 type BackgroundOption = {
   key: string;
@@ -101,90 +117,177 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
   onDeleteCard
 }) => {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    lastActiveElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const raf = window.requestAnimationFrame(() => {
+      const [firstFocusable] = getFocusableElements(dialogRef.current);
+      (firstFocusable || dialogRef.current)?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements(dialogRef.current);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      window.cancelAnimationFrame(raf);
+      lastActiveElementRef.current?.focus();
+      lastActiveElementRef.current = null;
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  return (
+  const sidebarNode = (
     <div className="menu-sidebar-overlay" onClick={onClose}>
-      <div className="menu-sidebar" onClick={e => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="menu-sidebar"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="menu-header">
-          {activeTab !== 'main' && <button className="btn-icon" onClick={() => onTabChange('main')}>←</button>}
-          <h3>{t('board.menu')}</h3>
-          <button className="btn-icon" onClick={onClose}>✕</button>
+          {activeTab !== 'main' && (
+            <button type="button" className="btn-icon" onClick={() => onTabChange('main')} aria-label={t('community.back')}>
+              ←
+            </button>
+          )}
+          <h3 id={titleId}>{t('board.menu')}</h3>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label={t('common.close')}>✕</button>
         </div>
         <div className="menu-content">
           {activeTab === 'main' && (
-            <>
-              <ul className="menu-list">
-                {canEditBoard && (
-                  <li className="menu-list-item" onClick={() => onTabChange('background')}>
-                    <span className="menu-item-icon">🖼️</span>
-                    <span>{t('board.menu.changeBackground')}</span>
-                  </li>
-                )}
-                <li className="menu-list-item" onClick={() => onTabChange('members')}>
-                  <span className="menu-item-icon">👥</span>
-                  <span>{t('board.menu.members')}</span>
-                </li>
-                {canEditBoard && (
-                  <li className="menu-list-item" onClick={() => onTabChange('permissions')}>
-                    <span className="menu-item-icon">🛡️</span>
-                    <span>{t('permissions.title')}</span>
-                  </li>
-                )}
-                {canEditBoard && (
-                  <li className="menu-list-item" onClick={() => onTabChange('archived')}>
-                    <span className="menu-item-icon">🗄️</span>
-                    <span>{t('board.menu.archived')}</span>
-                  </li>
-                )}
-              </ul>
-              <div className="menu-divider"></div>
-              <div className="menu-invite">
-                <h4 className="menu-section-title">{t('board.menu.inviteTitle')}</h4>
-                <div className="menu-invite-row">
-                  <input className="form-input" readOnly value={inviteLink} style={{ fontSize: '12px', padding: '6px' }} />
-                  <button
-                    className="btn-primary"
-                    style={{ width: 'auto', padding: '6px 12px' }}
-                    onClick={onInvite}
-                    disabled={!inviteLink || !canManageMembers}
-                  >
-                    {t('board.menu.inviteTitle')}
-                  </button>
-                </div>
-                {!canManageMembers && (
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-                    {t('members.permissionsHint')}
-                  </div>
-                )}
-              </div>
-              <div className="menu-divider"></div>
-              {(canEditBoard || canLeaveBoard) && (
-                <ul className="menu-list">
+            <div className="menu-main-layout">
+              <section className="menu-group">
+                <h4 className="menu-group-title">{t('board.menu')}</h4>
+                <ul className="menu-list" role="menu" aria-label={t('board.menu')}>
                   {canEditBoard && (
-                    <li className="menu-list-item" onClick={onArchiveToggle}>
-                      <span className="menu-item-icon">📦</span>
-                      <span>{board.is_archived ? t('board.unarchive') : t('board.archive')}</span>
+                    <li>
+                      <button type="button" className="menu-list-item" onClick={() => onTabChange('background')} role="menuitem">
+                        <span className="menu-item-icon">🖼️</span>
+                        <span>{t('board.menu.changeBackground')}</span>
+                        <span className="menu-list-item-chevron">›</span>
+                      </button>
                     </li>
                   )}
-                  {isOwner ? (
-                    <li className="menu-list-item menu-list-item-danger" onClick={onDeleteBoard}>
-                      <span className="menu-item-icon">🗑️</span>
-                      <span>{t('board.delete')}</span>
+                  <li>
+                    <button type="button" className="menu-list-item" onClick={() => onTabChange('members')} role="menuitem">
+                      <span className="menu-item-icon">👥</span>
+                      <span>{t('board.menu.members')}</span>
+                      <span className="menu-list-item-chevron">›</span>
+                    </button>
+                  </li>
+                  {canEditBoard && (
+                    <li>
+                      <button type="button" className="menu-list-item" onClick={() => onTabChange('permissions')} role="menuitem">
+                        <span className="menu-item-icon">🛡️</span>
+                        <span>{t('permissions.title')}</span>
+                        <span className="menu-list-item-chevron">›</span>
+                      </button>
                     </li>
-                  ) : canLeaveBoard ? (
-                    <li className="menu-list-item menu-list-item-danger" onClick={onLeaveBoard}>
-                      <span className="menu-item-icon">🚪</span>
-                      <span>{t('board.leave')}</span>
+                  )}
+                  {canEditBoard && (
+                    <li>
+                      <button type="button" className="menu-list-item" onClick={() => onTabChange('archived')} role="menuitem">
+                        <span className="menu-item-icon">🗄️</span>
+                        <span>{t('board.menu.archived')}</span>
+                        <span className="menu-list-item-chevron">›</span>
+                      </button>
                     </li>
-                  ) : null}
+                  )}
                 </ul>
+              </section>
+
+              <section className="menu-group">
+                <h4 className="menu-group-title">{t('board.menu.inviteTitle')}</h4>
+                <div className="menu-invite">
+                  <div className="menu-invite-row">
+                    <input className="form-input" readOnly value={inviteLink} aria-label={t('board.menu.inviteTitle')} />
+                    <button
+                      type="button"
+                      className="btn-primary menu-invite-btn"
+                      onClick={onInvite}
+                      disabled={!inviteLink || !canManageMembers}
+                    >
+                      {t('board.menu.inviteTitle')}
+                    </button>
+                  </div>
+                  {!canManageMembers && (
+                    <div className="menu-invite-note">
+                      {t('members.permissionsHint')}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {(canEditBoard || canLeaveBoard) && (
+                <section className="menu-group">
+                  <ul className="menu-list">
+                    {canEditBoard && (
+                      <li>
+                        <button type="button" className="menu-list-item" onClick={onArchiveToggle}>
+                          <span className="menu-item-icon">📦</span>
+                          <span>{board.is_archived ? t('board.unarchive') : t('board.archive')}</span>
+                        </button>
+                      </li>
+                    )}
+                    {isOwner ? (
+                      <li>
+                        <button type="button" className="menu-list-item menu-list-item-danger" onClick={onDeleteBoard}>
+                          <span className="menu-item-icon">🗑️</span>
+                          <span>{t('board.delete')}</span>
+                        </button>
+                      </li>
+                    ) : canLeaveBoard ? (
+                      <li>
+                        <button type="button" className="menu-list-item menu-list-item-danger" onClick={onLeaveBoard}>
+                          <span className="menu-item-icon">🚪</span>
+                          <span>{t('board.leave')}</span>
+                        </button>
+                      </li>
+                    ) : null}
+                  </ul>
+                </section>
               )}
-              <div className="menu-divider"></div>
-              <div className="menu-nav">
-                <h4 className="menu-section-title">{t('nav.menu')}</h4>
-                <div className="menu-list">
+
+              <section className="menu-group menu-nav">
+                <h4 className="menu-group-title">{t('nav.menu')}</h4>
+                <div className="menu-list menu-nav-list">
                   <Link to="/boards" className="menu-list-item" onClick={onClose}>
                     {t('nav.board')}
                   </Link>
@@ -200,20 +303,23 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                   <Link to="/profile" className="menu-list-item" onClick={onClose}>
                     {t('nav.profile')}
                   </Link>
-                  <button
-                    type="button"
-                    className="menu-list-item menu-list-item-danger"
-                    onClick={() => { onLogout(); onClose(); }}
-                  >
-                    {t('nav.logout')}
-                  </button>
                 </div>
+              </section>
+
+              <section className="menu-group menu-sidebar-footer">
                 <div className="menu-language">
-                  <span className="menu-section-title">{t('nav.language')}</span>
+                  <span className="menu-group-title">{t('nav.language')}</span>
                   <LanguageSelect compact />
                 </div>
-              </div>
-            </>
+                <button
+                  type="button"
+                  className="menu-logout-btn"
+                  onClick={() => { onLogout(); onClose(); }}
+                >
+                  {t('nav.logout')}
+                </button>
+              </section>
+            </div>
           )}
           {activeTab === 'permissions' && (
             <div className="members-panel">
@@ -422,6 +528,8 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                           <img
                             src={getAvatarSrc(member.user.profile)}
                             alt={displayName}
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                               if (e.currentTarget.src !== fallbackAvatar) {
                                 e.currentTarget.src = fallbackAvatar;
@@ -441,6 +549,8 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                               <img
                                 src={getAvatarSrc(member.user.profile)}
                                 alt={displayName}
+                                loading="lazy"
+                                decoding="async"
                                 onError={(e) => {
                                   if (e.currentTarget.src !== fallbackAvatar) {
                                     e.currentTarget.src = fallbackAvatar;
@@ -456,6 +566,7 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
                               type="button"
                               className="btn-icon member-popover-close"
                               onClick={() => onToggleActiveMember(null)}
+                              aria-label={t('common.close')}
                             >
                               ✕
                             </button>
@@ -568,4 +679,10 @@ export const BoardMenuSidebar: React.FC<BoardMenuSidebarProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(sidebarNode, document.body);
+  }
+
+  return sidebarNode;
 };

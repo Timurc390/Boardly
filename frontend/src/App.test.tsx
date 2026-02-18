@@ -1,20 +1,19 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import App from './App';
-//import { AuthProvider } from './context/AuthContext';
-import { FaqScreen } from './screens/FaqScreen';
+import { getPrivacyPolicyContent } from './content/privacyPolicyContent';
 
-test('renders faq placeholder', () => {
-  render(
-    <MemoryRouter initialEntries={['/faq']}>
-        <Routes>
-          <Route element={<App />}>
-            <Route path="/faq" element={<FaqScreen />} />
-          </Route>
-        </Routes>
-    </MemoryRouter>
-  );
-  const title = screen.getByText(/FAQ/i);
-  expect(title).toBeInTheDocument();
+describe('privacy policy content', () => {
+  test('returns localized content for supported locale', () => {
+    const content = getPrivacyPolicyContent('uk');
+
+    expect(content.isTranslated).toBe(true);
+    expect(content.sections.length).toBeGreaterThan(0);
+    expect(content.navTitle).toBe('Політика конфіденційності');
+  });
+
+  test('falls back to english metadata for unsupported locale', () => {
+    const content = getPrivacyPolicyContent('it' as any);
+
+    expect(content.navTitle).toBe('Privacy Policy');
+    expect(content.effectiveDate).toBe('October 7, 2025');
+    expect(content.sections.length).toBeGreaterThan(0);
+  });
 });

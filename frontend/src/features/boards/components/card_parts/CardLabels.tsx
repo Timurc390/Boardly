@@ -34,7 +34,13 @@ export const CardLabels: React.FC<CardLabelsProps> = ({
           <div className="card-section-header">
             <h4 className="card-main-section-title">{t('labels.title')}</h4>
             {canEdit && (
-              <button type="button" className="card-section-add" onClick={onOpenLabelsPopover}>
+              <button
+                type="button"
+                className="card-section-add"
+                onClick={onOpenLabelsPopover}
+                aria-label={t('card.add.labels')}
+                title={t('card.add.labels')}
+              >
                 +
               </button>
             )}

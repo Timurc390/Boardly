@@ -156,7 +156,7 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
                     <div className="card-cover-menu">
                       <div className="card-cover-menu-header">
                         <span>{t('card.cover.title')}</span>
-                        <button type="button" className="btn-icon" onClick={onToggleCoverMenu}>✕</button>
+                        <button type="button" className="btn-icon" onClick={onToggleCoverMenu} aria-label={t('common.close')}>✕</button>
                       </div>
                       <div className="card-cover-section">
                         <div className="card-cover-section-title">{t('card.cover.size')}</div>

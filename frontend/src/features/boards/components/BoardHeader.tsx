@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LanguageSelect } from '../../../components/LanguageSelect';
 import { useI18n } from '../../../context/I18nContext';
@@ -41,6 +41,8 @@ interface BoardHeaderProps {
   onSearchChange: (value: string) => void;
   onOpenFilter: () => void;
   onOpenMenu: () => void;
+  onOpenMembersPanel: () => void;
+  closeSignal?: number;
 }
 
 export const BoardHeader: React.FC<BoardHeaderProps> = ({
@@ -76,14 +78,77 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
   filterQuery,
   onSearchChange,
   onOpenFilter,
-  onOpenMenu
+  onOpenMenu,
+  onOpenMembersPanel,
+  closeSignal = 0
 }) => {
   const { t } = useI18n();
+  const [isMembersPanelOpen, setIsMembersPanelOpen] = useState(false);
+  const [membersPanelQuery, setMembersPanelQuery] = useState('');
+  const currentUserEntry = headerMembers.find(item => item.user.id === currentUserId);
+  const currentUserProfile = currentUserEntry?.user;
+  const currentUserName = currentUserProfile ? getMemberDisplayName(currentUserProfile) : t('nav.profile');
+  const currentUserInitial = currentUserName.charAt(0).toUpperCase();
+  const favoriteActionLabel = board.is_favorite ? 'Remove from favorites' : 'Add to favorites';
+  const normalizedMembersQuery = membersPanelQuery.trim().toLowerCase();
+
+  const filteredHeaderMembers = useMemo(() => {
+    if (!normalizedMembersQuery) return headerMembers;
+    return headerMembers.filter(({ user }) => {
+      const name = getMemberDisplayName(user).toLowerCase();
+      const username = (user.username || '').toLowerCase();
+      const email = (user.email || '').toLowerCase();
+      return name.includes(normalizedMembersQuery)
+        || username.includes(normalizedMembersQuery)
+        || email.includes(normalizedMembersQuery);
+    });
+  }, [getMemberDisplayName, headerMembers, normalizedMembersQuery]);
+
+  const workspaceParticipants = useMemo(
+    () =>
+      filteredHeaderMembers.filter(entry =>
+        entry.user.id === ownerId || (entry.membership?.role || 'viewer') !== 'viewer'
+      ),
+    [filteredHeaderMembers, ownerId]
+  );
+  const guestParticipants = useMemo(
+    () =>
+      filteredHeaderMembers.filter(entry =>
+        entry.user.id !== ownerId && (entry.membership?.role || 'viewer') === 'viewer'
+      ),
+    [filteredHeaderMembers, ownerId]
+  );
+
+  useEffect(() => {
+    if (headerMemberId) {
+      setIsMembersPanelOpen(false);
+    }
+  }, [headerMemberId]);
+
+  useEffect(() => {
+    if (!isMembersPanelOpen) {
+      setMembersPanelQuery('');
+    }
+  }, [isMembersPanelOpen]);
+
+  useEffect(() => {
+    if (!closeSignal) return;
+    setIsMembersPanelOpen(false);
+    setMembersPanelQuery('');
+  }, [closeSignal]);
 
   return (
     <>
       {headerMemberId && (
         <div className="board-member-popover-overlay" onClick={onCloseHeaderMember} />
+      )}
+      {isMembersPanelOpen && (
+        <button
+          type="button"
+          className="board-members-panel-overlay"
+          onClick={() => setIsMembersPanelOpen(false)}
+          aria-label={t('common.close')}
+        />
       )}
       <div className="board-header">
         <div className="board-header-main">
@@ -93,35 +158,37 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
               onClick={onToggleGlobalMenu}
               aria-label={t('nav.menu')}
               aria-expanded={isGlobalMenuOpen}
+              aria-haspopup="menu"
             >
               ☰
             </button>
             {isGlobalMenuOpen && (
               <>
                 <div className="board-global-menu-overlay" onClick={onCloseGlobalMenu} />
-                <div className="board-global-menu-dropdown">
-                  <Link to="/boards" className="board-global-menu-item" onClick={onCloseGlobalMenu}>
+                <div className="board-global-menu-dropdown" role="menu" aria-label={t('nav.menu')}>
+                  <Link to="/boards" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
                     {t('nav.board')}
                   </Link>
-                  <Link to="/my-cards" className="board-global-menu-item" onClick={onCloseGlobalMenu}>
+                  <Link to="/my-cards" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
                     {t('nav.myCards')}
                   </Link>
-                  <Link to="/help" className="board-global-menu-item" onClick={onCloseGlobalMenu}>
+                  <Link to="/help" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
                     {t('nav.help')}
                   </Link>
-                  <Link to="/community" className="board-global-menu-item" onClick={onCloseGlobalMenu}>
+                  <Link to="/community" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
                     {t('nav.community')}
                   </Link>
                   <div className="board-global-menu-divider" />
                   <div className="board-global-menu-lang">
                     <LanguageSelect compact />
                   </div>
-                  <Link to="/profile" className="board-global-menu-item" onClick={onCloseGlobalMenu}>
+                  <Link to="/profile" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
                     {t('nav.profile')}
                   </Link>
                   <button
                     type="button"
                     className="board-global-menu-item board-global-menu-button"
+                    role="menuitem"
                     onClick={() => {
                       onLogout();
                       onCloseGlobalMenu();
@@ -133,10 +200,10 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
               </>
             )}
           </div>
-          <Link to="/boards" className="btn-icon board-back-btn">←</Link>
+          <Link to="/boards" className="btn-icon board-back-btn" aria-label={t('nav.board')}>←</Link>
           <div className="board-icon" aria-hidden="true">
             {!boardIconFailed ? (
-              <img src={boardIconSrc} alt="" onError={onBoardIconError} />
+              <img src={boardIconSrc} alt="" decoding="async" onError={onBoardIconError} />
             ) : (
               <span>{boardIconLetter}</span>
             )}
@@ -152,6 +219,9 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
           <button 
             onClick={onToggleFavorite} 
             className="btn-icon" 
+            aria-label={favoriteActionLabel}
+            title={favoriteActionLabel}
+            aria-pressed={board.is_favorite}
             style={{ color: board.is_favorite ? '#FFC107' : 'var(--text-secondary)', fontSize: '20px' }}
           >
             {board.is_favorite ? '★' : '☆'}
@@ -181,11 +251,14 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                       onClick={() => onToggleHeaderMember(isActive ? null : member.id)}
                       title={displayName}
                       aria-expanded={isActive}
+                      aria-label={`${displayName} (${roleLabel})`}
                     >
                       <div className="board-member-avatar">
                         <img
                           src={getAvatarSrc(member.profile)}
                           alt={displayName}
+                          loading="lazy"
+                          decoding="async"
                           onError={(e) => {
                             if (e.currentTarget.src !== fallbackAvatar) {
                               e.currentTarget.src = fallbackAvatar;
@@ -201,6 +274,8 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                             <img
                               src={getAvatarSrc(member.profile)}
                               alt={displayName}
+                              loading="lazy"
+                              decoding="async"
                               onError={(e) => {
                                 if (e.currentTarget.src !== fallbackAvatar) {
                                   e.currentTarget.src = fallbackAvatar;
@@ -217,6 +292,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                             type="button"
                             className="btn-icon member-popover-close"
                             onClick={onCloseHeaderMember}
+                            aria-label={t('common.close')}
                           >
                             ✕
                           </button>
@@ -274,6 +350,122 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                   <div className="board-member-avatar board-member-count">+{extraMembersCount}</div>
                 </div>
               )}
+              <div className="board-members-panel-wrapper">
+                <button
+                  type="button"
+                  className="board-members-panel-trigger"
+                  onClick={() => {
+                    onToggleHeaderMember(null);
+                    setIsMembersPanelOpen(prev => {
+                      const next = !prev;
+                      if (next) onOpenMembersPanel();
+                      return next;
+                    });
+                  }}
+                  aria-expanded={isMembersPanelOpen}
+                  aria-label={t('members.modalTitle')}
+                >
+                  +
+                </button>
+
+                {isMembersPanelOpen && (
+                  <div className="board-members-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="board-members-panel-header">
+                      <span>✦ {t('members.modalTitle')}</span>
+                      <button
+                        type="button"
+                        className="board-members-panel-close"
+                        onClick={() => setIsMembersPanelOpen(false)}
+                        aria-label={t('common.close')}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="board-members-panel-search">
+                      <span>⌕</span>
+                      <input
+                        value={membersPanelQuery}
+                        onChange={(e) => setMembersPanelQuery(e.target.value)}
+                        placeholder={`${t('common.search')}...`}
+                        aria-label={t('common.search')}
+                      />
+                    </div>
+
+                    <div className="board-members-panel-section">
+                      <div className="board-members-panel-label">{t('members.workspaceParticipants')}</div>
+                      <div className="board-members-panel-avatars">
+                        {workspaceParticipants.map(({ user: memberUser }) => {
+                          const name = getMemberDisplayName(memberUser);
+                          return (
+                            <button
+                              key={`workspace-${memberUser.id}`}
+                              type="button"
+                              className="board-members-panel-avatar"
+                              title={name}
+                              onClick={() => {
+                                setIsMembersPanelOpen(false);
+                                onToggleHeaderMember(memberUser.id);
+                              }}
+                            >
+                              <img
+                                src={getAvatarSrc(memberUser.profile)}
+                                alt={name}
+                                loading="lazy"
+                                decoding="async"
+                                onError={(e) => {
+                                  if (e.currentTarget.src !== fallbackAvatar) {
+                                    e.currentTarget.src = fallbackAvatar;
+                                  }
+                                }}
+                              />
+                            </button>
+                          );
+                        })}
+                        {workspaceParticipants.length === 0 && (
+                          <span className="board-members-panel-empty">—</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="board-members-panel-section">
+                      <div className="board-members-panel-label">{t('members.guests')}</div>
+                      <div className="board-members-panel-avatars">
+                        {guestParticipants.map(({ user: memberUser }) => {
+                          const name = getMemberDisplayName(memberUser);
+                          return (
+                            <button
+                              key={`guest-${memberUser.id}`}
+                              type="button"
+                              className="board-members-panel-avatar"
+                              title={name}
+                              onClick={() => {
+                                setIsMembersPanelOpen(false);
+                                onToggleHeaderMember(memberUser.id);
+                              }}
+                            >
+                              <img
+                                src={getAvatarSrc(memberUser.profile)}
+                                alt={name}
+                                loading="lazy"
+                                decoding="async"
+                                onError={(e) => {
+                                  if (e.currentTarget.src !== fallbackAvatar) {
+                                    e.currentTarget.src = fallbackAvatar;
+                                  }
+                                }}
+                              />
+                            </button>
+                          );
+                        })}
+                        {guestParticipants.length === 0 && (
+                          <span className="board-members-panel-empty">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <div className="board-header-search">
@@ -282,6 +474,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
               placeholder={t('toolbar.searchPlaceholder')}
               value={filterQuery}
               onChange={(e) => onSearchChange(e.target.value)}
+              aria-label={t('toolbar.searchPlaceholder')}
             />
           </div>
           <div className="board-header-actions">
@@ -294,12 +487,26 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
               <span className="board-header-action-label">{t('board.filters')}</span>
             </button>
             <button
-              className="btn-secondary board-header-action"
+              className="board-account-trigger"
               onClick={onOpenMenu}
+              aria-haspopup="menu"
               aria-label={t('board.menu')}
+              title={currentUserName}
             >
-              <span className="board-header-action-icon">•••</span>
-              <span className="board-header-action-label">{t('board.menu')}</span>
+              {currentUserProfile ? (
+                <img
+                  src={getAvatarSrc(currentUserProfile.profile)}
+                  alt={currentUserName}
+                  decoding="async"
+                  onError={(e) => {
+                    if (e.currentTarget.src !== fallbackAvatar) {
+                      e.currentTarget.src = fallbackAvatar;
+                    }
+                  }}
+                />
+              ) : (
+                <span>{currentUserInitial || boardIconLetter}</span>
+              )}
             </button>
           </div>
         </div>

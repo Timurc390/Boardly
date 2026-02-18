@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 // ВИПРАВЛЕНО: Імпортуємо Redux хуки та потрібну дію
 import { useAppDispatch } from '../store/hooks';
 import { activateUserAccount } from '../store/slices/authSlice';
@@ -7,7 +7,6 @@ import { useI18n } from '../context/I18nContext';
 
 export const ActivationScreen: React.FC = () => {
   const { uid, token } = useParams<{ uid: string; token: string }>();
-  const navigate = useNavigate();
   const dispatch = useAppDispatch(); // Отримуємо диспетчер
   const { t } = useI18n();
   

@@ -19,8 +19,9 @@ export const InviteScreen: React.FC = () => {
       try {
         const board = await joinBoard(link);
         navigate(`/boards/${board.id}`);
-      } catch (err: any) {
-        if (err.response?.data?.detail === 'already_member') {
+      } catch (err: unknown) {
+        const maybeError = err as { response?: { data?: { detail?: string } } };
+        if (maybeError.response?.data?.detail === 'already_member') {
             navigate('/boards');
             return;
         }
@@ -32,7 +33,7 @@ export const InviteScreen: React.FC = () => {
     };
 
     handleJoin();
-  }, [link, navigate]);
+  }, [link, navigate, t]);
 
   if (error) {
     return (

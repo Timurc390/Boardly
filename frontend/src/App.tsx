@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { I18nProvider } from './context/I18nContext';
 import { Layout } from './components/layout/Layout';
@@ -37,7 +37,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }
 // Компонент-обгортка для ініціалізації
 const AppContent = () => {
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector(state => state.auth);
+  const { user, isAuthenticated } = useAppSelector(state => state.auth);
+  const homePath = isAuthenticated ? '/boards' : '/community';
   
   useEffect(() => {
     // Якщо є токен, пробуємо завантажити профіль
@@ -61,7 +62,8 @@ const AppContent = () => {
     <I18nProvider>
       <Routes>
         {/* Публічні маршрути */}
-        <Route path="/" element={<LandingScreen />} />
+        <Route path="/" element={<Navigate to={homePath} replace />} />
+        <Route path="/landing" element={<LandingScreen />} />
         <Route path="/auth" element={<AuthScreen />} />
         <Route path="/login" element={<Navigate to="/auth" replace />} />
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
@@ -126,7 +128,7 @@ const AppContent = () => {
           } 
         />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={homePath} replace />} />
       </Routes>
     </I18nProvider>
   );

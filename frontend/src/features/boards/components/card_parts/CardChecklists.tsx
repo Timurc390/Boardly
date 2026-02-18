@@ -143,6 +143,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                         className="btn-icon checklist-item-delete"
                         onClick={() => onDeleteChecklistItem(item.id, checklist.id)}
                         title={t('common.delete')}
+                        aria-label={t('common.delete')}
                       >
                         🗑️
                       </button>

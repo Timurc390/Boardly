@@ -96,6 +96,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
   const hasChecklist = checklistStats.total > 0;
   const isChecklistComplete = hasChecklist && checklistStats.done === checklistStats.total;
   const hasMeta = hasDescription || commentCount > 0 || attachmentCount > 0 || hasChecklist || hasDueDate;
+
   return (
     <Draggable draggableId={`card-${card.id}`} index={index} isDragDisabled={!canEdit}>
       {(provided, snapshot) => (
@@ -104,6 +105,8 @@ const CardItemComponent: React.FC<CardItemProps> = ({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          aria-label={card.title}
+          aria-roledescription="draggable card"
           style={{
             ...provided.draggableProps.style,
           }}

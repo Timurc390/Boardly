@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { DragDropContext, Droppable, DropResult, DragStart } from '@hello-pangea/dnd';
 import { BoardColumn } from './components/BoardColumn';
 import { CardModal } from './components/CardModal';
 import { BoardHeader } from './components/BoardHeader';
@@ -11,6 +11,8 @@ import { Button } from '../../components/ui/Button';
 import { useI18n } from '../../context/I18nContext';
 import { Card, ActivityLog, Board, List } from '../../types';
 import { getBoardActivity } from './api';
+import { getEdgeAutoScrollDelta, parseEntityId } from './utils/dragAutoScroll';
+import { useOverlayManager } from './hooks/useOverlayManager';
 
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { 
@@ -67,7 +69,6 @@ export const BoardDetailScreen: React.FC = () => {
   const { currentBoard: board, loading: isLoading, error, isLive } = useAppSelector(state => state.board);
   const [isAddingList, setIsAddingList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeMenuTab, setActiveMenuTab] = useState<'main' | 'background' | 'members' | 'archived' | 'permissions'>('main');
   const [boardTitle, setBoardTitle] = useState('');
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -77,18 +78,41 @@ export const BoardDetailScreen: React.FC = () => {
   const [filterLabelId, setFilterLabelId] = useState<number | ''>('');
   const [filterDue, setFilterDue] = useState<'all' | 'overdue' | 'today' | 'week' | 'no_due'>('all');
   const [filterCompleted, setFilterCompleted] = useState<'all' | 'completed' | 'incomplete'>('all');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [bgUrlInput, setBgUrlInput] = useState('');
   const [isTouch, setIsTouch] = useState(false);
-  const [isGlobalMenuOpen, setIsGlobalMenuOpen] = useState(false);
   const [boardIconFailed, setBoardIconFailed] = useState(false);
   const [memberQuery, setMemberQuery] = useState('');
   const [activeMemberId, setActiveMemberId] = useState<number | null>(null);
-  const [headerMemberId, setHeaderMemberId] = useState<number | null>(null);
   const [activityMember, setActivityMember] = useState<BoardMember | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isActivityLoading, setIsActivityLoading] = useState(false);
+  const boardCanvasRef = useRef<HTMLDivElement | null>(null);
+  const dragPointerRef = useRef({ x: 0, y: 0 });
+  const draggingTypeRef = useRef<'list' | 'card' | null>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
+  const {
+    isMenuOpen,
+    isFilterOpen,
+    isGlobalMenuOpen,
+    openListMenuId,
+    headerMemberId,
+    headerOverlayCloseSignal,
+    isActivityOpen,
+    closeTransientOverlays,
+    toggleGlobalMenu,
+    closeGlobalMenu,
+    toggleListMenu,
+    closeListMenu,
+    toggleHeaderMember,
+    closeHeaderMember,
+    openSidebar,
+    closeSidebar,
+    openFilter,
+    closeFilter,
+    openActivity,
+    closeActivity,
+    prepareHeaderMembersPanel
+  } = useOverlayManager();
 
   const updateSearch = useCallback((value: string) => {
     const params = new URLSearchParams(location.search);
@@ -131,16 +155,70 @@ export const BoardDetailScreen: React.FC = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
-    const media = window.matchMedia('(pointer: coarse)');
-    const update = () => setIsTouch(media.matches);
+    const mediaNarrow = window.matchMedia('(max-width: 980px)');
+    const mediaCoarse = window.matchMedia('(pointer: coarse)');
+    const update = () => {
+      setIsTouch(mediaNarrow.matches || mediaCoarse.matches);
+    };
     update();
-    if (media.addEventListener) {
-      media.addEventListener('change', update);
-      return () => media.removeEventListener('change', update);
+    if (mediaNarrow.addEventListener && mediaCoarse.addEventListener) {
+      mediaNarrow.addEventListener('change', update);
+      mediaCoarse.addEventListener('change', update);
+      return () => {
+        mediaNarrow.removeEventListener('change', update);
+        mediaCoarse.removeEventListener('change', update);
+      };
     }
-    media.addListener(update);
-    return () => media.removeListener(update);
+    mediaNarrow.addListener(update);
+    mediaCoarse.addListener(update);
+    return () => {
+      mediaNarrow.removeListener(update);
+      mediaCoarse.removeListener(update);
+    };
   }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const touchClass = 'board-touch-active';
+    if (isTouch) {
+      document.body.classList.add(touchClass);
+    } else {
+      document.body.classList.remove(touchClass);
+    }
+    return () => {
+      document.body.classList.remove(touchClass);
+    };
+  }, [isTouch]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const fallbackOffset = 56;
+    const syncHeaderOffset = () => {
+      const header = document.querySelector('.board-detail-page .board-header') as HTMLElement | null;
+      const measured = header?.getBoundingClientRect().height ?? fallbackOffset;
+      const normalized = Math.max(fallbackOffset, Math.round(measured));
+      root.style.setProperty('--board-touch-header-offset', `${normalized}px`);
+    };
+
+    if (!isTouch) {
+      root.style.setProperty('--board-touch-header-offset', `${fallbackOffset}px`);
+      return;
+    }
+
+    const raf = window.requestAnimationFrame(syncHeaderOffset);
+    window.addEventListener('resize', syncHeaderOffset);
+    window.addEventListener('orientationchange', syncHeaderOffset);
+    window.visualViewport?.addEventListener('resize', syncHeaderOffset);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', syncHeaderOffset);
+      window.removeEventListener('orientationchange', syncHeaderOffset);
+      window.visualViewport?.removeEventListener('resize', syncHeaderOffset);
+      root.style.setProperty('--board-touch-header-offset', `${fallbackOffset}px`);
+    };
+  }, [isTouch, board?.id]);
 
   useEffect(() => {
     if (board) setBoardTitle(board.title);
@@ -149,27 +227,13 @@ export const BoardDetailScreen: React.FC = () => {
   const selectedCardId = selectedCard?.id;
 
   useEffect(() => {
-    if (!selectedCardId || !board?.lists) return;
-    const allCards = board.lists.flatMap(l => l.cards || []);
-    const foundCard = allCards.find(c => c.id === selectedCardId);
-    if (foundCard) {
-      setSelectedCard(foundCard);
-    }
-  }, [board, selectedCardId]);
+    closeTransientOverlays();
+  }, [board?.id, closeTransientOverlays]);
 
   useEffect(() => {
-    setHeaderMemberId(null);
-  }, [board?.id]);
-
-  useEffect(() => {
-    if (!board) return;
-    const params = new URLSearchParams(location.search);
-    const cardId = params.get('card');
-    if (!cardId) return;
-    const allCards = board.lists?.flatMap(l => l.cards || []) || [];
-    const foundCard = allCards.find(c => c.id === Number(cardId));
-    if (foundCard) setSelectedCard(foundCard);
-  }, [board, location.search]);
+    if (!selectedCardId) return;
+    closeTransientOverlays();
+  }, [closeTransientOverlays, selectedCardId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -179,7 +243,7 @@ export const BoardDetailScreen: React.FC = () => {
 
   const boardId = board?.id ?? 0;
   const isOwner = board?.owner?.id === user?.id;
-  const currentMembership = board?.members?.find(m => m.user.id === user?.id);
+  const currentMembership = board?.members?.find((m: BoardMember) => m.user.id === user?.id);
   const role = currentMembership?.role;
   const isAdmin = role === 'admin';
   const isDeveloper = role === 'developer';
@@ -199,12 +263,38 @@ export const BoardDetailScreen: React.FC = () => {
     }
     return false;
   }, [board?.dev_can_edit_assigned_cards, canEditBoard, isDeveloper, user?.id]);
-  const activeLists = useMemo(() => board?.lists?.filter(l => !l.is_archived) || [], [board?.lists]);
-  const archivedLists = useMemo(() => board?.lists?.filter(l => l.is_archived) || [], [board?.lists]);
-  const archivedCards = useMemo(
-    () => board?.lists?.flatMap(l => (l.cards || []).filter(c => c.is_archived)) || [],
+  const boardCards = useMemo(
+    () => board?.lists?.flatMap((list: List) => list.cards || []) || [],
     [board?.lists]
   );
+  const boardListsById = useMemo(() => {
+    const next = new Map<number, List>();
+    (board?.lists || []).forEach((list: List) => next.set(list.id, list));
+    return next;
+  }, [board?.lists]);
+  const activeLists = useMemo(() => board?.lists?.filter((l: List) => !l.is_archived) || [], [board?.lists]);
+  const archivedLists = useMemo(() => board?.lists?.filter((l: List) => l.is_archived) || [], [board?.lists]);
+  const archivedCards = useMemo(
+    () => board?.lists?.flatMap((l: List) => (l.cards || []).filter((c: Card) => c.is_archived)) || [],
+    [board?.lists]
+  );
+
+  useEffect(() => {
+    if (!selectedCardId) return;
+    const foundCard = boardCards.find((c: Card) => c.id === selectedCardId);
+    if (foundCard) {
+      setSelectedCard(foundCard);
+    }
+  }, [boardCards, selectedCardId]);
+
+  useEffect(() => {
+    if (!board) return;
+    const params = new URLSearchParams(location.search);
+    const cardId = params.get('card');
+    if (!cardId) return;
+    const foundCard = boardCards.find((c: Card) => c.id === Number(cardId));
+    if (foundCard) setSelectedCard(foundCard);
+  }, [board, boardCards, location.search]);
 
   const matchesFilters = useCallback((card: Card) => {
     if (filterQuery) {
@@ -250,11 +340,15 @@ export const BoardDetailScreen: React.FC = () => {
 
   const filteredLists = useMemo(() => {
     if (!isFiltering) return activeLists;
-    return activeLists.map(list => ({
+    return activeLists.map((list: List) => ({
       ...list,
-      cards: (list.cards || []).filter(c => !c.is_archived && matchesFilters(c))
+      cards: (list.cards || []).filter((c: Card) => !c.is_archived && matchesFilters(c))
     }));
   }, [activeLists, isFiltering, matchesFilters]);
+  const listOptions = useMemo(
+    () => filteredLists.map((item: List) => ({ id: item.id, title: item.title })),
+    [filteredLists]
+  );
 
   const handleCreateList = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,11 +376,11 @@ export const BoardDetailScreen: React.FC = () => {
   }, [dispatch, id, selectedCard, t]);
 
   const handleAddCard = useCallback((listId: number, title: string) => {
-    const list = board?.lists?.find(item => item.id === listId);
+    const list = boardListsById.get(listId);
     if (!list || !canAddCardToList(list)) return;
     const order = (list?.cards?.length || 0) + 1;
     dispatch(addCardAction({ listId, title, order }));
-  }, [board?.lists, canAddCardToList, dispatch]);
+  }, [boardListsById, canAddCardToList, dispatch]);
 
   const handleUpdateList = useCallback((listId: number, data: Partial<List>) => {
     dispatch(updateListOptimistic({ listId, data }));
@@ -304,15 +398,15 @@ export const BoardDetailScreen: React.FC = () => {
   }, [dispatch]);
 
   const handleArchiveAllCardsInList = useCallback((listId: number) => {
-    const list = board?.lists?.find(item => item.id === listId);
+    const list = boardListsById.get(listId);
     if (!list) return;
     if (!window.confirm(t('list.archiveAllCardsConfirm'))) return;
     (list.cards || [])
-      .filter(card => !card.is_archived)
-      .forEach(card => {
+      .filter((card: Card) => !card.is_archived)
+      .forEach((card: Card) => {
         dispatch(updateCardAction({ cardId: card.id, data: { is_archived: true } }));
       });
-  }, [board?.lists, dispatch, t]);
+  }, [boardListsById, dispatch, t]);
 
   const handleToggleCardComplete = useCallback((cardId: number, next: boolean) => {
     dispatch(updateCardAction({ cardId, data: { is_completed: next } }));
@@ -349,7 +443,85 @@ export const BoardDetailScreen: React.FC = () => {
     handleCopyInvite();
   }, [handleCopyInvite, inviteLink, t]);
 
+  const stopAutoScroll = useCallback(() => {
+    draggingTypeRef.current = null;
+    if (autoScrollRafRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
+    }
+  }, []);
+
+  const runAutoScroll = useCallback(() => {
+    const draggingType = draggingTypeRef.current;
+    if (!draggingType) {
+      autoScrollRafRef.current = null;
+      return;
+    }
+
+    const boardCanvas = boardCanvasRef.current;
+    const pointer = dragPointerRef.current;
+
+    if (boardCanvas) {
+      const rect = boardCanvas.getBoundingClientRect();
+      const horizontalDelta = getEdgeAutoScrollDelta(pointer.x, rect.left, rect.right, 92, 4, 28);
+      if (horizontalDelta !== 0) {
+        boardCanvas.scrollLeft += horizontalDelta;
+      }
+    }
+
+    if (draggingType === 'card') {
+      const target = document.elementFromPoint(pointer.x, pointer.y) as HTMLElement | null;
+      const listBody = target?.closest('.list-body') as HTMLElement | null;
+      if (listBody) {
+        const rect = listBody.getBoundingClientRect();
+        const verticalDelta = getEdgeAutoScrollDelta(pointer.y, rect.top, rect.bottom, 74, 4, 24);
+        if (verticalDelta !== 0) {
+          listBody.scrollTop += verticalDelta;
+        }
+      }
+    }
+
+    autoScrollRafRef.current = window.requestAnimationFrame(runAutoScroll);
+  }, []);
+
+  const startAutoScroll = useCallback((type: 'list' | 'card') => {
+    draggingTypeRef.current = type;
+    if (autoScrollRafRef.current !== null) return;
+    autoScrollRafRef.current = window.requestAnimationFrame(runAutoScroll);
+  }, [runAutoScroll]);
+
+  useEffect(() => {
+    const updatePointer = (x: number, y: number) => {
+      dragPointerRef.current = { x, y };
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      updatePointer(event.clientX, event.clientY);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0] || event.changedTouches[0];
+      if (!touch) return;
+      updatePointer(touch.clientX, touch.clientY);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, []);
+
+  useEffect(() => () => stopAutoScroll(), [stopAutoScroll]);
+
+  const onDragStart = useCallback((start: DragStart) => {
+    closeTransientOverlays({ keepSidebar: true, keepFilter: true, keepActivity: true });
+    startAutoScroll(start.type === 'list' ? 'list' : 'card');
+  }, [closeTransientOverlays, startAutoScroll]);
+
   const onDragEnd = useCallback((result: DropResult) => {
+    stopAutoScroll();
     const { destination, source, type, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
@@ -357,16 +529,18 @@ export const BoardDetailScreen: React.FC = () => {
     if (type === 'list') {
       if (!canEditBoard) return;
       dispatch(moveListOptimistic({ sourceIndex: source.index, destIndex: destination.index }));
-      const listId = Number(draggableId.replace('list-', ''));
+      const listId = parseEntityId(draggableId, 'list-');
+      if (!listId) return;
       dispatch(moveListAction({ listId, order: destination.index + 1 }));
       return;
     }
 
-    const cardId = Number(draggableId.replace('card-', ''));
-    const sourceListId = Number(source.droppableId.replace('list-', ''));
-    const destListId = Number(destination.droppableId.replace('list-', ''));
-    const card = board?.lists?.flatMap(l => l.cards || []).find(c => c.id === cardId);
-    const targetList = board?.lists?.find(l => l.id === destListId);
+    const cardId = parseEntityId(draggableId, 'card-');
+    const sourceListId = parseEntityId(source.droppableId, 'list-');
+    const destListId = parseEntityId(destination.droppableId, 'list-');
+    if (!cardId || !sourceListId || !destListId) return;
+    const card = boardCards.find((c: Card) => c.id === cardId);
+    const targetList = boardListsById.get(destListId);
     if (!card || !targetList) return;
     if (!canEditCard(card)) return;
     if (!canAddCardToList(targetList)) return;
@@ -383,7 +557,7 @@ export const BoardDetailScreen: React.FC = () => {
       listId: destListId,
       order: destination.index + 1
     }));
-  }, [board?.lists, canAddCardToList, canEditBoard, canEditCard, dispatch]);
+  }, [boardCards, boardListsById, canAddCardToList, canEditBoard, canEditCard, dispatch, stopAutoScroll]);
 
   const handleMoveList = useCallback((listId: number, fromIndex: number, toIndex: number) => {
     if (!canEditBoard) return;
@@ -394,8 +568,8 @@ export const BoardDetailScreen: React.FC = () => {
 
   const handleMoveCard = useCallback((cardId: number, sourceListId: number, destListId: number, destIndex: number) => {
     if (!canEditBoard) {
-      const card = board?.lists?.flatMap(l => l.cards || []).find(c => c.id === cardId);
-      const targetList = board?.lists?.find(l => l.id === destListId);
+      const card = boardCards.find((c: Card) => c.id === cardId);
+      const targetList = boardListsById.get(destListId);
       if (!card || !targetList) return;
       if (!canEditCard(card)) return;
       if (!canAddCardToList(targetList)) return;
@@ -403,7 +577,7 @@ export const BoardDetailScreen: React.FC = () => {
     if (destIndex < 0) return;
     dispatch(moveCardOptimistic({ cardId, sourceListId, destListId, newIndex: destIndex }));
     dispatch(moveCardAction({ cardId, listId: destListId, order: destIndex + 1 }));
-  }, [board?.lists, canAddCardToList, canEditBoard, canEditCard, dispatch]);
+  }, [boardCards, boardListsById, canAddCardToList, canEditBoard, canEditCard, dispatch]);
 
   const runBoardAction = useCallback(async (action: any) => {
     try {
@@ -416,7 +590,7 @@ export const BoardDetailScreen: React.FC = () => {
 
   const handleUpdateCardLabels = useCallback((labelIds: number[]) => {
     if (!selectedCard) return;
-    const nextLabels = (board?.labels || []).filter(label => labelIds.includes(label.id));
+    const nextLabels = (board?.labels || []).filter((label: NonNullable<Board['labels']>[number]) => labelIds.includes(label.id));
     setSelectedCard(prev => (prev ? { ...prev, labels: nextLabels } : prev));
     void runBoardAction(updateCardAction({ cardId: selectedCard.id, data: { label_ids: labelIds } }));
   }, [board?.labels, runBoardAction, selectedCard]);
@@ -460,7 +634,7 @@ export const BoardDetailScreen: React.FC = () => {
       list.push(board.owner);
       seen.add(board.owner.id);
     }
-    (board?.members || []).forEach(member => {
+    (board?.members || []).forEach((member: BoardMember) => {
       if (!seen.has(member.user.id)) {
         list.push(member.user);
         seen.add(member.user.id);
@@ -470,9 +644,9 @@ export const BoardDetailScreen: React.FC = () => {
   }, [board?.members, board?.owner]);
   const headerMembers = useMemo(
     () =>
-      membersForDisplay.map(userMember => ({
+      membersForDisplay.map((userMember: BoardMember['user']) => ({
         user: userMember,
-        membership: board?.members?.find(m => m.user.id === userMember.id)
+        membership: board?.members?.find((m: BoardMember) => m.user.id === userMember.id)
       })),
     [board?.members, membersForDisplay]
   );
@@ -484,7 +658,7 @@ export const BoardDetailScreen: React.FC = () => {
   const normalizedMemberQuery = memberQuery.trim().toLowerCase();
   const filteredMembers = useMemo(
     () =>
-      (board?.members || []).filter(member => {
+      (board?.members || []).filter((member: BoardMember) => {
         if (!normalizedMemberQuery) return true;
         const displayName = getMemberDisplayName(member.user);
         const haystack = [displayName, member.user.username || '', member.user.email || '']
@@ -525,10 +699,10 @@ export const BoardDetailScreen: React.FC = () => {
         return {
           key: `photo-${id}`,
           value: `/board-backgrounds/board-${id}.jpg`,
-          label: `Photo ${id}`,
+          label: `${t('board.background.images')} ${id}`,
         };
       }),
-    []
+    [t]
   );
 
   const handleBackgroundSelect = useCallback((value: string) => {
@@ -570,8 +744,8 @@ export const BoardDetailScreen: React.FC = () => {
 
   const openMemberActivity = useCallback(async (member: BoardMember) => {
     if (!boardId) return;
+    openActivity();
     setActivityMember(member);
-    setIsActivityOpen(true);
     setIsActivityLoading(true);
     try {
       const logs = await getBoardActivity(boardId, member.user.id);
@@ -581,14 +755,19 @@ export const BoardDetailScreen: React.FC = () => {
     } finally {
       setIsActivityLoading(false);
     }
-  }, [boardId]);
+  }, [boardId, openActivity]);
+
+  const handleCardOpen = useCallback((card: Card) => {
+    closeTransientOverlays();
+    setSelectedCard(card);
+  }, [closeTransientOverlays]);
 
   if (isLoading && !board) return <div className="loading-state">{t('common.loading')}</div>;
   if (error) return <div className="error-state">{t('board.error.loadDetails')}</div>;
   if (!board) return null;
 
   return (
-    <div className="board-detail-page" style={backgroundStyle}>
+    <div className={`board-detail-page ${isTouch ? 'is-touch' : ''}`} style={backgroundStyle}>
       <BoardHeader
         board={board}
         boardTitle={boardTitle}
@@ -601,15 +780,15 @@ export const BoardDetailScreen: React.FC = () => {
         boardIconFailed={boardIconFailed}
         onBoardIconError={() => setBoardIconFailed(true)}
         isGlobalMenuOpen={isGlobalMenuOpen}
-        onToggleGlobalMenu={() => setIsGlobalMenuOpen(prev => !prev)}
-        onCloseGlobalMenu={() => setIsGlobalMenuOpen(false)}
+        onToggleGlobalMenu={toggleGlobalMenu}
+        onCloseGlobalMenu={closeGlobalMenu}
         onLogout={() => dispatch(logoutUser())}
         headerMembers={headerMembers}
         visibleMembers={visibleMembers}
         extraMembersCount={extraMembersCount}
         headerMemberId={headerMemberId}
-        onToggleHeaderMember={(id) => setHeaderMemberId(id)}
-        onCloseHeaderMember={() => setHeaderMemberId(null)}
+        onToggleHeaderMember={toggleHeaderMember}
+        onCloseHeaderMember={closeHeaderMember}
         getAvatarSrc={getAvatarSrc}
         fallbackAvatar={fallbackAvatar}
         getMemberDisplayName={getMemberDisplayName}
@@ -621,25 +800,35 @@ export const BoardDetailScreen: React.FC = () => {
         onRemoveMember={(membershipId) => dispatch(removeBoardMemberAction(membershipId))}
         filterQuery={filterQuery}
         onSearchChange={updateSearch}
-        onOpenFilter={() => setIsFilterOpen(true)}
-        onOpenMenu={() => { setIsMenuOpen(true); setActiveMenuTab('main'); }}
+        onOpenFilter={() => {
+          openFilter();
+        }}
+        onOpenMenu={() => {
+          openSidebar();
+          setActiveMenuTab('main');
+        }}
+        onOpenMembersPanel={prepareHeaderMembersPanel}
+        closeSignal={headerOverlayCloseSignal}
       />
 
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <Droppable droppableId="board-drop-zone" direction="horizontal" type="list">
           {(provided) => (
             <div
               className="board-canvas"
-              ref={provided.innerRef}
+              ref={(node) => {
+                boardCanvasRef.current = node;
+                provided.innerRef(node);
+              }}
               {...provided.droppableProps}
             >
-              {filteredLists.map((list, index) => (
+              {filteredLists.map((list: List, index: number) => (
                 <BoardColumn 
                   key={list.id} 
                   list={list} 
                   index={index} 
                   listIndex={index}
-                  listOptions={filteredLists.map(item => ({ id: item.id, title: item.title }))}
+                  listOptions={listOptions}
                   prevList={index > 0 ? filteredLists[index - 1] : null}
                   nextList={index < filteredLists.length - 1 ? filteredLists[index + 1] : null}
                   isTouch={isTouch}
@@ -651,10 +840,13 @@ export const BoardDetailScreen: React.FC = () => {
                   onDeleteList={handleDeleteList}
                   onCopyList={handleCopyList}
                   onArchiveAllCards={handleArchiveAllCardsInList}
-                  onCardClick={setSelectedCard}
+                  onCardClick={handleCardOpen}
                   onToggleCardComplete={handleToggleCardComplete}
+                  listMenuOpen={openListMenuId !== null && openListMenuId === list.id}
+                  onToggleListMenu={toggleListMenu}
+                  onCloseListMenu={closeListMenu}
                   isCollapsed={collapsedLists.includes(list.id)}
-                  onToggleCollapse={() => toggleListCollapse(list.id)}
+                  onToggleCollapse={toggleListCollapse}
                   onMoveList={handleMoveList}
                   onMoveCard={handleMoveCard}
                 />
@@ -737,7 +929,7 @@ export const BoardDetailScreen: React.FC = () => {
 
       <BoardFiltersModal
         isOpen={isFilterOpen}
-        onClose={() => setIsFilterOpen(false)}
+        onClose={closeFilter}
         filterQuery={filterQuery}
         onSearchChange={updateSearch}
         filterMemberId={filterMemberId}
@@ -760,7 +952,7 @@ export const BoardDetailScreen: React.FC = () => {
 
       <BoardMenuSidebar
         isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
+        onClose={closeSidebar}
         activeTab={activeMenuTab}
         onTabChange={setActiveMenuTab}
         board={board}
@@ -807,9 +999,16 @@ export const BoardDetailScreen: React.FC = () => {
         onDeleteCard={(cardId) => dispatch(deleteCardAction(cardId))}
       />
 
+      <Link to="/help" className="board-floating-help" aria-label={t('nav.help')} title={t('nav.help')}>
+        ?
+      </Link>
+
       <BoardActivityModal
         isOpen={isActivityOpen}
-        onClose={() => { setIsActivityOpen(false); setActivityMember(null); }}
+        onClose={() => {
+          closeActivity();
+          setActivityMember(null);
+        }}
         activityMember={activityMember}
         activityLogs={activityLogs}
         isLoading={isActivityLoading}

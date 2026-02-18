@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { KanbanPreview } from '../components/KanbanPreview';
 import { useI18n } from '../context/I18nContext';
 
@@ -11,9 +9,31 @@ import { loginUser, registerUser, googleLoginUser, clearError } from '../store/s
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
+type GoogleTokenResponse = {
+  access_token?: string;
+};
+
+type GoogleTokenClient = {
+  requestAccessToken: () => void;
+};
+
+type GoogleOAuth2Api = {
+  initTokenClient: (config: {
+    client_id: string;
+    scope: string;
+    callback: (response: GoogleTokenResponse) => void;
+  }) => GoogleTokenClient;
+};
+
+type GoogleIdentity = {
+  accounts: {
+    oauth2: GoogleOAuth2Api;
+  };
+};
+
 declare global {
   interface Window {
-    google: any;
+    google?: GoogleIdentity;
   }
 }
 
@@ -77,11 +97,11 @@ export const AuthScreen: React.FC = () => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: 'email profile',
-      callback: async (response: any) => {
+      callback: async (response: GoogleTokenResponse) => {
         if (response.access_token) {
           try {
             await dispatch(googleLoginUser({ access_token: response.access_token })).unwrap();
-          } catch (err: any) {
+          } catch (err: unknown) {
             console.error("Google Auth Error:", err);
             setLocalError(t('auth.googleError'));
           }
@@ -123,11 +143,16 @@ export const AuthScreen: React.FC = () => {
       } else {
         await dispatch(loginUser({ username: formData.username, password: formData.password })).unwrap();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err && typeof err === 'object') {
-         if (err.email) setLocalError(err.email[0]);
-         else if (err.non_field_errors) setLocalError(err.non_field_errors[0]);
-         else if (err.detail) setLocalError(err.detail);
+         const authErr = err as {
+          email?: string[];
+          non_field_errors?: string[];
+          detail?: string;
+         };
+         if (authErr.email?.length) setLocalError(authErr.email[0]);
+         else if (authErr.non_field_errors?.length) setLocalError(authErr.non_field_errors[0]);
+         else if (authErr.detail) setLocalError(authErr.detail);
          else setLocalError(t('auth.loginError'));
       } else {
          setLocalError(t('common.noConnection'));

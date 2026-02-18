@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { List, Card } from '../../../types';
 import { CardItem } from './CardItem';
@@ -6,16 +7,16 @@ import { Button } from '../../../components/ui/Button';
 import { useI18n } from '../../../context/I18nContext';
 
 const LIST_COLOR_OPTIONS = [
-  { value: '#61bd4f', label: 'Green' },
-  { value: '#f2d600', label: 'Yellow' },
-  { value: '#ff9f1a', label: 'Orange' },
-  { value: '#eb5a46', label: 'Red' },
-  { value: '#c377e0', label: 'Purple' },
-  { value: '#0079bf', label: 'Blue' },
-  { value: '#00c2e0', label: 'Sky' },
-  { value: '#51e898', label: 'Mint' },
-  { value: '#ff78cb', label: 'Pink' },
-  { value: '#344563', label: 'Slate' }
+  '#AC7575',
+  '#334132',
+  '#2E315C',
+  '#A8285B',
+  '#D8C246',
+  '#5B7BFA',
+  '#F08A5D',
+  '#22344C',
+  '#2E2E2E',
+  '#E8DDC7'
 ];
 
 const hexToRgb = (hex: string) => {
@@ -67,9 +68,12 @@ interface BoardColumnProps {
   onToggleCardComplete: (cardId: number, next: boolean) => void;
   onMoveList?: (listId: number, fromIndex: number, toIndex: number) => void;
   onMoveCard?: (cardId: number, sourceListId: number, destListId: number, destIndex: number) => void;
+  listMenuOpen: boolean;
+  onToggleListMenu: (listId: number) => void;
+  onCloseListMenu: () => void;
   
   isCollapsed: boolean;
-  onToggleCollapse: () => void;
+  onToggleCollapse: (listId: number) => void;
 }
 
 const BoardColumnComponent: React.FC<BoardColumnProps> = ({ 
@@ -92,6 +96,9 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   onToggleCardComplete,
   onMoveList,
   onMoveCard,
+  listMenuOpen,
+  onToggleListMenu,
+  onCloseListMenu,
   isCollapsed,
   onToggleCollapse
 }) => {
@@ -102,12 +109,14 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(list.title);
   
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isColorOpen, setIsColorOpen] = useState(true);
-  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(true);
+  const listMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const listMenuDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [menuCoords, setMenuCoords] = useState<{ top: number; left: number } | null>(null);
   
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newCardInputRef = useRef<HTMLInputElement>(null);
+  const isTouchViewport = !!isTouch;
 
   const visibleCards = useMemo(
     () => (list.cards || []).filter(card => !card.is_archived),
@@ -124,6 +133,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   );
 
   const listColor = list.color?.trim() || '';
+  const normalizedListColor = listColor.toLowerCase();
   const headerMeta = listColor ? getHeaderColorMeta(listColor) : null;
   const hasListColor = !!headerMeta;
   const headerStyle: React.CSSProperties | undefined = headerMeta
@@ -151,6 +161,69 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     }, 50);
   }, [isAdding, isTouch]);
 
+  const getMenuCoords = useCallback((anchor: HTMLElement | null, menuWidth = 250) => {
+    if (typeof window === 'undefined' || !anchor) return null;
+    const rect = anchor.getBoundingClientRect();
+    const margin = 8;
+    const top = Math.min(window.innerHeight - 80, Math.max(margin, rect.bottom + 6));
+    const preferredLeft = rect.right - menuWidth;
+    const left = Math.min(window.innerWidth - menuWidth - margin, Math.max(margin, preferredLeft));
+    return { top, left };
+  }, []);
+
+  const syncListMenuCoords = useCallback(() => {
+    if (isTouchViewport) return;
+    setMenuCoords(getMenuCoords(listMenuTriggerRef.current));
+  }, [getMenuCoords, isTouchViewport]);
+
+  useEffect(() => {
+    if (!listMenuOpen || isTouchViewport) return;
+    syncListMenuCoords();
+  }, [isTouchViewport, listMenuOpen, syncListMenuCoords]);
+
+  useEffect(() => {
+    if (!listMenuOpen || isTouchViewport || typeof window === 'undefined') return;
+    const sync = () => syncListMenuCoords();
+    window.addEventListener('resize', sync);
+    window.addEventListener('scroll', sync, true);
+    return () => {
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('scroll', sync, true);
+    };
+  }, [isTouchViewport, listMenuOpen, syncListMenuCoords]);
+
+  useEffect(() => {
+    if (!listMenuOpen) {
+      setMenuCoords(null);
+    }
+  }, [listMenuOpen]);
+
+  useEffect(() => {
+    if (!listMenuOpen || typeof document === 'undefined') return;
+
+    const handleOutsidePointer = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (listMenuDropdownRef.current?.contains(target)) return;
+      if (listMenuTriggerRef.current?.contains(target)) return;
+      onCloseListMenu();
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseListMenu();
+    };
+
+    document.addEventListener('mousedown', handleOutsidePointer, true);
+    document.addEventListener('touchstart', handleOutsidePointer, true);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsidePointer, true);
+      document.removeEventListener('touchstart', handleOutsidePointer, true);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [listMenuOpen, onCloseListMenu]);
+
   const handleTitleSave = () => {
     setIsEditingTitle(false);
     if (titleValue.trim() && titleValue !== list.title) {
@@ -177,8 +250,8 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     }
   };
 
-  const handleMenuAction = (action: 'add' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'sort' | 'subscribe' | 'automation' | 'collapse' | 'delete' | 'toggleDevAddCards') => {
-      setIsMenuOpen(false);
+  const handleMenuAction = (action: 'add' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'remove') => {
+      onCloseListMenu();
       if (action === 'add') {
         if (!canAddCards) return;
         setIsAdding(true);
@@ -210,64 +283,122 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
         });
         return;
       }
-      if (action === 'sort' && onMoveCard) {
-        if (visibleCards.length < 2) return;
-        const modeRaw = window.prompt(
-          `${t('list.menu.sortPrompt')}\n1 - ${t('list.menu.sortByDue')}\n2 - ${t('list.menu.sortByTitle')}`,
-          '1'
-        );
-        if (!modeRaw) return;
-        const mode = modeRaw.trim();
-        const sortedCards = [...visibleCards];
-        if (mode === '1') {
-          sortedCards.sort((a, b) => {
-            const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY;
-            const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY;
-            return aDue - bDue;
-          });
-        } else if (mode === '2') {
-          sortedCards.sort((a, b) => a.title.localeCompare(b.title));
-        } else {
-          return;
-        }
-        sortedCards.forEach((cardItem, cardIndex) => {
-          onMoveCard(cardItem.id, list.id, list.id, cardIndex);
-        });
-        return;
-      }
-      if (action === 'subscribe') {
-        setIsSubscribed(prev => !prev);
-        return;
-      }
-      if (action === 'automation') {
-        window.alert(t('list.menu.comingSoon'));
-        return;
-      }
-      if (action === 'toggleDevAddCards') {
-        onUpdateList(list.id, { allow_dev_add_cards: !list.allow_dev_add_cards });
-        return;
-      }
-      if (action === 'delete') onDeleteList(list.id);
-      if (action === 'collapse') onToggleCollapse();
+      if (action === 'remove') onDeleteList(list.id);
   };
 
-  const handleMoveListLeft = () => {
+  const handleMoveListLeft = useCallback(() => {
     if (!onMoveList || !prevList) return;
     onMoveList(list.id, listIndex, listIndex - 1);
-  };
+  }, [list.id, listIndex, onMoveList, prevList]);
 
-  const handleMoveListRight = () => {
+  const handleMoveListRight = useCallback(() => {
     if (!onMoveList || !nextList) return;
     onMoveList(list.id, listIndex, listIndex + 1);
-  };
-
-  const handleColorSelect = useCallback((color: string | null) => {
-    onUpdateList(list.id, { color });
-  }, [list.id, onUpdateList]);
+  }, [list.id, listIndex, nextList, onMoveList]);
 
   const handleCardClick = useCallback((cardItem: Card) => {
     onCardClick(cardItem);
   }, [onCardClick]);
+
+  const fallbackLeft = typeof window !== 'undefined' ? Math.max(8, window.innerWidth - 266) : 8;
+  const resolvedMenuCoords = menuCoords ?? { top: 72, left: fallbackLeft };
+  const listMenuDropdownStyle: React.CSSProperties | undefined = !isTouchViewport
+    ? {
+        position: 'fixed',
+        top: resolvedMenuCoords.top,
+        left: resolvedMenuCoords.left,
+        right: 'auto',
+        minWidth: 250,
+        zIndex: 'var(--z-board-list-menu)'
+      }
+    : undefined;
+
+  const listMenuContent = (
+    <>
+      <div
+        ref={listMenuDropdownRef}
+        className={`list-menu-dropdown ${isTouchViewport ? 'is-touch-portal' : ''}`.trim()}
+        role="menu"
+        aria-label={t('list.menu')}
+        style={listMenuDropdownStyle}
+      >
+        <div className="list-menu-header">
+          <span>{t('list.menu')}</span>
+          <button
+            type="button"
+            className="list-menu-close"
+            onClick={onCloseListMenu}
+            aria-label={t('common.close')}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="list-menu-section">
+          {canAddCards && (
+            <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('add')}>
+              {t('list.menu.addCard')}
+            </button>
+          )}
+          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('copy')}>
+            {t('list.copy')}
+          </button>
+          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('move')}>
+            {t('list.menu.move')}
+          </button>
+          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('moveAll')}>
+            {t('list.menu.moveAll')}
+          </button>
+        </div>
+        <div className="list-color-section">
+          <button
+            type="button"
+            className="list-color-header"
+            onClick={() => setIsColorPickerOpen((prev) => !prev)}
+          >
+            <span className="list-color-title">{t('list.color.title')}</span>
+            <span className="list-color-chevron">{isColorPickerOpen ? '▾' : '▸'}</span>
+          </button>
+          {isColorPickerOpen && (
+            <>
+              <div className="list-color-grid">
+                {LIST_COLOR_OPTIONS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`list-color-swatch ${normalizedListColor === color.toLowerCase() ? 'active' : ''}`}
+                    style={{ background: color }}
+                    onClick={() => onUpdateList(list.id, { color })}
+                    aria-pressed={normalizedListColor === color.toLowerCase()}
+                    aria-label={color}
+                    title={color}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className={`list-color-none ${!listColor ? 'active' : ''}`}
+                onClick={() => onUpdateList(list.id, { color: '' })}
+              >
+                {t('list.color.none')}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="list-menu-divider" />
+        <div className="list-menu-section">
+          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('archive')}>
+            {t('list.archive')}
+          </button>
+          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('archiveAllCards')}>
+            {t('list.menu.archiveAllCards')}
+          </button>
+          <button className="list-menu-item danger" role="menuitem" onClick={() => handleMenuAction('remove')}>
+            {t('common.delete')}
+          </button>
+        </div>
+      </div>
+    </>
+  );
 
   const handleToggleComplete = useCallback((cardId: number, next: boolean) => {
     onToggleCardComplete(cardId, next);
@@ -293,6 +424,10 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     onMoveCard(cardId, list.id, list.id, cardIndex + 1);
   }, [list.id, onMoveCard]);
 
+  const handleToggleCollapse = useCallback(() => {
+    onToggleCollapse(list.id);
+  }, [list.id, onToggleCollapse]);
+
   if (isCollapsed) {
       return (
     <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
@@ -313,7 +448,7 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                         border: hasListColor ? `1px solid ${headerMeta.divider}` : '1px solid rgba(255,255,255,0.1)',
                         color: headerMeta?.text
                     }}
-                    onClick={onToggleCollapse}
+                    onClick={handleToggleCollapse}
                 >
                     <span style={{ fontWeight: 600, color: headerMeta?.text || 'var(--text-primary)' }}>{list.title}</span>
                     <span className="count-badge" style={{ marginTop: 8, transform: 'rotate(90deg)', ...headerBadgeStyle }}>{visibleCount}</span>
@@ -357,18 +492,28 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                       <>
                         <button
                           className="btn-icon"
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); handleMoveListLeft(); }}
                           disabled={!prevList}
                           title={t('list.moveLeft')}
+                          aria-label={t('list.moveLeft')}
                           style={{ fontSize: 12, width: 22, height: 22, opacity: prevList ? 0.8 : 0.3, ...headerIconStyle }}
                         >
                           ◀
                         </button>
                         <button
                           className="btn-icon"
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
                           onClick={(e) => { e.stopPropagation(); handleMoveListRight(); }}
                           disabled={!nextList}
                           title={t('list.moveRight')}
+                          aria-label={t('list.moveRight')}
                           style={{ fontSize: 12, width: 22, height: 22, opacity: nextList ? 0.8 : 0.3, ...headerIconStyle }}
                         >
                           ▶
@@ -379,124 +524,28 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                     {canEditList && (
                       <>
                         <button 
+                          ref={listMenuTriggerRef}
                           className="list-menu-trigger btn-icon"
-                          onClick={() => setIsMenuOpen(!isMenuOpen)}
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!listMenuOpen && !isTouchViewport) {
+                              setMenuCoords(getMenuCoords(listMenuTriggerRef.current));
+                            }
+                            onToggleListMenu(list.id);
+                          }}
+                          aria-haspopup="menu"
+                          aria-expanded={listMenuOpen}
+                          aria-label={t('list.menu')}
                           style={{ fontSize: 16, width: 24, height: 24, ...headerIconStyle }}
                         >
                           •••
                         </button>
 
-                        {isMenuOpen && (
-                            <>
-                            <div 
-                                className="list-menu-overlay"
-                                onClick={() => setIsMenuOpen(false)}
-                            ></div>
-                            <div className="list-menu-dropdown">
-                                <div className="list-menu-section">
-                                  {canAddCards && (
-                                    <button className="list-menu-item" onClick={() => handleMenuAction('add')}>
-                                      <span className="list-menu-icon">＋</span>
-                                      {t('list.menu.addCard')}
-                                    </button>
-                                  )}
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('copy')}>
-                                      <span className="list-menu-icon">📋</span>
-                                      {t('list.copy')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('move')}>
-                                      <span className="list-menu-icon">⇄</span>
-                                      {t('list.menu.move')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('moveAll')}>
-                                      <span className="list-menu-icon">↥</span>
-                                      {t('list.menu.moveAll')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('sort')}>
-                                      <span className="list-menu-icon">⇅</span>
-                                      {t('list.menu.sort')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('subscribe')}>
-                                      <span className="list-menu-icon">{isSubscribed ? '✅' : '👁️'}</span>
-                                      {isSubscribed ? t('list.menu.unsubscribe') : t('list.menu.subscribe')}
-                                  </button>
-                                </div>
-                                <div className="list-menu-divider" />
-                                <button className="list-menu-item" onClick={() => handleMenuAction('toggleDevAddCards')}>
-                                    <span className="list-menu-icon">{list.allow_dev_add_cards ? '✅' : '🚫'}</span>
-                                    {list.allow_dev_add_cards ? t('list.menu.devCanAddCards') : t('list.menu.devCannotAddCards')}
-                                </button>
-                                <div className="list-menu-divider" />
-                                <div className={`list-color-section ${isColorOpen ? 'open' : ''}`}>
-                                  <button
-                                    type="button"
-                                    className="list-color-header"
-                                    onClick={() => setIsColorOpen(prev => !prev)}
-                                  >
-                                    <span>{t('list.color.title')}</span>
-                                    <span className="list-color-chevron">{isColorOpen ? '▾' : '▸'}</span>
-                                  </button>
-                                  {isColorOpen && (
-                                    <>
-                                      <div className="list-color-grid">
-                                        {LIST_COLOR_OPTIONS.map(option => (
-                                          <button
-                                            key={option.value}
-                                            type="button"
-                                            className={`list-color-swatch ${list.color === option.value ? 'active' : ''}`}
-                                            style={{ background: option.value }}
-                                            onClick={() => handleColorSelect(option.value)}
-                                            title={option.label}
-                                            aria-label={option.label}
-                                          />
-                                        ))}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className={`list-color-none ${listColor ? '' : 'active'}`}
-                                        onClick={() => handleColorSelect(null)}
-                                      >
-                                        {t('list.color.none')}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="list-menu-divider" />
-                                <div className="list-menu-section">
-                                  <div className="list-menu-heading">{t('list.menu.automation')}</div>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('automation')}>
-                                      <span className="list-menu-icon">⚡</span>
-                                      {t('list.menu.automationAdd')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('automation')}>
-                                      <span className="list-menu-icon">⏱️</span>
-                                      {t('list.menu.automationDaily')}
-                                  </button>
-                                  <button className="list-menu-item" onClick={() => handleMenuAction('automation')}>
-                                      <span className="list-menu-icon">➕</span>
-                                      {t('list.menu.automationRule')}
-                                  </button>
-                                </div>
-                                <div className="list-menu-divider" />
-                                <button className="list-menu-item" onClick={() => handleMenuAction('archive')}>
-                                    <span className="list-menu-icon">📦</span>
-                                    {t('list.archive')}
-                                </button>
-                                <button className="list-menu-item" onClick={() => handleMenuAction('archiveAllCards')}>
-                                    <span className="list-menu-icon">🗃️</span>
-                                    {t('list.menu.archiveAllCards')}
-                                </button>
-                                <button className="list-menu-item" onClick={() => handleMenuAction('delete')} style={{color: 'var(--danger)'}}>
-                                    <span className="list-menu-icon">🗑️</span>
-                                    {t('common.delete')}
-                                </button>
-                                <button className="list-menu-item" onClick={() => handleMenuAction('collapse')}>
-                                    <span className="list-menu-icon">▤</span>
-                                    {t('list.collapse')}
-                                </button>
-                            </div>
-                            </>
-                        )}
+                        {listMenuOpen && (typeof document !== 'undefined' ? createPortal(listMenuContent, document.body) : listMenuContent)}
                       </>
                     )}
                 </div>

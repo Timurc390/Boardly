@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 // ЗМІНА: Імпортуємо хук Redux замість useAuth
 import { useAppSelector } from '../store/hooks';
 import { getInitialLocale, normalizeLocale, SUPPORTED_LOCALES, translations, type Locale } from '../i18n/translations';
@@ -22,16 +22,26 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ЗМІНА: Отримуємо користувача з Redux Store
   const { user } = useAppSelector(state => state.auth);
   
-  const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
+  const [locale, setLocaleState] = useState<Locale>(() => getInitialLocale());
+  const [isLocalePinned, setIsLocalePinned] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(window.localStorage.getItem('locale'));
+  });
+
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(normalizeLocale(next));
+    setIsLocalePinned(true);
+  }, []);
 
   // Синхронізація мови з профілем користувача
   useEffect(() => {
     if (!user?.profile?.language) return;
+    if (isLocalePinned) return;
     const profileLocale = normalizeLocale(user.profile.language);
     if (profileLocale !== locale) {
-      setLocale(profileLocale);
+      setLocaleState(profileLocale);
     }
-  }, [user?.id, user?.profile?.language, locale]);
+  }, [user?.id, user?.profile?.language, locale, isLocalePinned]);
 
   // Збереження мови в localStorage та html тег
   useEffect(() => {
@@ -61,7 +71,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLocale,
     t,
     supportedLocales: [...SUPPORTED_LOCALES]
-  }), [locale, t]);
+  }), [locale, setLocale, t]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };

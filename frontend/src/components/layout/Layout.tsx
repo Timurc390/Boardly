@@ -14,9 +14,12 @@ export const Layout: React.FC = () => {
   
   const { t, locale } = useI18n();
   const location = useLocation();
-  const isBoardDetail = /^\/boards\/[^/]+$/.test(location.pathname);
-  const isCommunityPage = location.pathname === '/community' || location.pathname === '/get-started';
-  const hideTopNav = isBoardDetail || isCommunityPage;
+  const normalizedPath = location.pathname.replace(/\/+$/, '') || '/';
+  const isBoardDetail = /^\/boards\/[^/]+$/.test(normalizedPath);
+  const isBoardsPage = normalizedPath === '/boards';
+  const isCommunityPage = normalizedPath === '/community' || normalizedPath === '/get-started';
+  const isHelpPage = normalizedPath === '/help' || normalizedPath === '/support';
+  const hideTopNav = isBoardDetail || isBoardsPage || isCommunityPage || isHelpPage;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   
@@ -77,7 +80,7 @@ export const Layout: React.FC = () => {
   };
 
   // Функція для перевірки активного посилання
-  const isActive = (path: string) => location.pathname === path ? 'active' : '';
+  const isActive = (path: string) => normalizedPath === path ? 'active' : '';
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
@@ -135,7 +138,7 @@ export const Layout: React.FC = () => {
                     {/* Аватарка (кружечок) */}
                     <div className="nav-profile-avatar" style={{width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold'}}>
                       {resolvedAvatarUrl && !avatarFailed ? (
-                        <img src={resolvedAvatarUrl} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
+                        <img src={resolvedAvatarUrl} alt="Avatar" loading="lazy" decoding="async" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
                       ) : (
                         user.username.charAt(0).toUpperCase()
                       )}
@@ -174,16 +177,16 @@ export const Layout: React.FC = () => {
           {user ? (
             <div className="nav-actions-mobile">
               <LanguageSelect className="nav-lang-select nav-lang-select-mobile" compact />
-              <Link to="/profile" className="nav-mobile-profile" title={t('nav.profile')}>
+              <Link to="/profile" className="nav-mobile-profile" title={t('nav.profile')} aria-label={t('nav.profile')}>
                 <div className="nav-profile-avatar" style={{width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold'}}>
                   {resolvedAvatarUrl && !avatarFailed ? (
-                    <img src={resolvedAvatarUrl} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
+                    <img src={resolvedAvatarUrl} alt="Avatar" loading="lazy" decoding="async" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={() => setAvatarFailed(true)} />
                   ) : (
                     user.username.charAt(0).toUpperCase()
                   )}
                 </div>
               </Link>
-              <button className="btn-icon nav-mobile-logout" onClick={handleLogout} title={t('nav.logout')}>
+              <button className="btn-icon nav-mobile-logout" onClick={handleLogout} title={t('nav.logout')} aria-label={t('nav.logout')}>
                 ⎋
               </button>
             </div>

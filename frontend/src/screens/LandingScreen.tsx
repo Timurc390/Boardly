@@ -1,13 +1,12 @@
 import React, { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 //import { useAuth } from '../context/AuthContext.tsx.bak';
 
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useAppSelector } from '../store/hooks';
 import { useI18n } from '../context/I18nContext';
 
 export const LandingScreen: React.FC = () => {
   const { isAuthenticated } = useAppSelector(state => state.auth);
-  const navigate = useNavigate();
   const { t } = useI18n();
 
   useEffect(() => {
@@ -18,7 +17,7 @@ export const LandingScreen: React.FC = () => {
       document.body.classList.remove('landing-no-scroll');
       document.documentElement.classList.remove('landing-no-scroll');
     };
-  }, [isAuthenticated, navigate]);
+  }, []);
 
   return (
     <div className="landing-page">
@@ -26,7 +25,7 @@ export const LandingScreen: React.FC = () => {
         <div className="landing-inner">
           <div className="landing-top">
             <div className="landing-brand">
-              <img className="landing-brand-icon" src="/anti-trello-logo.png" alt="Anti TRELLO" />
+              <img className="landing-brand-icon" src="/anti-trello-logo.png" alt="Anti TRELLO" decoding="async" />
               <span>Anti TRELLO</span>
             </div>
             <div className="landing-logo">Boardly</div>
@@ -65,7 +64,7 @@ export const LandingScreen: React.FC = () => {
             </div>
 
             <div className="landing-media">
-              <img src="/phone-hand.png" alt="Boardly on phone" />
+              <img src="/phone-hand.png" alt="Boardly on phone" loading="lazy" decoding="async" />
             </div>
           </div>
         </div>

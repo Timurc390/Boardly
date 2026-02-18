@@ -14,6 +14,8 @@ __pycache__/
 dist/
 build/
 out/
+frontend/playwright-report/
+frontend/test-results/
 
 # Системні файли Git (хоча .git ігнорується автоматично, краще не додавати його вручну в список)
 # .git/ 

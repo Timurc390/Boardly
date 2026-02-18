@@ -29,14 +29,14 @@ export const MyCardsScreen: React.FC = () => {
         setIsLoading(true);
         const res = await client.get('/my-cards/');
         setCards(res.data);
-      } catch (e) {
+      } catch {
         setError(t('myCards.loadError'));
       } finally {
         setIsLoading(false);
       }
     };
     fetchMyCards();
-  }, []);
+  }, [t]);
 
   return (
     <div style={{

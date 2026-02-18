@@ -1,19 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { FiUser, FiShield, FiSettings, FiClock, FiArrowLeft } from 'react-icons/fi';
 //import { useAuth } from '../context/AuthContext.tsx.bak';
 import { ActivityLog } from '../types';
-import { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 import { useI18n } from '../context/I18nContext';
 import { type Locale } from '../i18n/translations';
+import { getProfilePrivacyContent } from '../content/profilePrivacyContent';
 
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { 
   updateUserProfile, 
   uploadUserAvatar, 
-  removeUserAvatar, 
   logoutUser, 
   changeUserPassword,
   deleteUserAccount,
@@ -55,9 +54,81 @@ const getUserName = (log: ActivityLog, fallback: string) => {
   return full || u.username || u.email || fallback;
 };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+const getFocusableElements = (container: HTMLElement | null) => {
+  if (!container) return [] as HTMLElement[];
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
+};
+
+const useDialogA11y = (
+  isOpen: boolean,
+  onClose: () => void,
+  dialogRef: React.RefObject<HTMLDivElement | null>
+) => {
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    lastActiveElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const raf = window.requestAnimationFrame(() => {
+      const [firstFocusable] = getFocusableElements(dialogRef.current);
+      (firstFocusable || dialogRef.current)?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements(dialogRef.current);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      window.cancelAnimationFrame(raf);
+      lastActiveElementRef.current?.focus();
+      lastActiveElementRef.current = null;
+    };
+  }, [dialogRef, isOpen, onClose]);
+};
+
 export const ProfileScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const logout = () => {
     dispatch(logoutUser());
   };
@@ -69,12 +140,9 @@ export const ProfileScreen: React.FC = () => {
   const uploadAvatar = async (file: File) => {
     return dispatch(uploadUserAvatar(file));
   };
-
-  const deleteAvatar = async () => {
-    return dispatch(removeUserAvatar());
-  };
   const { user, token } = useAppSelector(state => state.auth);
   const { t, locale, setLocale, supportedLocales } = useI18n();
+  const prefersReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
@@ -94,6 +162,23 @@ export const ProfileScreen: React.FC = () => {
   });
   const [isEmailPrefsOpen, setIsEmailPrefsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
+  const emailPrefsDialogRef = useRef<HTMLDivElement>(null);
+  const integrationsDialogRef = useRef<HTMLDivElement>(null);
+  const deactivateDialogRef = useRef<HTMLDivElement>(null);
+  const closeEmailPrefs = useCallback(() => setIsEmailPrefsOpen(false), []);
+  const closeIntegrations = useCallback(() => setIsIntegrationsOpen(false), []);
+  const closeDeactivate = useCallback(() => setIsDeactivateOpen(false), []);
+
+  useDialogA11y(isEmailPrefsOpen, closeEmailPrefs, emailPrefsDialogRef);
+  useDialogA11y(isIntegrationsOpen, closeIntegrations, integrationsDialogRef);
+  useDialogA11y(isDeactivateOpen, closeDeactivate, deactivateDialogRef);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'profile' || tab === 'activity' || tab === 'settings' || tab === 'privacy') {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -457,11 +542,19 @@ export const ProfileScreen: React.FC = () => {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 }
-  };
+  const containerVariants = prefersReducedMotion
+    ? {
+        hidden: { opacity: 1, y: 0 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0 } },
+        exit: { opacity: 1, y: 0, transition: { duration: 0 } }
+      }
+    : {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -20 }
+      };
+
+  const privacyContent = React.useMemo(() => getProfilePrivacyContent(locale), [locale]);
 
   if (!user) return <div className="loading-state">{t('common.loading')}</div>;
 
@@ -477,6 +570,8 @@ export const ProfileScreen: React.FC = () => {
     ? t('profile.privacy.subtitle')
     : activeTab === 'profile'
     ? t('profile.header.subtitle')
+    : activeTab === 'activity'
+    ? t('profile.activity.subtitle')
     : activeTab === 'settings'
     ? t('profile.settings.subtitle')
     : '';
@@ -485,32 +580,7 @@ export const ProfileScreen: React.FC = () => {
     <div className="profile-page">
       <div className="profile-shell">
         <aside className="profile-side">
-          <div className="profile-side-brand">Boardly</div>
-          <div className="profile-user-card">
-            <div className="profile-avatar-wrapper">
-              <div className="profile-avatar">
-                {resolvedAvatarUrl && !avatarFailed ? (
-                  <img src={resolvedAvatarUrl} alt="Avatar" onError={() => setAvatarFailed(true)} />
-                ) : (
-                  <span className="profile-initials">
-                    {user.username.charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <div className="avatar-overlay" onClick={() => fileInputRef.current?.click()}>
-                  <span>📷</span>
-                </div>
-                <input 
-                  type="file" 
-                  hidden 
-                  ref={fileInputRef} 
-                  onChange={handleAvatarChange} 
-                  accept="image/*"
-                />
-              </div>
-            </div>
-            <h2 className="profile-name">{user.first_name} {user.last_name}</h2>
-            <p className="profile-username">{user.email}</p>
-          </div>
+          <Link to="/boards" className="profile-side-brand">Boardly</Link>
 
           <nav className="profile-nav">
             {(Object.keys(TAB_LABEL_KEYS) as TabKey[]).map((key) => {
@@ -528,21 +598,32 @@ export const ProfileScreen: React.FC = () => {
                 </button>
               );
             })}
-            <Link to="/boards" className="profile-nav-item profile-back-link">
-              <span className="profile-nav-icon" aria-hidden="true">
-                <BackIcon />
-              </span>
-              {t('profile.backToMain')}
-            </Link>
           </nav>
 
-          <Link to="/help" className="profile-help-button" aria-label={t('nav.help')}>
-            ?
-          </Link>
+          <div className="profile-side-footer">
+            <Link to="/boards" className="profile-return-link">
+              {t('profile.backToMain')}
+            </Link>
+            <button type="button" className="profile-logout-btn" onClick={logout}>
+              {t('nav.logout')}
+            </button>
+          </div>
         </aside>
+
+        <input
+          type="file"
+          hidden
+          ref={fileInputRef}
+          onChange={handleAvatarChange}
+          accept="image/*"
+        />
 
         <main className="profile-main">
           <div className="profile-header">
+            <Link to="/boards" className="profile-top-back">
+              <BackIcon />
+              <span>{t('community.back')}</span>
+            </Link>
             <h1>{headerTitle}</h1>
             {headerSubtitle && <p>{headerSubtitle}</p>}
           </div>
@@ -563,16 +644,13 @@ export const ProfileScreen: React.FC = () => {
                     <div className="profile-avatar-col">
                       <div className="profile-avatar-large">
                         {resolvedAvatarUrl && !avatarFailed ? (
-                          <img src={resolvedAvatarUrl} alt={t('profile.avatarAlt')} onError={() => setAvatarFailed(true)} />
+                          <img src={resolvedAvatarUrl} alt={t('profile.avatarAlt')} loading="lazy" decoding="async" onError={() => setAvatarFailed(true)} />
                         ) : (
                           <span>{user.username.charAt(0).toUpperCase()}</span>
                         )}
                       </div>
                       <button className="profile-btn-secondary avatar-btn" onClick={() => fileInputRef.current?.click()}>
                         {t('profile.avatar.change')}
-                      </button>
-                      <button className="profile-btn-danger avatar-btn" onClick={deleteAvatar}>
-                        {t('profile.avatar.remove')}
                       </button>
                     </div>
 
@@ -734,16 +812,6 @@ export const ProfileScreen: React.FC = () => {
                     </div>
                   </div>
                 </section>
-
-                <section className="profile-card access">
-                  <div className="profile-card-title">{t('profile.section.access')}</div>
-                  <div className="profile-card-actions column">
-                    <button className="profile-btn-secondary" onClick={logout}>{t('nav.logout')}</button>
-                    <button className="profile-btn-danger" onClick={() => setIsDeactivateOpen(true)}>
-                      {t('profile.actions.deactivate')}
-                    </button>
-                  </div>
-                </section>
               </motion.div>
             )}
 
@@ -754,14 +822,13 @@ export const ProfileScreen: React.FC = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="profile-card"
+                className="profile-activity-shell"
               >
-                <div className="profile-card-title">{t('profile.tabs.activity')}</div>
                 <div className="activity-list">
                   {loadingActivity ? (
-                    <div className="loading-state">{t('common.loading')}</div>
+                    <div className="activity-empty-row">{t('common.loading')}</div>
                   ) : activityLogs.length === 0 ? (
-                    <div className="empty-state">{t('profile.activity.empty')}</div>
+                    <div className="activity-empty-row">{t('profile.activity.empty')}</div>
                   ) : (
                     activityLogs.map(log => (
                       <div key={log.id} className="activity-item">
@@ -788,129 +855,76 @@ export const ProfileScreen: React.FC = () => {
                 exit="exit"
                 className="settings-layout"
               >
-                <div className="settings-grid-top">
-                  <section className="settings-card settings-card-general">
-                    <div className="settings-card-title">{t('profile.settings.general')}</div>
-                    <div className="settings-field">
-                      <label>{t('profile.settings.language')}</label>
-                      <select
-                        className="form-input settings-select"
-                        value={form.language}
-                        onChange={e => setForm({ ...form, language: e.target.value })}
+                <section className="settings-card settings-card-general">
+                  <div className="settings-card-title">{t('profile.settings.general')}</div>
+                  <div className="settings-field settings-field-language">
+                    <label>{t('profile.settings.language')}</label>
+                    <select
+                      className="form-input settings-select"
+                      value={form.language}
+                      onChange={e => setForm({ ...form, language: e.target.value })}
+                    >
+                      {supportedLocales.map(code => (
+                        <option key={code} value={code}>
+                          {t(`lang.${code}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="settings-row">
+                    <span className="settings-row-label">{t('profile.settings.theme')}</span>
+                    <div className="settings-pill-row settings-pill-row-inline">
+                      <button
+                        className={`settings-pill ${form.theme === 'light' ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setForm({ ...form, theme: 'light' })}
                       >
-                        {supportedLocales.map(code => (
-                          <option key={code} value={code}>
-                            {t(`lang.${code}`)}
-                          </option>
-                        ))}
-                      </select>
+                        {t('profile.settings.light')}
+                      </button>
+                      <button
+                        className={`settings-pill ${form.theme === 'dark' ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setForm({ ...form, theme: 'dark' })}
+                      >
+                        {t('profile.settings.dark')}
+                      </button>
                     </div>
-                    <button className="settings-btn settings-btn-muted" type="button" onClick={handleClearCache}>
-                      {t('profile.settings.clearCache')}
-                    </button>
-                    <div className="settings-helper">{t('profile.settings.cacheDescription')}</div>
-                  </section>
+                  </div>
 
-                  <section className="settings-card settings-card-notifications">
-                    <div className="settings-card-title">{t('profile.settings.notifications')}</div>
-                    <div className="settings-toggle-row">
-                      <span>{t('profile.settings.desktopNotifications')}</span>
-                      <label className="settings-toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsPrefs.desktopNotifications}
-                          onChange={e => setSettingsPrefs(prev => ({ ...prev, desktopNotifications: e.target.checked }))}
-                        />
-                        <span className="settings-toggle-slider" />
-                      </label>
+                  <div className="settings-row">
+                    <span className="settings-row-label">{t('profile.settings.defaultBoardView')}</span>
+                    <div className="settings-pill-row settings-pill-row-inline">
+                      <button
+                        className={`settings-pill ${settingsPrefs.defaultBoardView === 'kanban' ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'kanban' }))}
+                      >
+                        {t('profile.settings.kanban')}
+                      </button>
+                      <button
+                        className={`settings-pill ${settingsPrefs.defaultBoardView === 'calendar' ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'calendar' }))}
+                      >
+                        {t('profile.settings.calendar')}
+                      </button>
                     </div>
-                    <div className="settings-toggle-row">
-                      <span>{t('profile.settings.assignedToTask')}</span>
-                      <label className="settings-toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsPrefs.assignedToTask}
-                          onChange={e => setSettingsPrefs(prev => ({ ...prev, assignedToTask: e.target.checked }))}
-                        />
-                        <span className="settings-toggle-slider" />
-                      </label>
-                    </div>
-                    <div className="settings-toggle-row">
-                      <span>{t('profile.settings.dueDateApproaching')}</span>
-                      <label className="settings-toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsPrefs.dueDateApproaching}
-                          onChange={e => setSettingsPrefs(prev => ({ ...prev, dueDateApproaching: e.target.checked }))}
-                        />
-                        <span className="settings-toggle-slider" />
-                      </label>
-                    </div>
-                    <div className="settings-toggle-row">
-                      <span>{t('profile.settings.addedToBoard')}</span>
-                      <label className="settings-toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsPrefs.addedToBoard}
-                          onChange={e => setSettingsPrefs(prev => ({ ...prev, addedToBoard: e.target.checked }))}
-                        />
-                        <span className="settings-toggle-slider" />
-                      </label>
-                    </div>
-                    <button className="settings-btn settings-btn-accent" type="button" onClick={() => setIsEmailPrefsOpen(true)}>
-                      {t('profile.settings.manageEmail')}
-                    </button>
-                  </section>
+                  </div>
 
-                  <section className="settings-card settings-card-appearance">
-                    <div className="settings-card-title">{t('profile.settings.appearance')}</div>
-                    <div className="settings-field">
-                      <label>{t('profile.settings.theme')}</label>
-                      <div className="settings-pill-row">
-                        <button
-                          className={`settings-pill ${form.theme === 'dark' ? 'active' : ''}`}
-                          type="button"
-                          onClick={() => setForm({ ...form, theme: 'dark' })}
-                        >
-                          {t('profile.settings.dark')}
-                        </button>
-                        <button
-                          className={`settings-pill ${form.theme === 'light' ? 'active' : ''}`}
-                          type="button"
-                          onClick={() => setForm({ ...form, theme: 'light' })}
-                        >
-                          {t('profile.settings.light')}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="settings-field">
-                      <label>{t('profile.settings.defaultBoardView')}</label>
-                      <div className="settings-pill-row">
-                        <button
-                          className={`settings-pill ${settingsPrefs.defaultBoardView === 'kanban' ? 'active' : ''}`}
-                          type="button"
-                          onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'kanban' }))}
-                        >
-                          {t('profile.settings.kanban')}
-                        </button>
-                        <button
-                          className={`settings-pill ${settingsPrefs.defaultBoardView === 'calendar' ? 'active' : ''}`}
-                          type="button"
-                          onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'calendar' }))}
-                        >
-                          {t('profile.settings.calendar')}
-                        </button>
-                      </div>
-                    </div>
+                  <div className="settings-general-actions">
                     <button className="settings-btn settings-btn-secondary" type="button" onClick={() => setIsIntegrationsOpen(true)}>
                       {t('profile.settings.manageIntegrations')}
                     </button>
-                  </section>
-                </div>
+                    <button className="settings-btn settings-btn-accent" type="button" onClick={handleClearCache}>
+                      {t('profile.settings.clearCache')}
+                    </button>
+                  </div>
+                </section>
 
                 <section className="settings-card settings-card-security">
                   <div className="settings-card-title">{t('profile.settings.security')}</div>
-                  <div className="settings-toggle-row">
+                  <div className="settings-row settings-toggle-row">
                     <span>{t('profile.settings.twoFactor')}</span>
                     <label className="settings-toggle">
                       <input
@@ -921,8 +935,8 @@ export const ProfileScreen: React.FC = () => {
                       <span className="settings-toggle-slider" />
                     </label>
                   </div>
-                  <div className="settings-toggle-row">
-                    <div>
+                  <div className="settings-row settings-toggle-row settings-row-with-helper">
+                    <div className="settings-row-copy">
                       <div>{t('profile.settings.requireVerification')}</div>
                       <div className="settings-helper">{t('profile.settings.additionalVerification')}</div>
                     </div>
@@ -935,7 +949,7 @@ export const ProfileScreen: React.FC = () => {
                       <span className="settings-toggle-slider" />
                     </label>
                   </div>
-                  <div className="settings-field settings-inline">
+                  <div className="settings-row settings-field settings-inline">
                     <label>{t('profile.settings.sessionTimeout')}</label>
                     <select
                       className="form-input settings-select"
@@ -945,9 +959,73 @@ export const ProfileScreen: React.FC = () => {
                       <option value="1h">{t('profile.settings.sessionTimeout1h')}</option>
                     </select>
                   </div>
+                  <div className="settings-row settings-toggle-row settings-row-public">
+                    <span>{t('profile.fields.public')}</span>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={form.notify_email}
+                        onChange={e => setForm({ ...form, notify_email: e.target.checked })}
+                      />
+                      <span className="settings-toggle-slider" />
+                    </label>
+                  </div>
                   <div className="settings-actions">
-                    <button className="settings-btn settings-btn-primary" onClick={handleSave} disabled={saving}>
+                    <button className="settings-btn settings-btn-primary" type="button" onClick={handleSave} disabled={saving}>
                       {saving ? t('common.saving') : t('profile.settings.saveChanges')}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="settings-card settings-card-notifications">
+                  <div className="settings-card-title">{t('profile.settings.notifications')}</div>
+                  <div className="settings-row settings-toggle-row">
+                    <span className="settings-row-label">{t('profile.settings.desktopNotifications')}</span>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settingsPrefs.desktopNotifications}
+                        onChange={e => setSettingsPrefs(prev => ({ ...prev, desktopNotifications: e.target.checked }))}
+                      />
+                      <span className="settings-toggle-slider" />
+                    </label>
+                  </div>
+                  <div className="settings-row settings-toggle-row">
+                    <span className="settings-row-label settings-row-label-sub">{t('profile.settings.assignedToTask')}</span>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settingsPrefs.assignedToTask}
+                        onChange={e => setSettingsPrefs(prev => ({ ...prev, assignedToTask: e.target.checked }))}
+                      />
+                      <span className="settings-toggle-slider" />
+                    </label>
+                  </div>
+                  <div className="settings-row settings-toggle-row">
+                    <span className="settings-row-label settings-row-label-sub">{t('profile.settings.dueDateApproaching')}</span>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settingsPrefs.dueDateApproaching}
+                        onChange={e => setSettingsPrefs(prev => ({ ...prev, dueDateApproaching: e.target.checked }))}
+                      />
+                      <span className="settings-toggle-slider" />
+                    </label>
+                  </div>
+                  <div className="settings-row settings-toggle-row">
+                    <span className="settings-row-label settings-row-label-sub">{t('profile.settings.addedToBoard')}</span>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settingsPrefs.addedToBoard}
+                        onChange={e => setSettingsPrefs(prev => ({ ...prev, addedToBoard: e.target.checked }))}
+                      />
+                      <span className="settings-toggle-slider" />
+                    </label>
+                  </div>
+                  <div className="settings-actions">
+                    <button className="settings-btn settings-btn-accent" type="button" onClick={() => setIsEmailPrefsOpen(true)}>
+                      {t('profile.settings.manageEmail')}
                     </button>
                   </div>
                 </section>
@@ -961,21 +1039,40 @@ export const ProfileScreen: React.FC = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="profile-privacy-body"
+                className="profile-privacy-layout"
               >
-                <PrivacyPolicyScreen />
+                {privacyContent.paragraphs.map((paragraph, index) => (
+                  <p
+                    key={`privacy-paragraph-${index}`}
+                    className={`privacy-text-block${index === privacyContent.paragraphs.length - 1 ? ' short' : ''}`}
+                  >
+                    {paragraph}
+                  </p>
+                ))}
+                {privacyContent.translationNotice && (
+                  <p className="privacy-summary-line">{privacyContent.translationNotice}</p>
+                )}
+                <p className="privacy-summary-line">{privacyContent.summaryTitle}</p>
               </motion.div>
             )}
           </AnimatePresence>
         </main>
       </div>
       {isEmailPrefsOpen && (
-        <div className="settings-modal-overlay" onClick={() => setIsEmailPrefsOpen(false)}>
-          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="settings-modal-close" onClick={() => setIsEmailPrefsOpen(false)}>
+        <div className="settings-modal-overlay" onClick={closeEmailPrefs}>
+          <div
+            ref={emailPrefsDialogRef}
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="email-prefs-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="settings-modal-close" onClick={closeEmailPrefs} aria-label={t('common.close')}>
               {t('profile.deactivate.close')}
             </button>
-            <div className="settings-modal-title">{t('profile.emailPrefs.title')}</div>
+            <div className="settings-modal-title" id="email-prefs-modal-title">{t('profile.emailPrefs.title')}</div>
             <div className="settings-modal-subtitle">{t('profile.emailPrefs.subtitle')}</div>
             <div className="settings-modal-content">
               <div className="settings-toggle-row">
@@ -1026,9 +1123,10 @@ export const ProfileScreen: React.FC = () => {
             <div className="settings-modal-actions">
               <button
                 className="settings-btn settings-btn-primary"
+                type="button"
                 onClick={async () => {
                   await handleSave();
-                  setIsEmailPrefsOpen(false);
+                  closeEmailPrefs();
                 }}
                 disabled={saving}
               >
@@ -1040,12 +1138,20 @@ export const ProfileScreen: React.FC = () => {
       )}
 
       {isIntegrationsOpen && (
-        <div className="settings-modal-overlay" onClick={() => setIsIntegrationsOpen(false)}>
-          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="settings-modal-close" onClick={() => setIsIntegrationsOpen(false)}>
+        <div className="settings-modal-overlay" onClick={closeIntegrations}>
+          <div
+            ref={integrationsDialogRef}
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="integrations-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="settings-modal-close" onClick={closeIntegrations} aria-label={t('common.close')}>
               {t('profile.deactivate.close')}
             </button>
-            <div className="settings-modal-title">{t('profile.integrations.title')}</div>
+            <div className="settings-modal-title" id="integrations-modal-title">{t('profile.integrations.title')}</div>
             <div className="settings-modal-subtitle">{t('profile.integrations.subtitle')}</div>
             <div className="settings-modal-content integrations-list">
               <div className="integration-item">
@@ -1082,17 +1188,26 @@ export const ProfileScreen: React.FC = () => {
 
       {toast && <div className="profile-toast">{toast}</div>}
       {isDeactivateOpen && (
-        <div className="attention-overlay" onClick={() => setIsDeactivateOpen(false)}>
-          <div className="attention-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="attention-close" onClick={() => setIsDeactivateOpen(false)}>
+        <div className="attention-overlay" onClick={closeDeactivate}>
+          <div
+            ref={deactivateDialogRef}
+            className="attention-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deactivate-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="attention-close" onClick={closeDeactivate} aria-label={t('common.close')}>
               {t('profile.deactivate.close')}
             </button>
-            <div className="attention-title">{t('profile.deactivate.title')}</div>
+            <div className="attention-title" id="deactivate-modal-title">{t('profile.deactivate.title')}</div>
             <div className="attention-text">{t('profile.deactivate.message')}</div>
             <button
               className="attention-action"
+              type="button"
               onClick={async () => {
-                setIsDeactivateOpen(false);
+                closeDeactivate();
                 await handleDeleteAccount();
               }}
             >

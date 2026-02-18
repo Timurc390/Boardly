@@ -13,7 +13,7 @@ test.describe.parallel('browserstack parallel warmup', () => {
   const paths = [
     { name: 'home', path: '/' },
     { name: 'auth', path: '/auth' },
-    { name: 'board', path: '/board' },
+    { name: 'board', path: '/boards' },
     { name: 'my-cards', path: '/my-cards' },
     { name: 'profile', path: '/profile' }
   ];

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Board, List, Card, Checklist, ChecklistItem, Label, Comment } from '../../../types';
+import { Board, List, Card } from '../../../types';
 import * as api from '../api';
 import { DropResult } from '@hello-pangea/dnd';
 import { useI18n } from '../../../context/I18nContext';
