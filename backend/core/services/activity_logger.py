@@ -1,4 +1,5 @@
 from core.models import ActivityLog
+from core.services.activity_retention import apply_activity_retention
 
 def log_activity(user, action, entity_type='', entity_id=None, meta=None):
     """
@@ -14,3 +15,4 @@ def log_activity(user, action, entity_type='', entity_id=None, meta=None):
         entity_id=entity_id,
         meta=meta or {}
     )
+    apply_activity_retention(user)

@@ -9,3 +9,4 @@ dj-rest-auth==7.0.2
 dj-database-url>=2.1
 psycopg2-binary>=2.9
 Pillow>=10.0
+whitenoise>=6.8

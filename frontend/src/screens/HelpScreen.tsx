@@ -7,15 +7,15 @@ export const HelpScreen: React.FC = () => {
   const { t } = useI18n();
 
   const featuredItems = [
-    { titleKey: 'help.featured.item1', path: '/faq' },
-    { titleKey: 'help.featured.item2', path: '/faq' },
-    { titleKey: 'help.featured.item3', path: '/faq' },
-    { titleKey: 'help.featured.item4', path: '/faq' },
-    { titleKey: 'help.featured.item5', path: '/faq' },
-    { titleKey: 'help.featured.item6', path: '/faq' },
-    { titleKey: 'help.featured.item7', path: '/faq' },
-    { titleKey: 'help.featured.item8', path: '/faq' },
-    { titleKey: 'help.featured.item9', path: '/faq' }
+    { titleKey: 'help.featured.item1', path: '/help' },
+    { titleKey: 'help.featured.item2', path: '/help' },
+    { titleKey: 'help.featured.item3', path: '/help' },
+    { titleKey: 'help.featured.item4', path: '/help' },
+    { titleKey: 'help.featured.item5', path: '/help' },
+    { titleKey: 'help.featured.item6', path: '/help' },
+    { titleKey: 'help.featured.item7', path: '/help' },
+    { titleKey: 'help.featured.item8', path: '/help' },
+    { titleKey: 'help.featured.item9', path: '/help' }
   ];
 
   const resourceItems = [
@@ -31,7 +31,7 @@ export const HelpScreen: React.FC = () => {
       titleKey: 'help.resources.status.title',
       bodyKey: 'help.resources.status.body',
       linkKey: 'help.resources.status.link',
-      path: '/faq'
+      path: '/help'
     },
     {
       icon: '/help-icons/idea.png',
@@ -52,7 +52,7 @@ export const HelpScreen: React.FC = () => {
       titleKey: 'help.resources.billing.title',
       bodyKey: 'help.resources.billing.body',
       linkKey: 'help.resources.billing.link',
-      path: '/faq'
+      path: '/help'
     },
     {
       icon: '/help-icons/badge.png',
@@ -66,14 +66,14 @@ export const HelpScreen: React.FC = () => {
       titleKey: 'help.resources.developers.title',
       bodyKey: 'help.resources.developers.body',
       linkKey: 'help.resources.developers.link',
-      path: '/faq'
+      path: '/help'
     },
     {
       icon: '/help-icons/enterprise.png',
       titleKey: 'help.resources.enterprise.title',
       bodyKey: 'help.resources.enterprise.body',
       linkKey: 'help.resources.enterprise.link',
-      path: '/faq'
+      path: '/help'
     },
     {
       icon: '/help-icons/cloud-server.png',
@@ -165,7 +165,7 @@ export const HelpScreen: React.FC = () => {
 
         <section className="help-footer-cta help-animate" style={{ animationDelay: '260ms' }}>
           <p>{t('help.contact.title')}</p>
-          <button type="button" className="help-contact-btn" onClick={() => navigate('/faq')}>
+          <button type="button" className="help-contact-btn" onClick={() => navigate('/help')}>
             {t('help.contact.button')}
           </button>
         </section>

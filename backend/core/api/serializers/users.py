@@ -28,13 +28,16 @@ class ProfileSerializer(serializers.ModelSerializer):
             'notify_assigned',
             'notify_due',
             'notify_added',
+            'activity_retention',
             'default_board_view',
             'session_timeout',
             'two_factor_enabled',
             'require_login_verification',
+            'password_initialized',
             'avatar',
             'avatar_url'
         )
+        read_only_fields = ('password_initialized',)
 
     def get_avatar_url(self, obj):
         if not obj.avatar:

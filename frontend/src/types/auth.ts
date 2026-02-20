@@ -12,10 +12,12 @@ export interface ProfileData {
   notify_assigned?: boolean;
   notify_due?: boolean;
   notify_added?: boolean;
+  activity_retention?: '7d' | '30d' | '365d';
   default_board_view?: 'kanban' | 'calendar';
   session_timeout?: string;
   two_factor_enabled?: boolean;
   require_login_verification?: boolean;
+  password_initialized?: boolean;
   avatar?: string | null;
   avatar_url?: string | null;
 }

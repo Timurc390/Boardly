@@ -15,6 +15,8 @@ RUN set -ex && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /root/.cache/
 COPY . /code
+RUN mkdir -p /data/media
+RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 

@@ -91,9 +91,13 @@ export const registerUser = createAsyncThunk(
   'auth/register',
   async (data: any, { rejectWithValue }) => {
     try {
-      await client.post('/auth/users/', { 
-        ...data, 
-        email: data.email || `${data.username}@boardly.local` 
+      // Djoser user_create serializer does not accept profile-only fields (e.g. organization).
+      await client.post('/auth/users/', {
+        username: (data.username || '').trim(),
+        password: data.password || '',
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        email: (data.email || `${data.username}@boardly.local`).trim(),
       });
       // Повертаємо true, але не логінимось (чекаємо активації)
       return true;
@@ -150,12 +154,55 @@ export const removeUserAvatar = createAsyncThunk(
 
 export const changeUserPassword = createAsyncThunk(
   'auth/changePassword',
-  async (data: { current_password: string; new_password: string }, { rejectWithValue }) => {
+  async (data: { current_password: string; new_password: string; re_new_password?: string }, { rejectWithValue }) => {
     try {
-      await client.post('/auth/users/set_password/', data);
+      try {
+        await client.post('/users/me/password/', {
+          current_password: data.current_password,
+          new_password: data.new_password,
+          re_new_password: data.re_new_password ?? data.new_password,
+        });
+      } catch (firstErr: any) {
+        const status = firstErr?.response?.status;
+        if (status !== 404) {
+          throw firstErr;
+        }
+
+        // Backward compatibility with Djoser endpoint.
+        try {
+          await client.post('/auth/users/set_password/', {
+            current_password: data.current_password,
+            new_password: data.new_password,
+            re_new_password: data.re_new_password ?? data.new_password,
+          });
+        } catch (djoserErr: any) {
+          const payload = djoserErr?.response?.data;
+          const hasReNewPasswordError =
+            payload && typeof payload === 'object' && 're_new_password' in payload;
+          if (!hasReNewPasswordError) {
+            throw djoserErr;
+          }
+          await client.post('/auth/users/set_password/', {
+            current_password: data.current_password,
+            new_password: data.new_password,
+          });
+        }
+      }
       return true;
     } catch (err: any) {
       return rejectWithValue(err.response?.data || 'Password change failed');
+    }
+  }
+);
+
+export const verifyCurrentPassword = createAsyncThunk(
+  'auth/verifyCurrentPassword',
+  async (current_password: string, { rejectWithValue }) => {
+    try {
+      await client.post('/users/me/password/check-current/', { current_password });
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(err.response?.data || 'Current password verification failed');
     }
   }
 );
@@ -210,11 +257,30 @@ export const resetUserPassword = createAsyncThunk(
   }
 );
 
+export const requestUserPasswordChange = createAsyncThunk(
+  'auth/requestUserPasswordChange',
+  async (
+    data: { current_password?: string; new_password: string; re_new_password?: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      await client.post('/users/me/password/request-change/', {
+        current_password: data.current_password ?? '',
+        new_password: data.new_password,
+        re_new_password: data.re_new_password ?? data.new_password,
+      });
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(err.response?.data || 'Password change request failed');
+    }
+  }
+);
+
 export const confirmUserPasswordReset = createAsyncThunk(
   'auth/resetPasswordConfirm',
-  async (data: any, { rejectWithValue }) => {
+  async (data: { uid?: string; token?: string }, { rejectWithValue }) => {
     try {
-      await client.post('/auth/users/reset_password_confirm/', data);
+      await client.post('/users/password/confirm-change/', data);
       return true;
     } catch (err: any) {
       return rejectWithValue(err.response?.data || 'Password reset failed');

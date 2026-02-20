@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
+import { createPortal } from 'react-dom';
 import { Card } from '../../../types';
 import { useI18n } from '../../../context/I18nContext';
 
@@ -99,21 +100,22 @@ const CardItemComponent: React.FC<CardItemProps> = ({
 
   return (
     <Draggable draggableId={`card-${card.id}`} index={index} isDragDisabled={!canEdit}>
-      {(provided, snapshot) => (
-        <div
-          className={`task-card ${snapshot.isDragging ? 'dragging' : ''}`}
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          aria-label={card.title}
-          aria-roledescription="draggable card"
-          style={{
-            ...provided.draggableProps.style,
-          }}
-          onClick={handleClick}
-          onMouseEnter={() => setIsHover(true)}
-          onMouseLeave={() => setIsHover(false)}
-        >
+      {(provided, snapshot) => {
+        const cardNode = (
+          <div
+            className={`task-card ${snapshot.isDragging ? 'dragging' : ''}`}
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            aria-label={card.title}
+            aria-roledescription="draggable card"
+            style={{
+              ...provided.draggableProps.style,
+            }}
+            onClick={handleClick}
+            onMouseEnter={() => setIsHover(true)}
+            onMouseLeave={() => setIsHover(false)}
+          >
           {coverColor && (
             <div className={`card-item-cover ${coverMode}`} style={{ background: coverColor }} />
           )}
@@ -243,8 +245,15 @@ const CardItemComponent: React.FC<CardItemProps> = ({
               </div>
             )}
           </div>
-        </div>
-      )}
+          </div>
+        );
+
+        if (snapshot.isDragging && typeof document !== 'undefined') {
+          return createPortal(cardNode, document.body);
+        }
+
+        return cardNode;
+      }}
     </Draggable>
   );
 };

@@ -6,6 +6,7 @@ import { logoutUser } from '../../store/slices/authSlice';
 
 import { useI18n } from '../../context/I18nContext';
 import { LanguageSelect } from '../LanguageSelect';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export const Layout: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -26,29 +27,7 @@ export const Layout: React.FC = () => {
   const rawAvatarUrl = user?.profile?.avatar_url || '';
   const rawAvatarPath = user?.profile?.avatar || '';
   const resolvedAvatarUrl = useMemo(() => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const preferPath = rawAvatarUrl && origin.startsWith('https://') && rawAvatarUrl.startsWith('http://');
-    const candidate = preferPath ? (rawAvatarPath || rawAvatarUrl) : (rawAvatarUrl || rawAvatarPath);
-    if (!candidate) return '';
-    if (candidate.startsWith('data:')) return candidate;
-    if (candidate.startsWith('http')) {
-      try {
-        const url = new URL(candidate);
-        if (origin) {
-          const originUrl = new URL(origin);
-          const mixedContent = originUrl.protocol === 'https:' && url.protocol === 'http:';
-          const differentHost = url.host !== originUrl.host;
-          if ((mixedContent || differentHost) && url.pathname) {
-            return `${originUrl.origin}${url.pathname}`;
-          }
-        }
-      } catch {
-        return candidate;
-      }
-      return candidate;
-    }
-    if (candidate.startsWith('/')) return origin ? `${origin}${candidate}` : candidate;
-    return candidate;
+    return resolveMediaUrl(rawAvatarUrl || rawAvatarPath);
   }, [rawAvatarUrl, rawAvatarPath]);
   const [avatarFailed, setAvatarFailed] = useState(false);
 

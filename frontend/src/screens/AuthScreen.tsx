@@ -7,7 +7,7 @@ import { useI18n } from '../context/I18nContext';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loginUser, registerUser, googleLoginUser, clearError } from '../store/slices/authSlice';
 
-const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = '374249918192-1mtc1h12qqq33tvrj4g7jkbqat8udrbk.apps.googleusercontent.com';
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -147,13 +147,32 @@ export const AuthScreen: React.FC = () => {
       if (err && typeof err === 'object') {
          const authErr = err as {
           email?: string[];
+          username?: string[];
+          password?: string[];
+          first_name?: string[];
+          last_name?: string[];
           non_field_errors?: string[];
           detail?: string;
+          [key: string]: unknown;
          };
          if (authErr.email?.length) setLocalError(authErr.email[0]);
+         else if (authErr.username?.length) setLocalError(authErr.username[0]);
+         else if (authErr.password?.length) setLocalError(authErr.password[0]);
+         else if (authErr.first_name?.length) setLocalError(authErr.first_name[0]);
+         else if (authErr.last_name?.length) setLocalError(authErr.last_name[0]);
          else if (authErr.non_field_errors?.length) setLocalError(authErr.non_field_errors[0]);
          else if (authErr.detail) setLocalError(authErr.detail);
-         else setLocalError(t('auth.loginError'));
+         else {
+          const firstKey = Object.keys(authErr)[0];
+          const firstVal = firstKey ? (authErr as any)[firstKey] : null;
+          if (Array.isArray(firstVal) && firstVal.length) {
+            setLocalError(String(firstVal[0]));
+          } else if (typeof firstVal === 'string') {
+            setLocalError(firstVal);
+          } else {
+            setLocalError(t('auth.loginError'));
+          }
+         }
       } else {
          setLocalError(t('common.noConnection'));
       }

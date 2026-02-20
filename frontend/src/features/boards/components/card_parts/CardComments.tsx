@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, User, Comment } from '../../../../types';
 import { useI18n } from '../../../../context/I18nContext';
+import { resolveMediaUrl } from '../../../../utils/mediaUrl';
 
 interface CardCommentsProps {
   card: Card;
@@ -19,9 +20,7 @@ export const CardComments: React.FC<CardCommentsProps> = ({
   user,
   onAddComment,
   onUpdateComment,
-  onDeleteComment,
   canEditComment,
-  canDeleteComment,
   canEdit = true,
   onClose
 }) => {
@@ -39,16 +38,13 @@ export const CardComments: React.FC<CardCommentsProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const fallbackAvatar = '/logo.png';
   const emojiOptions = ['😀', '😂', '😍', '🤔', '🔥', '👏', '👍', '❤️', '🎉', '✅'];
   const reactionOptions = ['👍', '❤️', '🔥', '🎉', '😂', '😮', '👏', '✅'];
   const commentsCount = card.comments?.length || 0;
 
   const getAvatarSrc = (member?: User | null) => {
-    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
-    if (!candidate) return fallbackAvatar;
-    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
-    return `/${candidate}`;
+    return resolveMediaUrl(member?.profile?.avatar_url || member?.profile?.avatar, fallbackAvatar);
   };
 
   const submitNewComment = () => {
@@ -116,6 +112,12 @@ export const CardComments: React.FC<CardCommentsProps> = ({
     return items;
   }, [card.comments]);
 
+  const isEditedComment = (comment: Comment) => {
+    const updatedAt = (comment as Comment & { updated_at?: string | null }).updated_at;
+    if (!updatedAt) return false;
+    return new Date(updatedAt).getTime() > new Date(comment.created_at).getTime();
+  };
+
   const handleListScroll = () => {
     if (!listRef.current) return;
     const el = listRef.current;
@@ -175,11 +177,11 @@ export const CardComments: React.FC<CardCommentsProps> = ({
         )}
         {sortedComments.map(comment => {
           const canEditCurrent = canEditComment ? canEditComment(comment) : false;
-          const canDeleteCurrent = canDeleteComment ? canDeleteComment(comment) : false;
           const isEditing = editingId === comment.id;
           const authorName = comment.author?.username || comment.author?.email || t('common.unknown');
           const reactionState = reactionsByComment[comment.id] || { counts: {}, mine: [] };
           const reactionEntries = Object.entries(reactionState.counts);
+          const wasEdited = isEditedComment(comment);
 
           return (
             <div key={comment.id} className="comment-item card-comment-item">
@@ -197,7 +199,10 @@ export const CardComments: React.FC<CardCommentsProps> = ({
               <div className="comment-content card-comment-content">
                 <div className="comment-header">
                   <strong className="comment-author">{authorName}</strong>
-                  <span className="comment-date">{new Date(comment.created_at).toLocaleString(locale)}</span>
+                  <span className="comment-date">
+                    {new Date(comment.created_at).toLocaleString(locale)}
+                    {wasEdited ? <span className="comment-edited-mark"> · отрекдоктировано</span> : null}
+                  </span>
                 </div>
 
                 {isEditing ? (
@@ -271,16 +276,6 @@ export const CardComments: React.FC<CardCommentsProps> = ({
                           </button>
                         );
                       })}
-                      <button
-                        type="button"
-                        className="card-comment-reaction-add"
-                        aria-label={t('comments.react')}
-                        onClick={() => {
-                          setOpenReactionCommentId(prev => (prev === comment.id ? null : comment.id));
-                        }}
-                      >
-                        +
-                      </button>
                     </div>
                     {openReactionCommentId === comment.id && (
                       <div className="card-comment-reaction-picker" role="listbox" aria-label={t('comments.reactionPicker')}>
@@ -301,7 +296,7 @@ export const CardComments: React.FC<CardCommentsProps> = ({
                   </>
                 )}
 
-                {(canEditCurrent || canDeleteCurrent) && !isEditing && (
+                {canEditCurrent && !isEditing && (
                   <div className="comment-actions">
                     {canEditCurrent && (
                       <button
@@ -313,16 +308,6 @@ export const CardComments: React.FC<CardCommentsProps> = ({
                         }}
                       >
                         {t('common.edit')}
-                      </button>
-                    )}
-                    {canEditCurrent && canDeleteCurrent && <span>•</span>}
-                    {canDeleteCurrent && (
-                      <button
-                        type="button"
-                        className="comment-action"
-                        onClick={() => onDeleteComment(comment.id)}
-                      >
-                        {t('common.delete')}
                       </button>
                     )}
                   </div>

@@ -45,7 +45,13 @@ const ACTIONS_TO_BROADCAST = new Set([
   'board/addChecklistItem/fulfilled',
   'board/updateChecklistItem/fulfilled',
   'board/deleteChecklistItem/fulfilled',
+  'board/addChecklist/fulfilled',
   'board/addComment/fulfilled',
+  'board/updateComment/fulfilled',
+  'board/deleteComment/fulfilled',
+  'board/addCardMember/fulfilled',
+  'board/addAttachment/fulfilled',
+  'board/deleteAttachment/fulfilled',
   'board/removeMember/fulfilled',
   'board/updateMemberRole/fulfilled'
 ]);
@@ -253,6 +259,18 @@ export const socketMiddleware: Middleware = (storeApi) => (next) => (action) => 
       if (cardId !== null) {
         payload = {
           comment: rawAction.payload,
+          ws_meta: {
+            cardId,
+          },
+        };
+      }
+    }
+
+    if (actionType === 'board/addChecklist/fulfilled' && isRecord(metaArg)) {
+      const cardId = toNumber(metaArg.cardId);
+      if (cardId !== null) {
+        payload = {
+          checklist: rawAction.payload,
           ws_meta: {
             cardId,
           },

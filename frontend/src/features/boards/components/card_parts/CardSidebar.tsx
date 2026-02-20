@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
 import { useI18n } from '../../../../context/I18nContext';
+import { resolveMediaUrl } from '../../../../utils/mediaUrl';
 
 interface CardSidebarProps {
   card: Card;
@@ -42,22 +43,21 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
   isCoverMenuOpen, onToggleCoverMenu, coverMode, onCoverModeChange, onOpenCover
 }) => {
   const { t, locale } = useI18n();
-  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const fallbackAvatar = '/logo.png';
   const getAvatarSrc = (member: NonNullable<Card['members']>[number]) => {
-    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
-    if (!candidate) return fallbackAvatar;
-    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
-    return `/${candidate}`;
+    return resolveMediaUrl(member?.profile?.avatar_url || member?.profile?.avatar, fallbackAvatar);
   };
   const coverColors = [
-    '#2e7d32',
-    '#ef6c00',
-    '#f9a825',
-    '#8e24aa',
-    '#1e88e5',
-    '#00897b',
-    '#e53935',
-    '#5d4037'
+    '#4CAF50',
+    '#FBC02D',
+    '#E53935',
+    '#1E88E5',
+    '#9E9E9E',
+    '#F5F5F5',
+    '#FB8C00',
+    '#8E24AA',
+    '#00897B',
+    '#8D6E63'
   ];
   const dueDate = card.due_date ? new Date(card.due_date) : null;
   const dueText = dueDate && !Number.isNaN(dueDate.getTime())

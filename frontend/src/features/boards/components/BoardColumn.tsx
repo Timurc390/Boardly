@@ -7,16 +7,16 @@ import { Button } from '../../../components/ui/Button';
 import { useI18n } from '../../../context/I18nContext';
 
 const LIST_COLOR_OPTIONS = [
-  '#AC7575',
-  '#334132',
-  '#2E315C',
-  '#A8285B',
-  '#D8C246',
-  '#5B7BFA',
-  '#F08A5D',
-  '#22344C',
-  '#2E2E2E',
-  '#E8DDC7'
+  '#4CAF50',
+  '#FBC02D',
+  '#E53935',
+  '#1E88E5',
+  '#9E9E9E',
+  '#F5F5F5',
+  '#FB8C00',
+  '#8E24AA',
+  '#00897B',
+  '#8D6E63'
 ];
 
 const hexToRgb = (hex: string) => {
@@ -154,6 +154,12 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   }, [isEditingTitle]);
 
   useEffect(() => {
+    if (!isEditingTitle) {
+      setTitleValue(list.title);
+    }
+  }, [isEditingTitle, list.title]);
+
+  useEffect(() => {
     if (!isAdding || !newCardInputRef.current || isTouch) return;
     const input = newCardInputRef.current;
     setTimeout(() => {
@@ -250,12 +256,17 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     }
   };
 
-  const handleMenuAction = (action: 'add' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'remove') => {
+  const handleMenuAction = (action: 'add' | 'rename' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'remove') => {
       onCloseListMenu();
       if (action === 'add') {
         if (!canAddCards) return;
         setIsAdding(true);
         setTimeout(() => newCardInputRef.current?.focus(), 0);
+        return;
+      }
+      if (action === 'rename') {
+        setTitleValue(list.title);
+        setIsEditingTitle(true);
         return;
       }
       if (action === 'copy' && onCopyList) onCopyList(list.id);
@@ -337,6 +348,11 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
           {canAddCards && (
             <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('add')}>
               {t('list.menu.addCard')}
+            </button>
+          )}
+          {canEditList && (
+            <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('rename')}>
+              {t('common.edit')}
             </button>
           )}
           <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('copy')}>
@@ -431,17 +447,25 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   if (isCollapsed) {
       return (
     <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
-            {(provided) => (
+            {(provided, snapshot) => (
+                (() => {
+                  const providedStyle = provided.draggableProps.style || {};
+                  const baseTransform = providedStyle.transform;
+                  const mergedTransform = snapshot.isDragging
+                    ? baseTransform
+                    : [baseTransform, 'rotate(180deg)'].filter(Boolean).join(' ');
+                  return (
                 <div 
-                    className="kanban-column collapsed"
+                    className={`kanban-column collapsed ${snapshot.isDragging ? 'dragging-list' : ''}`}
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
                     style={{ 
-                        ...provided.draggableProps.style, 
+                        ...providedStyle, 
                         width: '40px', minWidth: '40px', 
                         alignItems: 'center', cursor: 'pointer',
-                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                        writingMode: 'vertical-rl',
+                        transform: mergedTransform,
                         padding: '12px 0',
                         background: hasListColor ? listColor : 'var(--bg-surface)',
                         borderRadius: '12px',
@@ -453,6 +477,8 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
                     <span style={{ fontWeight: 600, color: headerMeta?.text || 'var(--text-primary)' }}>{list.title}</span>
                     <span className="count-badge" style={{ marginTop: 8, transform: 'rotate(90deg)', ...headerBadgeStyle }}>{visibleCount}</span>
                 </div>
+                  );
+                })()
             )}
         </Draggable>
       );
@@ -460,11 +486,12 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
 
   return (
     <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
-      {(provided) => (
+      {(provided, snapshot) => (
         <div
-          className={`kanban-column ${hasListColor ? 'has-color' : ''}`}
+          className={`kanban-column ${hasListColor ? 'has-color' : ''} ${snapshot.isDragging ? 'dragging-list' : ''}`}
           ref={provided.innerRef}
           {...provided.draggableProps}
+          style={provided.draggableProps.style}
         >
           <div className={`list-header ${hasListColor ? 'has-color' : ''}`} {...provided.dragHandleProps} style={headerStyle}>
             {isEditingTitle ? (
@@ -480,7 +507,17 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
             ) : (
               <>
                 <span 
-                  onClick={() => { if (canEditList) setIsEditingTitle(true); }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (canEditList) setIsEditingTitle(true);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (canEditList) setIsEditingTitle(true);
+                  }}
                   style={{ cursor: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8, flex: 1, color: headerMeta?.text }}
                   title={list.title}
                 >

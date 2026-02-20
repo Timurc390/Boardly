@@ -21,11 +21,15 @@ export const ForgotPasswordScreen: React.FC = () => {
     setStatus('loading');
     setErrorMsg('');
     try {
-      await dispatch(resetUserPassword(email));
+      await dispatch(resetUserPassword(email)).unwrap();
       setStatus('success');
-    } catch (error) {
+    } catch (error: any) {
       setStatus('error');
-      // Для безпеки краще писати загальне повідомлення, навіть якщо email не знайдено
+      const payload = error?.payload ?? error;
+      if (payload?.detail) {
+        setErrorMsg(String(payload.detail));
+        return;
+      }
       setErrorMsg(t('passwordReset.error'));
     }
   };

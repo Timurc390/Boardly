@@ -1,6 +1,7 @@
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib.auth import get_user_model
 from django.utils.crypto import get_random_string # Імпортуємо генератор рядків
+from core.models import Profile
 
 class GoogleAccountAdapter(DefaultSocialAccountAdapter):
     """
@@ -35,5 +36,10 @@ class GoogleAccountAdapter(DefaultSocialAccountAdapter):
         if not user.has_usable_password():
             user.set_password(get_random_string(32)) # Генеруємо 32-символьний пароль
             user.save()
+
+        # Social users get a random password, so allow first password setup without current password.
+        profile, _ = Profile.objects.get_or_create(user=user)
+        profile.password_initialized = False
+        profile.save(update_fields=['password_initialized'])
             
         return user

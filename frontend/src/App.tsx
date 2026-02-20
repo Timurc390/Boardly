@@ -16,7 +16,6 @@ import { BoardListScreen } from './features/boards/BoardListScreen';
 import { BoardDetailScreen } from './features/boards/BoardDetailScreen';
 import { InviteScreen } from './features/boards/InviteScreen'; 
 import { ProfileScreen } from './screens/ProfileScreen';
-import { FaqScreen } from './screens/FaqScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { ResetPasswordConfirmScreen } from './screens/ResetPasswordConfirmScreen';
 import { MyCardsScreen } from './screens/MyCardsScreen';
@@ -49,7 +48,7 @@ const AppContent = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    const nextTheme = (user?.profile?.theme as string) || (typeof window !== 'undefined' ? window.localStorage.getItem('theme') : null) || 'dark';
+    const nextTheme = 'dark';
     if (typeof document !== 'undefined') {
       document.documentElement.dataset.theme = nextTheme;
     }
@@ -62,12 +61,13 @@ const AppContent = () => {
     <I18nProvider>
       <Routes>
         {/* Публічні маршрути */}
-        <Route path="/" element={<Navigate to={homePath} replace />} />
-        <Route path="/landing" element={<LandingScreen />} />
+        <Route path="/" element={<LandingScreen />} />
+        <Route path="/landing" element={<Navigate to="/" replace />} />
         <Route path="/auth" element={<AuthScreen />} />
         <Route path="/login" element={<Navigate to="/auth" replace />} />
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/password-reset/:uid/:token" element={<ResetPasswordConfirmScreen />} />
+        <Route path="/password-change-confirm/:uid/:token" element={<ResetPasswordConfirmScreen />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyScreen />} />
         <Route path="/activate/:uid/:token" element={<ActivationScreen />} />
 
@@ -106,14 +106,6 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <MyCardsScreen />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/faq" 
-            element={
-              <ProtectedRoute>
-                <FaqScreen />
               </ProtectedRoute>
             } 
           />

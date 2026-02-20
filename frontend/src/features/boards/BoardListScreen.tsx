@@ -8,7 +8,8 @@ import { useI18n } from '../../context/I18nContext';
 import * as api from './api';
 import { Board } from '../../types';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
+import { logoutUser } from '../../store/slices/authSlice';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const BOARD_LIST_BACKGROUND_KEY = 'boardly.boards.background';
 const DEFAULT_BOARDS_BACKGROUND = '/board-backgrounds/board-default.jpg';
@@ -50,46 +51,15 @@ export const BoardListScreen: React.FC = () => {
     return window.localStorage.getItem(BOARD_LIST_BACKGROUND_KEY) || DEFAULT_BOARDS_BACKGROUND;
   });
   const [pendingBackground, setPendingBackground] = useState<string>(dashboardBackground);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof document === 'undefined') return 'dark';
-    return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-  });
   const [avatarFailed, setAvatarFailed] = useState(false);
   const accountPanelRef = useRef<HTMLDivElement | null>(null);
   const backgroundModalRef = useRef<HTMLDivElement | null>(null);
   const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    const nextTheme = user?.profile?.theme === 'light' ? 'light' : user?.profile?.theme === 'dark' ? 'dark' : null;
-    if (nextTheme) setTheme(nextTheme);
-  }, [user?.profile?.theme]);
-
   const rawAvatarUrl = user?.profile?.avatar_url || '';
   const rawAvatarPath = user?.profile?.avatar || '';
   const resolvedAvatarUrl = useMemo(() => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const preferPath = rawAvatarUrl && origin.startsWith('https://') && rawAvatarUrl.startsWith('http://');
-    const candidate = preferPath ? (rawAvatarPath || rawAvatarUrl) : (rawAvatarUrl || rawAvatarPath);
-    if (!candidate) return '';
-    if (candidate.startsWith('data:')) return candidate;
-    if (candidate.startsWith('http')) {
-      try {
-        const url = new URL(candidate);
-        if (origin) {
-          const originUrl = new URL(origin);
-          const mixedContent = originUrl.protocol === 'https:' && url.protocol === 'http:';
-          const differentHost = url.host !== originUrl.host;
-          if ((mixedContent || differentHost) && url.pathname) {
-            return `${originUrl.origin}${url.pathname}`;
-          }
-        }
-      } catch {
-        return candidate;
-      }
-      return candidate;
-    }
-    if (candidate.startsWith('/')) return origin ? `${origin}${candidate}` : candidate;
-    return candidate;
+    return resolveMediaUrl(rawAvatarUrl || rawAvatarPath);
   }, [rawAvatarPath, rawAvatarUrl]);
 
   useEffect(() => {
@@ -145,19 +115,6 @@ export const BoardListScreen: React.FC = () => {
       }),
     []
   );
-  const applyTheme = useCallback((nextTheme: 'dark' | 'light') => {
-    setTheme(nextTheme);
-    if (typeof document !== 'undefined') {
-      document.documentElement.dataset.theme = nextTheme;
-    }
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('theme', nextTheme);
-    }
-    if (user && user.profile?.theme !== nextTheme) {
-      dispatch(updateUserProfile({ profile: { theme: nextTheme } }));
-    }
-  }, [dispatch, user]);
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBoardTitle.trim()) return;
@@ -295,7 +252,7 @@ export const BoardListScreen: React.FC = () => {
 
       <div className="board-list-shell">
         <header className="boards-hub-header">
-          <Link to="/boards" className="boards-hub-logo">Boardly</Link>
+          <Link to="/" className="boards-hub-logo">Boardly</Link>
           <div className="boards-hub-toolbar">
             <div className="boards-hub-search">
               <input
@@ -456,22 +413,6 @@ export const BoardListScreen: React.FC = () => {
             </div>
 
             <div className="boards-background-actions">
-              <div className="boards-theme-toggle boards-modal-theme-toggle">
-                <button
-                  type="button"
-                  className={`boards-theme-btn ${theme === 'light' ? 'active' : ''}`}
-                  onClick={() => applyTheme('light')}
-                >
-                  {t('profile.theme.light')}
-                </button>
-                <button
-                  type="button"
-                  className={`boards-theme-btn ${theme === 'dark' ? 'active' : ''}`}
-                  onClick={() => applyTheme('dark')}
-                >
-                  {t('profile.theme.dark')}
-                </button>
-              </div>
               <div className="boards-background-buttons">
                 <label className="btn-secondary" style={{ width: 'auto', cursor: 'pointer' }}>
                   {t('board.background.upload')}

@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Card, Board, User } from '../../../types';
+import { API_URL } from '../../../api/client';
+import { resolveMediaUrl } from '../../../utils/mediaUrl';
 import { CardHeader } from './card_parts/CardHeader';
 import { CardDescription } from './card_parts/CardDescription';
 import { CardChecklists } from './card_parts/CardChecklists';
@@ -93,7 +95,6 @@ export const CardModal: React.FC<CardModalProps> = ({
   
   const [dueDateDate, setDueDateDate] = useState('');
   const [dueDateTime, setDueDateTime] = useState('');
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [isCoverMenuOpen, setIsCoverMenuOpen] = useState(false);
   const [isColorblindMode, setIsColorblindMode] = useState<boolean>(() => {
@@ -109,10 +110,13 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [checklistCopyFromId, setChecklistCopyFromId] = useState<number | null>(null);
   const [isCreatingChecklist, setIsCreatingChecklist] = useState(false);
+  const [addChecklistItemSignal, setAddChecklistItemSignal] = useState(0);
   const [headerCloseSignal, setHeaderCloseSignal] = useState(0);
   const checklistsSectionRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const mainColRef = useRef<HTMLDivElement | null>(null);
   const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const [commentsMaxHeight, setCommentsMaxHeight] = useState<number | null>(null);
   const labelColorOptions = [
     '#61bd4f',
     '#f2d600',
@@ -126,16 +130,16 @@ export const CardModal: React.FC<CardModalProps> = ({
     '#344563'
   ];
   const coverColorOptions = [
-    '#216E4E',
-    '#7F5F01',
-    '#9E4C00',
-    '#AE2E24',
-    '#803FA5',
-    '#1558BC',
-    '#206A83',
-    '#4C6B1F',
-    '#943D73',
-    '#63666B'
+    '#4CAF50',
+    '#FBC02D',
+    '#E53935',
+    '#1E88E5',
+    '#9E9E9E',
+    '#F5F5F5',
+    '#FB8C00',
+    '#8E24AA',
+    '#00897B',
+    '#8D6E63'
   ];
 
   const membership = board.members?.find(m => m.user.id === user?.id);
@@ -148,9 +152,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   const developerCanEdit = board.dev_can_edit_assigned_cards ?? true;
   const developerCanArchive = board.dev_can_archive_assigned_cards ?? true;
   const developerCanJoin = board.dev_can_join_card ?? true;
-  const canEditTarget = isCardMember || !card.members || card.members.length === 0;
-  const canEditCard = !!(isOwner || isAdmin || (isDeveloper && developerCanEdit && canEditTarget));
-  const canArchiveCard = !!(isOwner || isAdmin || (isDeveloper && developerCanArchive && canEditTarget));
+  const canEditCard = !!(isOwner || isAdmin || (isDeveloper && developerCanEdit && isCardMember));
+  const canArchiveCard = !!(isOwner || isAdmin || (isDeveloper && developerCanArchive && isCardMember));
   const canDeleteCard = !!(isOwner || isAdmin);
   const canManageMembers = !!(isOwner || isAdmin);
   const canJoinCard = !!(canManageMembers || (isDeveloper && developerCanJoin));
@@ -171,7 +174,6 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
-      setIsQuickAddOpen(false);
       setIsCommentsOpen(false);
       setIsCoverMenuOpen(false);
       setActivePopover(null);
@@ -234,7 +236,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    const hasOpenPopover = isQuickAddOpen || isCoverMenuOpen || !!activePopover;
+    const hasOpenPopover = isCoverMenuOpen || !!activePopover;
     if (!hasOpenPopover) return;
 
     const handleClickOutsidePopover = (event: MouseEvent | TouchEvent) => {
@@ -245,6 +247,9 @@ export const CardModal: React.FC<CardModalProps> = ({
         '.card-add-popover',
         '.card-detail-popover',
         '.card-cover-menu',
+        '.card-comments-launch',
+        '.card-comments-col',
+        '.card-comments-panel',
         '.card-quick-btn',
         '.card-header-icon',
         '.card-list-pill',
@@ -255,7 +260,6 @@ export const CardModal: React.FC<CardModalProps> = ({
 
       if (target.closest(interactiveSelector)) return;
 
-      setIsQuickAddOpen(false);
       setIsCoverMenuOpen(false);
       setActivePopover(null);
     };
@@ -266,16 +270,40 @@ export const CardModal: React.FC<CardModalProps> = ({
       document.removeEventListener('mousedown', handleClickOutsidePopover);
       document.removeEventListener('touchstart', handleClickOutsidePopover);
     };
-  }, [activePopover, isCoverMenuOpen, isQuickAddOpen]);
+  }, [activePopover, isCoverMenuOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(COLORBLIND_STORAGE_KEY, isColorblindMode ? '1' : '0');
   }, [isColorblindMode]);
 
-  const closeAllCardOverlays = useCallback((options: { keepComments?: boolean; keepHeaderMenus?: boolean } = {}) => {
-    setIsQuickAddOpen(false);
-    setIsCoverMenuOpen(false);
+  useLayoutEffect(() => {
+    if (!isOpen || !mainColRef.current || typeof window === 'undefined') return undefined;
+
+    const syncHeight = () => {
+      const next = mainColRef.current?.offsetHeight || 0;
+      setCommentsMaxHeight(next > 0 ? next : null);
+    };
+
+    syncHeight();
+    window.addEventListener('resize', syncHeight);
+
+    let observer: ResizeObserver | null = null;
+    if ('ResizeObserver' in window && mainColRef.current) {
+      observer = new ResizeObserver(() => syncHeight());
+      observer.observe(mainColRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', syncHeight);
+      observer?.disconnect();
+    };
+  }, [isOpen, card.id, card.comments?.length, card.checklists?.length, isCommentsOpen]);
+
+  const closeAllCardOverlays = useCallback((options: { keepComments?: boolean; keepCover?: boolean; keepHeaderMenus?: boolean } = {}) => {
+    if (!options.keepCover) {
+      setIsCoverMenuOpen(false);
+    }
     setActivePopover(null);
     if (!options.keepComments) {
       setIsCommentsOpen(false);
@@ -325,7 +353,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   const handleCoverModeChange = (mode: 'full' | 'header') => {
     if (!card.card_color) {
-      onUpdateCard({ cover_size: mode, card_color: '#ef6c00' });
+      onUpdateCard({ cover_size: mode, card_color: '#4CAF50' });
       return;
     }
     onUpdateCard({ cover_size: mode });
@@ -349,8 +377,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   };
 
   const openCoverMenu = () => {
-    closeAllCardOverlays();
-    setIsCoverMenuOpen(true);
+    closeAllCardOverlays({ keepComments: true, keepCover: true });
+    setIsCoverMenuOpen(prev => !prev);
   };
 
   const openChecklistPopover = () => {
@@ -360,48 +388,17 @@ export const CardModal: React.FC<CardModalProps> = ({
     setChecklistCopyFromId(null);
   };
 
-  const handleQuickAdd = () => {
-    setIsQuickAddOpen(prev => {
-      const next = !prev;
-      if (next) {
-        closeAllCardOverlays();
-      }
-      return next;
-    });
-  };
-
-  const handleQuickAddItem = (action: 'labels' | 'checklist' | 'members' | 'attachments') => {
-    closeAllCardOverlays();
-    switch (action) {
-      case 'labels':
-        setActivePopover('labels');
-        break;
-      case 'checklist':
-        openChecklistPopover();
-        break;
-      case 'members':
-        setActivePopover('members');
-        break;
-      case 'attachments':
-        setActivePopover('attachments');
-        break;
-      default:
-        break;
-    }
-  };
-
   const handleToggleComments = () => {
     setIsCommentsOpen((prev) => {
       const next = !prev;
       if (next) {
-        setIsQuickAddOpen(false);
-        setIsCoverMenuOpen(false);
         setActivePopover(null);
         setHeaderCloseSignal((value) => value + 1);
       }
       return next;
     });
   };
+  const hasChecklists = (card.checklists || []).length > 0;
 
   const labelIds = useMemo(() => new Set((card.labels || []).map(l => l.id)), [card.labels]);
   const isLabelsOpen = activePopover === 'labels';
@@ -414,27 +411,20 @@ export const CardModal: React.FC<CardModalProps> = ({
     return (board.labels || []).filter(label => label.name.toLowerCase().includes(q));
   }, [board.labels, isLabelsOpen, labelQuery]);
 
-  const allMembers = useMemo(() => {
+  const cardMembers = useMemo(() => {
     if (!isMembersOpen) return [];
-    const list: User[] = [];
-    if (board.owner) list.push(board.owner);
-    (board.members || []).forEach(member => {
-      if (!list.some(item => item.id === member.user.id)) {
-        list.push(member.user);
-      }
-    });
-    return list;
-  }, [board.members, board.owner, isMembersOpen]);
+    return card.members || [];
+  }, [card.members, isMembersOpen]);
 
   const filteredMembers = useMemo(() => {
     if (!isMembersOpen) return [];
     const q = memberQuery.trim().toLowerCase();
-    if (!q) return allMembers;
-    return allMembers.filter(member => {
+    if (!q) return cardMembers;
+    return cardMembers.filter(member => {
       const text = `${member.first_name || ''} ${member.last_name || ''} ${member.username || ''} ${member.email || ''}`.toLowerCase();
       return text.includes(q);
     });
-  }, [allMembers, isMembersOpen, memberQuery]);
+  }, [cardMembers, isMembersOpen, memberQuery]);
 
   const handleToggleLabel = (labelId: number) => {
     if (!canEditCard) return;
@@ -462,6 +452,28 @@ export const CardModal: React.FC<CardModalProps> = ({
       setIsUploadingAttachment(false);
     }
   };
+
+  const resolveApiOrigin = useCallback(() => {
+    if (/^https?:\/\//i.test(API_URL)) {
+      return new URL(API_URL).origin;
+    }
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return `${window.location.protocol}//${window.location.hostname}:8000`;
+    }
+    return window.location.origin;
+  }, []);
+
+  const resolveAttachmentUrl = useCallback((filePath?: string) => {
+    if (!filePath) return '';
+    if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
+      return filePath;
+    }
+    const apiOrigin = resolveApiOrigin();
+    if (filePath.startsWith('/')) {
+      return `${apiOrigin}${filePath}`;
+    }
+    return `${apiOrigin}/${filePath.replace(/^\.?\//, '')}`;
+  }, [resolveApiOrigin]);
 
   const handleCreateChecklist = async () => {
     if (isCreatingChecklist) return;
@@ -543,6 +555,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     onClick={() => handleCoverModeChange('full')}
                   >
                     <span className="card-cover-preview full" style={{ background: resolveCoverColor(card.card_color || '#6d6d6d') }} />
+                    <span className="card-cover-size-label">{t('card.cover.size.full')}</span>
                   </button>
                   <button
                     type="button"
@@ -550,6 +563,7 @@ export const CardModal: React.FC<CardModalProps> = ({
                     onClick={() => handleCoverModeChange('header')}
                   >
                     <span className="card-cover-preview header" style={{ background: resolveCoverColor(card.card_color || '#6d6d6d') }} />
+                    <span className="card-cover-size-label">{t('card.cover.size.header')}</span>
                   </button>
                 </div>
               </div>
@@ -577,7 +591,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               </button>
             </div>
           )}
-          <div className="card-main-col" style={mainCardStyle}>
+          <div className="card-main-col" style={mainCardStyle} ref={mainColRef}>
             <CardHeader
               card={card}
               board={board}
@@ -594,27 +608,37 @@ export const CardModal: React.FC<CardModalProps> = ({
               onOpenCover={openCoverMenu}
               closeSignal={headerCloseSignal}
               onOpenHeaderMenu={() => {
-                closeAllCardOverlays({ keepHeaderMenus: true });
+                closeAllCardOverlays({ keepComments: true, keepCover: true, keepHeaderMenus: true });
               }}
               onClose={onClose}
             />
             <div className="card-quick-actions">
               <button
                 type="button"
-                className={`card-quick-btn ${isQuickAddOpen ? 'active' : ''}`}
-                onClick={handleQuickAdd}
+                className={`card-quick-btn ${isLabelsOpen ? 'active' : ''}`}
+                onClick={() => {
+                  closeAllCardOverlays();
+                  setActivePopover('labels');
+                }}
                 disabled={quickActionsDisabled}
               >
-                <span className="card-quick-icon">＋</span>
-                {t('card.quick.add')}
+                <span className="card-quick-icon">🏷</span>
+                {t('card.add.labels')}
               </button>
               <button type="button" className={`card-quick-btn ${isDueDateOpen ? 'active' : ''}`} onClick={startEditingDueDate} disabled={quickActionsDisabled}>
                 <span className="card-quick-icon">◷</span>
                 {t('card.quick.dates')}
               </button>
-              <button type="button" className="card-quick-btn" onClick={openChecklistPopover} disabled={quickActionsDisabled}>
-                <span className="card-quick-icon">☑</span>
-                {t('card.quick.checklist')}
+              <button
+                type="button"
+                className={`card-quick-btn ${activePopover === 'attachments' ? 'active' : ''}`}
+                onClick={() => {
+                  closeAllCardOverlays();
+                  setActivePopover('attachments');
+                }}
+              >
+                <span className="card-quick-icon">📎</span>
+                {t('card.add.attachments')}
               </button>
               <button
                 type="button"
@@ -629,35 +653,6 @@ export const CardModal: React.FC<CardModalProps> = ({
                 {t('card.quick.members')}
               </button>
             </div>
-            {isQuickAddOpen && (
-              <div className="card-add-popover">
-                <div className="card-add-title">{t('card.add.title')}</div>
-                <button type="button" className="card-add-item" onClick={() => handleQuickAddItem('labels')}>
-                  <span className="card-add-icon">🏷️</span>
-                  <div className="card-add-text">
-                    <span className="card-add-name">{t('card.add.labels')}</span>
-                  </div>
-                </button>
-                <button type="button" className="card-add-item" onClick={() => handleQuickAddItem('checklist')}>
-                  <span className="card-add-icon">☑️</span>
-                  <div className="card-add-text">
-                    <span className="card-add-name">{t('card.add.checklist')}</span>
-                  </div>
-                </button>
-                <button type="button" className="card-add-item" onClick={() => handleQuickAddItem('members')}>
-                  <span className="card-add-icon">👥</span>
-                  <div className="card-add-text">
-                    <span className="card-add-name">{t('card.add.members')}</span>
-                  </div>
-                </button>
-                <button type="button" className="card-add-item" onClick={() => handleQuickAddItem('attachments')}>
-                  <span className="card-add-icon">📎</span>
-                  <div className="card-add-text">
-                    <span className="card-add-name">{t('card.add.attachments')}</span>
-                  </div>
-                </button>
-              </div>
-            )}
             {activePopover === 'labels' && (
               <div className="card-detail-popover">
                 <div className="card-popover-header">
@@ -851,34 +846,21 @@ export const CardModal: React.FC<CardModalProps> = ({
                   value={memberQuery}
                   onChange={e => setMemberQuery(e.target.value)}
                 />
-                <div className="card-members-popover-section-title">{t('members.boardMembersTitle')}</div>
+                <div className="card-members-popover-section-title">{t('card.quick.members')}</div>
                 <div className="card-popover-list card-members-popover-list">
                   {filteredMembers.map(member => {
-                    const isAssigned = card.members?.some(m => m.id === member.id);
                     const label = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.username || member.email;
                     const initial = (label?.[0] || '?').toUpperCase();
-                    const memberRole = board.members?.find(m => m.user.id === member.id)?.role;
                     const rawAvatar = member.profile?.avatar_url || member.profile?.avatar || '';
-                    const avatarSrc = rawAvatar
-                      ? (rawAvatar.startsWith('http') || rawAvatar.startsWith('data:')
-                        ? rawAvatar
-                        : rawAvatar.startsWith('/')
-                          ? rawAvatar
-                          : `/${rawAvatar}`)
-                      : '';
+                    const avatarSrc = resolveMediaUrl(rawAvatar);
                     return (
                       <button
                         key={member.id}
                         type="button"
-                        className={`card-popover-item card-members-popover-item ${isAssigned ? 'active' : ''}`}
+                        className="card-popover-item card-members-popover-item active"
                         onClick={() => {
                           if (!canManageMembers) return;
-                          if (!isAssigned && memberRole === 'viewer') {
-                            window.alert(t('members.viewerCannotBeAssigned'));
-                            return;
-                          }
-                          if (isAssigned) onRemoveMember(member.id);
-                          else onAddMember(member.id);
+                          onRemoveMember(member.id);
                         }}
                       >
                         <span className="card-popover-avatar card-members-popover-avatar">
@@ -933,18 +915,45 @@ export const CardModal: React.FC<CardModalProps> = ({
                   )}
                   {(card.attachments || []).map(att => {
                     const fileName = att.file?.split('/').pop() || att.name || t('attachments.title');
+                    const fileUrl = resolveAttachmentUrl(att.file);
                     return (
                       <div key={att.id} className="card-attachment-row">
-                        <span className="card-attachment-name">{fileName}</span>
-                        {canEditCard && (
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            onClick={() => onDeleteAttachment(att.id)}
+                        <a
+                          className="card-attachment-name card-attachment-link"
+                          href={fileUrl || undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => {
+                            if (!fileUrl) e.preventDefault();
+                          }}
+                          title={fileName}
+                        >
+                          {fileName}
+                        </a>
+                        <div className="card-attachment-actions">
+                          <a
+                            className="btn-secondary btn-sm card-attachment-open"
+                            href={fileUrl || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (!fileUrl) e.preventDefault();
+                            }}
+                            aria-label={fileName}
+                            title={fileName}
                           >
-                            {t('common.delete')}
-                          </button>
-                        )}
+                            ↗
+                          </a>
+                          {canEditCard && (
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => onDeleteAttachment(att.id)}
+                            >
+                              {t('common.delete')}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -967,9 +976,18 @@ export const CardModal: React.FC<CardModalProps> = ({
                 onDeleteChecklistItem={onDeleteChecklistItem}
                 onToggleChecklistItem={onToggleChecklistItem} 
                 onUpdateChecklistItem={onUpdateChecklistItem}
+                openAddItemSignal={addChecklistItemSignal}
               />
             </div>
             <div className="card-main-footer">
+              <button
+                type="button"
+                className="checklist-add-trigger"
+                onClick={() => setAddChecklistItemSignal((v) => v + 1)}
+                disabled={!canEditCard || !hasChecklists}
+              >
+                + {t('checklist.addItem')}
+              </button>
               <button
                 type="button"
                 className={`card-comments-launch ${isCommentsOpen ? 'active' : ''}`}
@@ -983,7 +1001,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           </div>
 
           {isCommentsOpen && (
-            <div className="card-comments-col">
+            <div className="card-comments-col" style={commentsMaxHeight ? { maxHeight: `${commentsMaxHeight}px` } : undefined}>
               <CardComments
                 card={card}
                 user={user}

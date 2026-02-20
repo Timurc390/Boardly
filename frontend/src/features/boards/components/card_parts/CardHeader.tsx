@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { Card, Board } from '../../../../types';
 import { useI18n } from '../../../../context/I18nContext';
+import { resolveMediaUrl } from '../../../../utils/mediaUrl';
 
 interface CardHeaderProps {
   card: Card;
@@ -55,12 +56,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
     setMovePosition(currentIndex + 1);
   }, [card.id, card.list, currentIndex]);
   const listTitle = board.lists?.find(l => l.id === card.list)?.title || t('common.unknown');
-  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const fallbackAvatar = '/logo.png';
   const getAvatarSrc = (member: NonNullable<Card['members']>[number]) => {
-    const candidate = member?.profile?.avatar_url || member?.profile?.avatar || '';
-    if (!candidate) return fallbackAvatar;
-    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
-    return `/${candidate}`;
+    return resolveMediaUrl(member?.profile?.avatar_url || member?.profile?.avatar, fallbackAvatar);
   };
   const selectedList = activeLists.find(l => l.id === moveListId) || currentList || activeLists[0];
   const maxPosition = Math.max(1, (selectedList?.cards?.filter(c => !c.is_archived).length || 1));
@@ -309,14 +307,6 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyCard(); closeHeaderMenus(); }}>
         <span className="card-menu-icon">📋</span>
         {t('card.menu.copy')}
-      </button>
-      <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyLink(); closeHeaderMenus(); }}>
-        <span className="card-menu-icon">🪞</span>
-        {t('card.menu.mirror')}
-      </button>
-      <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyCard(); closeHeaderMenus(); }}>
-        <span className="card-menu-icon">📄</span>
-        {t('card.menu.template')}
       </button>
       <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyLink(); closeHeaderMenus(); }}>
         <span className="card-menu-icon">🔗</span>

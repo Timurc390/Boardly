@@ -335,7 +335,16 @@ const boardSlice = createSlice({
             ...payload,
             cards: payload.cards ?? [],
           };
-          lists.push(nextList);
+          const existingIndex = lists.findIndex((l) => l.id === nextList.id);
+          if (existingIndex !== -1) {
+            lists[existingIndex] = {
+              ...lists[existingIndex],
+              ...nextList,
+              cards: nextList.cards ?? lists[existingIndex].cards ?? [],
+            };
+          } else {
+            lists.push(nextList);
+          }
           lists.sort((a, b) => Number(a.order) - Number(b.order));
           return;
         }
@@ -502,6 +511,57 @@ const boardSlice = createSlice({
           card.comments.push(comment);
           return;
         }
+        case 'board/updateComment/fulfilled': {
+          if (!lists) return;
+          const updated = payload?.comment ?? payload;
+          const card = lists
+            .flatMap(list => list.cards || [])
+            .find(c => c.comments?.some(comment => comment.id === updated?.id));
+          if (!card || !card.comments) return;
+          const idx = card.comments.findIndex(comment => comment.id === updated.id);
+          if (idx !== -1) {
+            card.comments[idx] = { ...card.comments[idx], ...updated };
+          }
+          return;
+        }
+        case 'board/deleteComment/fulfilled': {
+          if (!lists) return;
+          const deletedId = payload?.commentId ?? payload;
+          for (const list of lists) {
+            for (const card of list.cards || []) {
+              if (!card.comments) continue;
+              const idx = card.comments.findIndex(comment => comment.id === deletedId);
+              if (idx !== -1) {
+                card.comments.splice(idx, 1);
+                return;
+              }
+            }
+          }
+          return;
+        }
+        case 'board/addAttachment/fulfilled': {
+          if (!lists) return;
+          const cardId = payload?.cardId;
+          const attachment = payload?.attachment ?? payload;
+          if (!cardId || !attachment) return;
+          const card = findCardInLists(lists, cardId);
+          if (!card) return;
+          if (!card.attachments) card.attachments = [];
+          if (!card.attachments.some(att => att.id === attachment.id)) {
+            card.attachments.push(attachment);
+          }
+          return;
+        }
+        case 'board/deleteAttachment/fulfilled': {
+          if (!lists) return;
+          const cardId = payload?.cardId;
+          const attachmentId = payload?.attachmentId ?? payload;
+          if (!cardId || !attachmentId) return;
+          const card = findCardInLists(lists, cardId);
+          if (!card?.attachments) return;
+          card.attachments = card.attachments.filter(att => att.id !== attachmentId);
+          return;
+        }
         default:
           return;
       }
@@ -569,7 +629,19 @@ const boardSlice = createSlice({
         if (state.currentBoard) state.currentBoard.is_favorite = action.payload.is_favorite;
       })
       .addCase(addListAction.fulfilled, (state, action) => {
-        state.currentBoard?.lists?.push({ ...action.payload, cards: [] });
+        if (!state.currentBoard?.lists) return;
+        const nextList: List = { ...action.payload, cards: action.payload.cards ?? [] };
+        const idx = state.currentBoard.lists.findIndex((l) => l.id === nextList.id);
+        if (idx !== -1) {
+          state.currentBoard.lists[idx] = {
+            ...state.currentBoard.lists[idx],
+            ...nextList,
+            cards: nextList.cards ?? state.currentBoard.lists[idx].cards ?? [],
+          };
+        } else {
+          state.currentBoard.lists.push(nextList);
+        }
+        state.currentBoard.lists.sort((a, b) => Number(a.order) - Number(b.order));
       })
       .addCase(updateListAction.fulfilled, (state, action) => {
         if (!state.currentBoard?.lists) return;
@@ -595,20 +667,36 @@ const boardSlice = createSlice({
         }
       })
       .addCase(copyListAction.fulfilled, (state, action) => {
-          state.currentBoard?.lists?.push(action.payload);
+          if (!state.currentBoard?.lists) return;
+          const nextList: List = { ...action.payload, cards: action.payload.cards ?? [] };
+          const idx = state.currentBoard.lists.findIndex((l) => l.id === nextList.id);
+          if (idx !== -1) {
+            state.currentBoard.lists[idx] = {
+              ...state.currentBoard.lists[idx],
+              ...nextList,
+              cards: nextList.cards ?? state.currentBoard.lists[idx].cards ?? [],
+            };
+          } else {
+            state.currentBoard.lists.push(nextList);
+          }
+          state.currentBoard.lists.sort((a, b) => Number(a.order) - Number(b.order));
       })
       .addCase(addCardAction.fulfilled, (state, action) => {
         const list = state.currentBoard?.lists?.find(l => l.id === action.payload.list);
         if (list) {
             if (!list.cards) list.cards = [];
-            list.cards.push(action.payload);
+            const idx = list.cards.findIndex((c) => c.id === action.payload.id);
+            if (idx !== -1) list.cards[idx] = action.payload;
+            else list.cards.push(action.payload);
         }
       })
       .addCase(copyCardAction.fulfilled, (state, action) => {
         const list = state.currentBoard?.lists?.find(l => l.id === action.payload.list);
         if (list) {
           if (!list.cards) list.cards = [];
-          list.cards.push(action.payload);
+          const idx = list.cards.findIndex((c) => c.id === action.payload.id);
+          if (idx !== -1) list.cards[idx] = action.payload;
+          else list.cards.push(action.payload);
         }
       })
       .addCase(updateCardAction.fulfilled, (state, action) => {

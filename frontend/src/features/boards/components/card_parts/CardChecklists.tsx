@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../../../types';
-import { Input } from '../../../../components/ui/Input';
 import { useI18n } from '../../../../context/I18nContext';
 
 interface CardChecklistsProps {
@@ -11,10 +10,11 @@ interface CardChecklistsProps {
   onDeleteChecklistItem: (itemId: number, checklistId?: number) => Promise<any> | void;
   onToggleChecklistItem: (itemId: number, isChecked: boolean) => Promise<any> | void;
   onUpdateChecklistItem: (itemId: number, text: string) => Promise<any> | void;
+  openAddItemSignal?: number;
 }
 
 export const CardChecklists: React.FC<CardChecklistsProps> = ({ 
-  card, canEdit, onDeleteChecklist, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem
+  card, canEdit, onDeleteChecklist, onAddChecklistItem, onDeleteChecklistItem, onToggleChecklistItem, onUpdateChecklistItem, openAddItemSignal = 0
 }) => {
   const { t } = useI18n();
   const checklists = useMemo(() => card.checklists || [], [card.checklists]);
@@ -23,6 +23,15 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
   const [hideCompleted, setHideCompleted] = useState<Record<number, boolean>>({});
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
+
+  useEffect(() => {
+    if (!canEdit) return;
+    if (!openAddItemSignal) return;
+    const firstChecklistId = checklists[0]?.id;
+    if (!firstChecklistId) return;
+    setExpandedAddChecklistId(firstChecklistId);
+    setNewItemText('');
+  }, [canEdit, checklists, openAddItemSignal]);
 
   const commitEdit = async (itemId: number) => {
     const next = editingText.trim();
@@ -40,16 +49,6 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
     await onAddChecklistItem(checklistId, next);
     setNewItemText('');
     setExpandedAddChecklistId(checklistId);
-  };
-
-  const handleDeleteChecklist = async (checklistId: number) => {
-    if (!canEdit) return;
-    if (!window.confirm(t('checklist.deleteConfirm'))) return;
-    await onDeleteChecklist(checklistId);
-    if (expandedAddChecklistId === checklistId) {
-      setExpandedAddChecklistId(null);
-      setNewItemText('');
-    }
   };
 
   return (
@@ -85,15 +84,6 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                       {showOnlyUnchecked ? t('checklist.showCompleted') : t('checklist.hideCompleted')}
                     </button>
                   )}
-                  {canEdit && (
-                    <button
-                      type="button"
-                      className="card-section-action checklist-delete"
-                      onClick={() => handleDeleteChecklist(checklist.id)}
-                    >
-                      {t('common.delete')}
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -114,7 +104,8 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                       disabled={!canEdit}
                     />
                     {editingItemId === item.id ? (
-                      <Input
+                      <input
+                        className="form-input checklist-inline-input"
                         value={editingText}
                         onChange={(e) => setEditingText(e.target.value)}
                         onBlur={() => commitEdit(item.id)}
@@ -156,7 +147,8 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                 <div className="checklist-add-row">
                   {expandedAddChecklistId === checklist.id ? (
                     <>
-                      <Input
+                      <input
+                        className="form-input checklist-add-input"
                         autoFocus
                         placeholder={t('checklist.itemPlaceholder')}
                         value={newItemText}
@@ -190,18 +182,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                         </button>
                       </div>
                     </>
-                  ) : (
-                    <button
-                      type="button"
-                      className="checklist-add-trigger"
-                      onClick={() => {
-                        setExpandedAddChecklistId(checklist.id);
-                        setNewItemText('');
-                      }}
-                    >
-                      + {t('checklist.addItem')}
-                    </button>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>

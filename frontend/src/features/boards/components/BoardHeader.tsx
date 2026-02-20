@@ -150,7 +150,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
           aria-label={t('common.close')}
         />
       )}
-      <div className="board-header">
+      <div className={`board-header ${headerMemberId ? 'member-popover-open' : ''}`}>
         <div className="board-header-main">
           <div className="board-global-menu">
             <button
@@ -310,14 +310,22 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
                               {t('members.viewActivity')}
                             </button>
                             {canManageMembers && member.id !== ownerId && (
-                              <label className="member-popover-action" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <label
+                                className="member-popover-action"
+                                style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('members.roleLabel')}</span>
                                 <select
                                   className="form-input"
                                   value={membership.role}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => e.stopPropagation()}
                                   onChange={(e) => {
                                     onToggleMemberRole(membership, e.target.value as 'admin' | 'developer' | 'viewer');
-                                    onCloseHeaderMember();
                                   }}
                                 >
                                   <option value="admin">{t('members.roleAdmin')}</option>

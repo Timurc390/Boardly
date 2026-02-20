@@ -314,6 +314,7 @@ class CardViewSet(viewsets.ModelViewSet):
         if not can_join_card(request.user, card):
             raise PermissionDenied('Only admins can manage card members.')
         CardMember.objects.get_or_create(card=card, user=request.user)
+        card.refresh_from_db()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'])
@@ -322,6 +323,7 @@ class CardViewSet(viewsets.ModelViewSet):
         if not CardMember.objects.filter(card=card, user=request.user).exists():
             raise PermissionDenied('Not a card member.')
         CardMember.objects.filter(card=card, user=request.user).delete()
+        card.refresh_from_db()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'], url_path='remove-member')
@@ -335,6 +337,7 @@ class CardViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'user_id_required'}, status=400)
 
         CardMember.objects.filter(card=card, user_id=user_id).delete()
+        card.refresh_from_db()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'], url_path='add-member')
@@ -354,6 +357,7 @@ class CardViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'viewer_cannot_be_assigned'}, status=400)
 
         CardMember.objects.get_or_create(card=card, user_id=user_id)
+        card.refresh_from_db()
         return Response(CardSerializer(card).data)
 
     @action(detail=True, methods=['post'])

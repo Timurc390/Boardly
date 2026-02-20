@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-// ВИПРАВЛЕНО: Імпортуємо Redux хуки та потрібну дію
 import { useAppDispatch } from '../store/hooks';
 import { activateUserAccount } from '../store/slices/authSlice';
 import { useI18n } from '../context/I18nContext';
 
 export const ActivationScreen: React.FC = () => {
   const { uid, token } = useParams<{ uid: string; token: string }>();
-  const dispatch = useAppDispatch(); // Отримуємо диспетчер
+  const dispatch = useAppDispatch();
   const { t } = useI18n();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -19,8 +18,6 @@ export const ActivationScreen: React.FC = () => {
         return;
       }
       try {
-        // ВИПРАВЛЕНО: Викликаємо дію через dispatch
-        // .unwrap() дозволяє обробити результат як звичайний Promise
         await dispatch(activateUserAccount({ uid, token })).unwrap();
         setStatus('success');
       } catch (error) {
@@ -33,34 +30,38 @@ export const ActivationScreen: React.FC = () => {
   }, [uid, token, dispatch]);
 
   return (
-    <div className="auth-page-split" style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div className="auth-left" style={{ width: '100%', maxWidth: '500px', textAlign: 'center' }}>
-        <div className="auth-header">
-          <h1>Boardly.</h1>
-        </div>
+    <div className="activation-page">
+      <div className="activation-glow activation-glow-left" aria-hidden="true" />
+      <div className="activation-glow activation-glow-right" aria-hidden="true" />
+
+      <div className="activation-card">
+        <div className="activation-brand">Boardly</div>
 
         {status === 'loading' && (
-          <div>
-            <h3>{t('activation.loadingTitle')}</h3>
-            <p>{t('activation.loadingHint')}</p>
+          <div className="activation-state">
+            <div className="activation-spinner" aria-hidden="true" />
+            <h1 className="activation-title">{t('activation.loadingTitle')}</h1>
+            <p className="activation-text">{t('activation.loadingHint')}</p>
           </div>
         )}
 
         {status === 'success' && (
-          <div>
-            <h3 style={{ color: 'var(--col-progress)' }}>{t('activation.successTitle')}</h3>
-            <p>{t('activation.successHint')}</p>
-            <Link to="/auth" className="btn btn-primary" style={{ marginTop: 20, display: 'inline-block', textDecoration: 'none' }}>
+          <div className="activation-state">
+            <div className="activation-icon success" aria-hidden="true">✓</div>
+            <h1 className="activation-title success">{t('activation.successTitle')}</h1>
+            <p className="activation-text">{t('activation.successHint')}</p>
+            <Link to="/auth" className="activation-action">
               {t('activation.signIn')}
             </Link>
           </div>
         )}
 
         {status === 'error' && (
-          <div>
-            <h3 style={{ color: 'var(--danger)' }}>{t('activation.errorTitle')}</h3>
-            <p>{t('activation.errorHint')}</p>
-            <Link to="/auth" className="btn btn-secondary" style={{ marginTop: 20, display: 'inline-block', textDecoration: 'none' }}>
+          <div className="activation-state">
+            <div className="activation-icon error" aria-hidden="true">!</div>
+            <h1 className="activation-title error">{t('activation.errorTitle')}</h1>
+            <p className="activation-text">{t('activation.errorHint')}</p>
+            <Link to="/auth" className="activation-action secondary">
               {t('activation.back')}
             </Link>
           </div>

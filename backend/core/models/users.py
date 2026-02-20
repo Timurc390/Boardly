@@ -27,16 +27,27 @@ class Profile(models.Model):
         ('fr', 'French'),
         ('es', 'Spanish'),
     )
+    ACTIVITY_RETENTION_CHOICES = (
+        ('7d', '7 days'),
+        ('30d', '1 month'),
+        ('365d', '1 year'),
+    )
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name="Користувач")
     organization = models.CharField(max_length=255, blank=True, verbose_name="Організація")
-    theme = models.CharField(max_length=50, choices=THEME_CHOICES, default='light', verbose_name="Тема інтерфейсу")
+    theme = models.CharField(max_length=50, choices=THEME_CHOICES, default='dark', verbose_name="Тема інтерфейсу")
     language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default='uk', verbose_name="Language")
     notify_email = models.BooleanField(default=True, verbose_name="Email notifications")
     notify_desktop = models.BooleanField(default=True, verbose_name="Desktop notifications")
     notify_assigned = models.BooleanField(default=True, verbose_name="Assigned task notifications")
     notify_due = models.BooleanField(default=True, verbose_name="Due date notifications")
     notify_added = models.BooleanField(default=True, verbose_name="Added to board notifications")
+    activity_retention = models.CharField(
+        max_length=10,
+        choices=ACTIVITY_RETENTION_CHOICES,
+        default='30d',
+        verbose_name="Activity retention period"
+    )
     default_board_view = models.CharField(
         max_length=20,
         choices=(('kanban', 'Kanban'), ('calendar', 'Calendar')),
@@ -46,6 +57,21 @@ class Profile(models.Model):
     session_timeout = models.CharField(max_length=20, default='1h', verbose_name="Session timeout")
     two_factor_enabled = models.BooleanField(default=False, verbose_name="Two-factor enabled")
     require_login_verification = models.BooleanField(default=False, verbose_name="Require login verification")
+    password_initialized = models.BooleanField(
+        default=True,
+        verbose_name="Require current password on password change"
+    )
+    pending_password_hash = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name="Pending password hash"
+    )
+    pending_password_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Pending password requested at"
+    )
     bio = models.TextField(blank=True, verbose_name="Bio")
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name="Avatar")
     

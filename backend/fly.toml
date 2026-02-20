@@ -11,6 +11,7 @@ console_command = '/code/manage.py shell'
 
 [env]
   PORT = '8000'
+  MEDIA_ROOT = '/data/media'
 
 [http_service]
   internal_port = 8000
@@ -28,7 +29,10 @@ console_command = '/code/manage.py shell'
 [processes]
   app = "daphne -b 0.0.0.0 -p 8000 boardly_project.asgi:application"
 
+[[mounts]]
+  source = 'boardly_media'
+  destination = '/data'
+
 [[statics]]
   guest_path = '/code/static'
   url_prefix = '/static/'
-

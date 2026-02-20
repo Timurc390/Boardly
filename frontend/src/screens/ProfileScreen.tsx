@@ -8,13 +8,14 @@ import { ActivityLog } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { type Locale } from '../i18n/translations';
 import { getProfilePrivacyContent } from '../content/profilePrivacyContent';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { 
   updateUserProfile, 
   uploadUserAvatar, 
   logoutUser, 
-  changeUserPassword,
+  requestUserPasswordChange,
   deleteUserAccount,
   sendEmailVerification
 } from '../store/slices/authSlice';
@@ -138,7 +139,7 @@ export const ProfileScreen: React.FC = () => {
   };
 
   const uploadAvatar = async (file: File) => {
-    return dispatch(uploadUserAvatar(file));
+    return dispatch(uploadUserAvatar(file)).unwrap();
   };
   const { user, token } = useAppSelector(state => state.auth);
   const { t, locale, setLocale, supportedLocales } = useI18n();
@@ -148,6 +149,7 @@ export const ProfileScreen: React.FC = () => {
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [avatarCacheBuster, setAvatarCacheBuster] = useState<number>(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [settingsPrefs, setSettingsPrefs] = useState({
@@ -155,22 +157,23 @@ export const ProfileScreen: React.FC = () => {
     assignedToTask: true,
     dueDateApproaching: true,
     addedToBoard: true,
-    twoFactor: false,
-    requireVerification: false,
-    defaultBoardView: 'kanban' as 'kanban' | 'calendar',
-    sessionTimeout: '1h'
   });
   const [isEmailPrefsOpen, setIsEmailPrefsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
+  const [isPasswordInstructionsOpen, setIsPasswordInstructionsOpen] = useState(false);
+  const [isMobileSettingsMenuOpen, setIsMobileSettingsMenuOpen] = useState(false);
   const emailPrefsDialogRef = useRef<HTMLDivElement>(null);
   const integrationsDialogRef = useRef<HTMLDivElement>(null);
+  const passwordInstructionsDialogRef = useRef<HTMLDivElement>(null);
   const deactivateDialogRef = useRef<HTMLDivElement>(null);
   const closeEmailPrefs = useCallback(() => setIsEmailPrefsOpen(false), []);
   const closeIntegrations = useCallback(() => setIsIntegrationsOpen(false), []);
+  const closePasswordInstructions = useCallback(() => setIsPasswordInstructionsOpen(false), []);
   const closeDeactivate = useCallback(() => setIsDeactivateOpen(false), []);
 
   useDialogA11y(isEmailPrefsOpen, closeEmailPrefs, emailPrefsDialogRef);
   useDialogA11y(isIntegrationsOpen, closeIntegrations, integrationsDialogRef);
+  useDialogA11y(isPasswordInstructionsOpen, closePasswordInstructions, passwordInstructionsDialogRef);
   useDialogA11y(isDeactivateOpen, closeDeactivate, deactivateDialogRef);
 
   useEffect(() => {
@@ -179,6 +182,10 @@ export const ProfileScreen: React.FC = () => {
       setActiveTab(tab);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    setIsMobileSettingsMenuOpen(false);
+  }, [activeTab]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -209,6 +216,7 @@ export const ProfileScreen: React.FC = () => {
     theme: 'dark', // За замовчуванням темна
     language: 'uk',
     notify_email: true,
+    activity_retention: '30d',
   });
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
@@ -227,9 +235,10 @@ export const ProfileScreen: React.FC = () => {
         email: user.email || '',
         organization: user.profile?.organization || '',
         bio: user.profile?.bio || '',
-        theme: (user.profile?.theme as string) || 'dark',
+        theme: 'dark',
         language: user.profile?.language || 'uk',
         notify_email: user.profile?.notify_email ?? true,
+        activity_retention: user.profile?.activity_retention || '30d',
       });
       setSettingsPrefs(prev => ({
         ...prev,
@@ -237,20 +246,16 @@ export const ProfileScreen: React.FC = () => {
         assignedToTask: user.profile?.notify_assigned ?? prev.assignedToTask,
         dueDateApproaching: user.profile?.notify_due ?? prev.dueDateApproaching,
         addedToBoard: user.profile?.notify_added ?? prev.addedToBoard,
-        twoFactor: user.profile?.two_factor_enabled ?? prev.twoFactor,
-        requireVerification: user.profile?.require_login_verification ?? prev.requireVerification,
-        defaultBoardView: (user.profile?.default_board_view as 'kanban' | 'calendar') || prev.defaultBoardView,
-        sessionTimeout: user.profile?.session_timeout || prev.sessionTimeout
       }));
     }
   }, [user]);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.documentElement.dataset.theme = form.theme;
+      document.documentElement.dataset.theme = 'dark';
     }
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('theme', form.theme);
+      window.localStorage.setItem('theme', 'dark');
     }
   }, [form.theme]);
 
@@ -296,6 +301,25 @@ export const ProfileScreen: React.FC = () => {
     showToast(t('profile.settings.comingSoon'));
   };
 
+  const handleClearActivity = async () => {
+    if (!token) return;
+    setLoadingActivity(true);
+    try {
+      await axios.post(
+        `${API_URL}/activity/clear/`,
+        {},
+        { headers: { Authorization: `Token ${token}` } }
+      );
+      setActivityLogs([]);
+      showToast('Activity cleared');
+    } catch (e) {
+      console.error(e);
+      showToast(t('common.error'));
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -308,17 +332,14 @@ export const ProfileScreen: React.FC = () => {
         profile: {
           organization: form.organization,
           bio: form.bio,
-          theme: form.theme as 'light' | 'dark',
+          theme: 'dark',
           language: form.language as Locale, // ВИПРАВЛЕНО: Явне приведення типу для TypeScript
           notify_email: form.notify_email,
+          activity_retention: form.activity_retention as '7d' | '30d' | '365d',
           notify_desktop: settingsPrefs.desktopNotifications,
           notify_assigned: settingsPrefs.assignedToTask,
           notify_due: settingsPrefs.dueDateApproaching,
           notify_added: settingsPrefs.addedToBoard,
-          default_board_view: settingsPrefs.defaultBoardView,
-          session_timeout: settingsPrefs.sessionTimeout,
-          two_factor_enabled: settingsPrefs.twoFactor,
-          require_login_verification: settingsPrefs.requireVerification,
         }
       });
       
@@ -348,15 +369,20 @@ export const ProfileScreen: React.FC = () => {
     if (e.target.files?.[0]) {
       try {
         await uploadAvatar(e.target.files[0]);
+        setAvatarFailed(false);
+        setAvatarCacheBuster(Date.now());
         showToast(t('profile.toast.avatarUpdated'));
       } catch {
         showToast(t('common.error'));
+      } finally {
+        e.target.value = '';
       }
     }
   };
 
   const handlePasswordChange = async () => {
-    if (!passwordForm.current_password || !passwordForm.new_password) {
+    const requireCurrentPassword = user?.profile?.password_initialized !== false;
+    if ((!passwordForm.current_password && requireCurrentPassword) || !passwordForm.new_password || !passwordForm.confirm_password) {
       showToast(t('common.error'));
       return;
     }
@@ -365,15 +391,37 @@ export const ProfileScreen: React.FC = () => {
       return;
     }
     try {
-      await dispatch(changeUserPassword({
+      await dispatch(requestUserPasswordChange({
         current_password: passwordForm.current_password,
-        new_password: passwordForm.new_password
+        new_password: passwordForm.new_password,
+        re_new_password: passwordForm.confirm_password,
       })).unwrap();
-      showToast(t('resetConfirm.successTitle'));
-      await dispatch(logoutUser());
-      navigate('/');
-    } catch (e) {
+      setIsPasswordInstructionsOpen(true);
+      setPasswordForm({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
+    } catch (e: any) {
       console.error(e);
+      const payload = e?.payload ?? e;
+      if (typeof payload === 'string') {
+        showToast(payload);
+        return;
+      }
+      if (payload?.detail) {
+        showToast(String(payload.detail));
+        return;
+      }
+      if (Array.isArray(payload?.non_field_errors) && payload.non_field_errors.length) {
+        showToast(String(payload.non_field_errors[0]));
+        return;
+      }
+      const firstKey = payload && typeof payload === 'object' ? Object.keys(payload)[0] : null;
+      if (firstKey && Array.isArray(payload[firstKey]) && payload[firstKey].length) {
+        showToast(String(payload[firstKey][0]));
+        return;
+      }
       showToast(t('common.error'));
     }
   };
@@ -392,30 +440,14 @@ export const ProfileScreen: React.FC = () => {
   const rawAvatarUrl = user?.profile?.avatar_url || '';
   const rawAvatarPath = user?.profile?.avatar || '';
   const resolvedAvatarUrl = React.useMemo(() => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const preferPath = rawAvatarUrl && origin.startsWith('https://') && rawAvatarUrl.startsWith('http://');
-    const candidate = preferPath ? (rawAvatarPath || rawAvatarUrl) : (rawAvatarUrl || rawAvatarPath);
-    if (!candidate) return '';
-    if (candidate.startsWith('data:')) return candidate;
-    if (candidate.startsWith('http')) {
-      try {
-        const url = new URL(candidate);
-        if (origin) {
-          const originUrl = new URL(origin);
-          const mixedContent = originUrl.protocol === 'https:' && url.protocol === 'http:';
-          const differentHost = url.host !== originUrl.host;
-          if ((mixedContent || differentHost) && url.pathname) {
-            return `${originUrl.origin}${url.pathname}`;
-          }
-        }
-      } catch {
-        return candidate;
-      }
-      return candidate;
-    }
-    if (candidate.startsWith('/')) return origin ? `${origin}${candidate}` : candidate;
-    return candidate;
+    return resolveMediaUrl(rawAvatarUrl || rawAvatarPath);
   }, [rawAvatarUrl, rawAvatarPath]);
+  const resolvedAvatarUrlWithBuster = React.useMemo(() => {
+    if (!resolvedAvatarUrl) return '';
+    if (resolvedAvatarUrl.startsWith('data:')) return resolvedAvatarUrl;
+    const separator = resolvedAvatarUrl.includes('?') ? '&' : '?';
+    return `${resolvedAvatarUrl}${separator}v=${avatarCacheBuster}`;
+  }, [resolvedAvatarUrl, avatarCacheBuster]);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
@@ -557,6 +589,7 @@ export const ProfileScreen: React.FC = () => {
   const privacyContent = React.useMemo(() => getProfilePrivacyContent(locale), [locale]);
 
   if (!user) return <div className="loading-state">{t('common.loading')}</div>;
+  const showCurrentPasswordField = user.profile?.password_initialized !== false;
 
   const headerTitle = activeTab === 'privacy'
     ? t('profile.privacy.title')
@@ -620,13 +653,79 @@ export const ProfileScreen: React.FC = () => {
 
         <main className="profile-main">
           <div className="profile-header">
-            <Link to="/boards" className="profile-top-back">
-              <BackIcon />
-              <span>{t('community.back')}</span>
-            </Link>
+            <div className="profile-header-controls">
+              <Link to="/boards" className="profile-top-back">
+                <BackIcon />
+                <span>{t('community.back')}</span>
+              </Link>
+              <button
+                type="button"
+                className="profile-mobile-menu-trigger"
+                aria-label={t('profile.tabsLabel')}
+                aria-expanded={isMobileSettingsMenuOpen}
+                onClick={() => setIsMobileSettingsMenuOpen(true)}
+              >
+                ⋯
+              </button>
+            </div>
             <h1>{headerTitle}</h1>
             {headerSubtitle && <p>{headerSubtitle}</p>}
           </div>
+
+          {isMobileSettingsMenuOpen && (
+            <div
+              className="profile-mobile-menu-overlay"
+              onClick={() => setIsMobileSettingsMenuOpen(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('profile.tabsLabel')}
+            >
+              <aside className="profile-mobile-menu" onClick={(e) => e.stopPropagation()}>
+                <div className="profile-mobile-menu-top">
+                  <span>{t('profile.tabsLabel')}</span>
+                  <button
+                    type="button"
+                    className="profile-mobile-menu-close"
+                    aria-label={t('common.close')}
+                    onClick={() => setIsMobileSettingsMenuOpen(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <nav className="profile-nav">
+                  {(Object.keys(TAB_LABEL_KEYS) as TabKey[]).map((key) => {
+                    const Icon = TAB_ICONS[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(key);
+                          navigate(`/profile?tab=${key}`);
+                        }}
+                        className={`profile-nav-item ${activeTab === key ? 'active' : ''}`}
+                      >
+                        <span className="profile-nav-icon" aria-hidden="true">
+                          <Icon />
+                        </span>
+                        {t(TAB_LABEL_KEYS[key])}
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                <div className="profile-side-footer">
+                  <Link to="/boards" className="profile-return-link" onClick={() => setIsMobileSettingsMenuOpen(false)}>
+                    {t('profile.backToMain')}
+                  </Link>
+                  <button type="button" className="profile-logout-btn" onClick={logout}>
+                    {t('nav.logout')}
+                  </button>
+                </div>
+              </aside>
+            </div>
+          )}
 
           <AnimatePresence mode="wait">
             {activeTab === 'profile' && (
@@ -643,8 +742,8 @@ export const ProfileScreen: React.FC = () => {
                   <div className="profile-personal-grid">
                     <div className="profile-avatar-col">
                       <div className="profile-avatar-large">
-                        {resolvedAvatarUrl && !avatarFailed ? (
-                          <img src={resolvedAvatarUrl} alt={t('profile.avatarAlt')} loading="lazy" decoding="async" onError={() => setAvatarFailed(true)} />
+                        {resolvedAvatarUrlWithBuster && !avatarFailed ? (
+                          <img src={resolvedAvatarUrlWithBuster} alt={t('profile.avatarAlt')} loading="lazy" decoding="async" onError={() => setAvatarFailed(true)} />
                         ) : (
                           <span>{user.username.charAt(0).toUpperCase()}</span>
                         )}
@@ -709,17 +808,19 @@ export const ProfileScreen: React.FC = () => {
                 <section className="profile-card password-change">
                   <div className="profile-card-title">{t('profile.section.passwordChange')}</div>
                   <div className="profile-form-grid one-col">
-                    <div className="form-group">
-                      <label>{t('profile.fields.currentPassword')}</label>
-                      <input 
-                        className="form-input" 
-                        type="password" 
-                        value={passwordForm.current_password}
-                        onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})}
-                        autoComplete="current-password"
-                        name="current-password"
-                      />
-                    </div>
+                    {showCurrentPasswordField && (
+                      <div className="form-group">
+                        <label>{t('profile.fields.currentPassword')}</label>
+                        <input 
+                          className="form-input" 
+                          type="password" 
+                          value={passwordForm.current_password}
+                          onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})}
+                          autoComplete="current-password"
+                          name="current-password"
+                        />
+                      </div>
+                    )}
                     <div className="form-group">
                       <label>{t('resetConfirm.newPasswordLabel')}</label>
                       <div style={{ position: 'relative' }}>
@@ -824,6 +925,16 @@ export const ProfileScreen: React.FC = () => {
                 exit="exit"
                 className="profile-activity-shell"
               >
+                <div className="profile-card-actions" style={{ marginBottom: 12 }}>
+                  <button
+                    className="profile-btn-secondary"
+                    type="button"
+                    onClick={handleClearActivity}
+                    disabled={loadingActivity || activityLogs.length === 0}
+                  >
+                    Clear activity
+                  </button>
+                </div>
                 <div className="activity-list">
                   {loadingActivity ? (
                     <div className="activity-empty-row">{t('common.loading')}</div>
@@ -872,113 +983,20 @@ export const ProfileScreen: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="settings-row">
-                    <span className="settings-row-label">{t('profile.settings.theme')}</span>
-                    <div className="settings-pill-row settings-pill-row-inline">
-                      <button
-                        className={`settings-pill ${form.theme === 'light' ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => setForm({ ...form, theme: 'light' })}
-                      >
-                        {t('profile.settings.light')}
-                      </button>
-                      <button
-                        className={`settings-pill ${form.theme === 'dark' ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => setForm({ ...form, theme: 'dark' })}
-                      >
-                        {t('profile.settings.dark')}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <span className="settings-row-label">{t('profile.settings.defaultBoardView')}</span>
-                    <div className="settings-pill-row settings-pill-row-inline">
-                      <button
-                        className={`settings-pill ${settingsPrefs.defaultBoardView === 'kanban' ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'kanban' }))}
-                      >
-                        {t('profile.settings.kanban')}
-                      </button>
-                      <button
-                        className={`settings-pill ${settingsPrefs.defaultBoardView === 'calendar' ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => setSettingsPrefs(prev => ({ ...prev, defaultBoardView: 'calendar' }))}
-                      >
-                        {t('profile.settings.calendar')}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="settings-general-actions">
-                    <button className="settings-btn settings-btn-secondary" type="button" onClick={() => setIsIntegrationsOpen(true)}>
-                      {t('profile.settings.manageIntegrations')}
-                    </button>
-                    <button className="settings-btn settings-btn-accent" type="button" onClick={handleClearCache}>
-                      {t('profile.settings.clearCache')}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="settings-card settings-card-security">
-                  <div className="settings-card-title">{t('profile.settings.security')}</div>
-                  <div className="settings-row settings-toggle-row">
-                    <span>{t('profile.settings.twoFactor')}</span>
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={settingsPrefs.twoFactor}
-                        onChange={e => setSettingsPrefs(prev => ({ ...prev, twoFactor: e.target.checked }))}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </label>
-                  </div>
-                  <div className="settings-row settings-toggle-row settings-row-with-helper">
-                    <div className="settings-row-copy">
-                      <div>{t('profile.settings.requireVerification')}</div>
-                      <div className="settings-helper">{t('profile.settings.additionalVerification')}</div>
-                    </div>
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={settingsPrefs.requireVerification}
-                        onChange={e => setSettingsPrefs(prev => ({ ...prev, requireVerification: e.target.checked }))}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </label>
-                  </div>
-                  <div className="settings-row settings-field settings-inline">
-                    <label>{t('profile.settings.sessionTimeout')}</label>
+                  <div className="settings-field settings-field-language">
+                    <label>Auto-delete activity</label>
                     <select
                       className="form-input settings-select"
-                      value={settingsPrefs.sessionTimeout}
-                      onChange={e => setSettingsPrefs(prev => ({ ...prev, sessionTimeout: e.target.value }))}
+                      value={form.activity_retention}
+                      onChange={e => setForm({ ...form, activity_retention: e.target.value as '7d' | '30d' | '365d' })}
                     >
-                      <option value="1h">{t('profile.settings.sessionTimeout1h')}</option>
+                      <option value="7d">7 days</option>
+                      <option value="30d">1 month</option>
+                      <option value="365d">1 year</option>
                     </select>
                   </div>
-                  <div className="settings-row settings-toggle-row settings-row-public">
-                    <span>{t('profile.fields.public')}</span>
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={form.notify_email}
-                        onChange={e => setForm({ ...form, notify_email: e.target.checked })}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </label>
-                  </div>
-                  <div className="settings-actions">
-                    <button className="settings-btn settings-btn-primary" type="button" onClick={handleSave} disabled={saving}>
-                      {saving ? t('common.saving') : t('profile.settings.saveChanges')}
-                    </button>
-                  </div>
-                </section>
 
-                <section className="settings-card settings-card-notifications">
-                  <div className="settings-card-title">{t('profile.settings.notifications')}</div>
+                  <div className="settings-card-title settings-subtitle">{t('profile.settings.notifications')}</div>
                   <div className="settings-row settings-toggle-row">
                     <span className="settings-row-label">{t('profile.settings.desktopNotifications')}</span>
                     <label className="settings-toggle">
@@ -1023,9 +1041,12 @@ export const ProfileScreen: React.FC = () => {
                       <span className="settings-toggle-slider" />
                     </label>
                   </div>
-                  <div className="settings-actions">
-                    <button className="settings-btn settings-btn-accent" type="button" onClick={() => setIsEmailPrefsOpen(true)}>
-                      {t('profile.settings.manageEmail')}
+                  <div className="settings-general-actions">
+                    <button className="settings-btn settings-btn-accent" type="button" onClick={handleClearCache}>
+                      {t('profile.settings.clearCache')}
+                    </button>
+                    <button className="settings-btn settings-btn-primary" type="button" onClick={handleSave} disabled={saving}>
+                      {saving ? t('common.saving') : t('common.save')}
                     </button>
                   </div>
                 </section>
@@ -1181,6 +1202,49 @@ export const ProfileScreen: React.FC = () => {
                   {t('profile.integrations.connect')}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPasswordInstructionsOpen && (
+        <div className="settings-modal-overlay" onClick={closePasswordInstructions}>
+          <div
+            ref={passwordInstructionsDialogRef}
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="password-instructions-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="settings-modal-close"
+              onClick={closePasswordInstructions}
+              aria-label={t('common.close')}
+            >
+              {t('profile.deactivate.close')}
+            </button>
+            <div className="settings-modal-title" id="password-instructions-modal-title">
+              Підтвердіть зміну пароля
+            </div>
+            <div className="settings-modal-subtitle">
+              Ми надіслали лист на вашу пошту. Відкрийте лист і перейдіть за посиланням, щоб завершити зміну пароля.
+            </div>
+            <div className="settings-modal-content">
+              <div className="settings-helper">
+                Якщо лист не з&apos;явився, перевірте папки «Спам» та «Промоакції».
+              </div>
+            </div>
+            <div className="settings-modal-actions">
+              <button
+                className="settings-btn settings-btn-primary"
+                type="button"
+                onClick={closePasswordInstructions}
+              >
+                Зрозуміло
+              </button>
             </div>
           </div>
         </div>

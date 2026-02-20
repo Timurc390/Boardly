@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, DropResult, DragStart } from '@hello-pangea/dnd';
+import { createPortal } from 'react-dom';
 import { BoardColumn } from './components/BoardColumn';
 import { CardModal } from './components/CardModal';
 import { BoardHeader } from './components/BoardHeader';
 import { BoardMenuSidebar } from './components/BoardMenuSidebar';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { BoardFiltersModal } from './components/BoardFiltersModal';
 import { BoardActivityModal } from './components/BoardActivityModal';
 import { Button } from '../../components/ui/Button';
@@ -86,10 +88,14 @@ export const BoardDetailScreen: React.FC = () => {
   const [activityMember, setActivityMember] = useState<BoardMember | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [isActivityLoading, setIsActivityLoading] = useState(false);
+  const [isListDragging, setIsListDragging] = useState(false);
+  const [topToast, setTopToast] = useState<string | null>(null);
   const boardCanvasRef = useRef<HTMLDivElement | null>(null);
-  const dragPointerRef = useRef({ x: 0, y: 0 });
-  const draggingTypeRef = useRef<'list' | 'card' | null>(null);
+  const isAnyDragRef = useRef(false);
+  const dragPointerRef = useRef({ x: Number.NaN, y: Number.NaN });
+  const draggingTypeRef = useRef<'card' | null>(null);
   const autoScrollRafRef = useRef<number | null>(null);
+  const topToastTimerRef = useRef<number | null>(null);
   const {
     isMenuOpen,
     isFilterOpen,
@@ -134,10 +140,14 @@ export const BoardDetailScreen: React.FC = () => {
     if (!id) return;
     let timer: number | null = null;
     let stopped = false;
-    const intervalMs = isLive ? 20000 : 5000;
+    const intervalMs = isLive ? 60000 : 15000;
 
     const poll = () => {
       if (stopped) return;
+      if (isAnyDragRef.current) {
+        timer = window.setTimeout(poll, intervalMs);
+        return;
+      }
       if (typeof document !== 'undefined' && document.hidden) {
         timer = window.setTimeout(poll, intervalMs);
         return;
@@ -155,25 +165,27 @@ export const BoardDetailScreen: React.FC = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mediaNarrow = window.matchMedia('(max-width: 980px)');
     const mediaCoarse = window.matchMedia('(pointer: coarse)');
+    const mediaNoHover = window.matchMedia('(hover: none)');
     const update = () => {
-      setIsTouch(mediaNarrow.matches || mediaCoarse.matches);
+      // Enable touch mode only on actual touch-first devices,
+      // not on narrow desktop windows where drag-and-drop should stay mouse-driven.
+      setIsTouch(mediaCoarse.matches && mediaNoHover.matches);
     };
     update();
-    if (mediaNarrow.addEventListener && mediaCoarse.addEventListener) {
-      mediaNarrow.addEventListener('change', update);
+    if (mediaCoarse.addEventListener && mediaNoHover.addEventListener) {
       mediaCoarse.addEventListener('change', update);
+      mediaNoHover.addEventListener('change', update);
       return () => {
-        mediaNarrow.removeEventListener('change', update);
         mediaCoarse.removeEventListener('change', update);
+        mediaNoHover.removeEventListener('change', update);
       };
     }
-    mediaNarrow.addListener(update);
     mediaCoarse.addListener(update);
+    mediaNoHover.addListener(update);
     return () => {
-      mediaNarrow.removeListener(update);
       mediaCoarse.removeListener(update);
+      mediaNoHover.removeListener(update);
     };
   }, []);
 
@@ -367,8 +379,14 @@ export const BoardDetailScreen: React.FC = () => {
     setSelectedCard(prev => (prev ? { ...prev, ...rest } : prev));
     dispatch(updateCardAction({ cardId: selectedCard.id, data }))
       .unwrap()
-      .catch(() => {
-        alert(t('common.actionFailed'));
+      .catch((error: any) => {
+        const message =
+          error?.detail ||
+          error?.response?.data?.detail ||
+          error?.response?.data?.message ||
+          error?.message ||
+          t('common.actionFailed');
+        alert(message);
         if (id) {
           dispatch(fetchBoardById(Number(id)));
         }
@@ -424,23 +442,46 @@ export const BoardDetailScreen: React.FC = () => {
     [board?.invite_link]
   );
 
-  const handleCopyInvite = useCallback(() => {
+  const showTopToast = useCallback((message: string) => {
+    setTopToast(message);
+    if (topToastTimerRef.current !== null) {
+      window.clearTimeout(topToastTimerRef.current);
+    }
+    topToastTimerRef.current = window.setTimeout(() => {
+      setTopToast(null);
+      topToastTimerRef.current = null;
+    }, 2200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (topToastTimerRef.current !== null) {
+        window.clearTimeout(topToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyInvite = useCallback(async () => {
     if (!inviteLink) return;
-    navigator.clipboard.writeText(inviteLink);
-  }, [inviteLink]);
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      showTopToast(t('common.linkCopied'));
+    } catch {
+      window.prompt(t('prompt.copyLink'), inviteLink);
+    }
+  }, [inviteLink, showTopToast, t]);
 
   const handleInvite = useCallback(async () => {
     if (!inviteLink) return;
+    await handleCopyInvite();
     const shareApi = (navigator as Navigator & { share?: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share;
     if (shareApi) {
       try {
         await shareApi({ title: t('board.menu.inviteTitle'), url: inviteLink });
-        return;
       } catch {
-        // Fallback to copy if sharing is cancelled or unavailable.
+        // Link is already copied; sharing is optional.
       }
     }
-    handleCopyInvite();
   }, [handleCopyInvite, inviteLink, t]);
 
   const stopAutoScroll = useCallback(() => {
@@ -458,18 +499,10 @@ export const BoardDetailScreen: React.FC = () => {
       return;
     }
 
-    const boardCanvas = boardCanvasRef.current;
     const pointer = dragPointerRef.current;
+    const hasPointer = Number.isFinite(pointer.x) && Number.isFinite(pointer.y);
 
-    if (boardCanvas) {
-      const rect = boardCanvas.getBoundingClientRect();
-      const horizontalDelta = getEdgeAutoScrollDelta(pointer.x, rect.left, rect.right, 92, 4, 28);
-      if (horizontalDelta !== 0) {
-        boardCanvas.scrollLeft += horizontalDelta;
-      }
-    }
-
-    if (draggingType === 'card') {
+    if (draggingType === 'card' && hasPointer) {
       const target = document.elementFromPoint(pointer.x, pointer.y) as HTMLElement | null;
       const listBody = target?.closest('.list-body') as HTMLElement | null;
       if (listBody) {
@@ -484,7 +517,7 @@ export const BoardDetailScreen: React.FC = () => {
     autoScrollRafRef.current = window.requestAnimationFrame(runAutoScroll);
   }, []);
 
-  const startAutoScroll = useCallback((type: 'list' | 'card') => {
+  const startAutoScroll = useCallback((type: 'card') => {
     draggingTypeRef.current = type;
     if (autoScrollRafRef.current !== null) return;
     autoScrollRafRef.current = window.requestAnimationFrame(runAutoScroll);
@@ -516,11 +549,20 @@ export const BoardDetailScreen: React.FC = () => {
   useEffect(() => () => stopAutoScroll(), [stopAutoScroll]);
 
   const onDragStart = useCallback((start: DragStart) => {
-    closeTransientOverlays({ keepSidebar: true, keepFilter: true, keepActivity: true });
-    startAutoScroll(start.type === 'list' ? 'list' : 'card');
-  }, [closeTransientOverlays, startAutoScroll]);
+    isAnyDragRef.current = true;
+    setIsListDragging(start.type === 'list');
+    if (start.type === 'card') {
+      closeTransientOverlays({ keepSidebar: true, keepFilter: true, keepActivity: true });
+      dragPointerRef.current = { x: Number.NaN, y: Number.NaN };
+      startAutoScroll('card');
+    } else {
+      stopAutoScroll();
+    }
+  }, [closeTransientOverlays, startAutoScroll, stopAutoScroll]);
 
   const onDragEnd = useCallback((result: DropResult) => {
+    isAnyDragRef.current = false;
+    setIsListDragging(false);
     stopAutoScroll();
     const { destination, source, type, draggableId } = result;
     if (!destination) return;
@@ -580,10 +622,27 @@ export const BoardDetailScreen: React.FC = () => {
   }, [boardCards, boardListsById, canAddCardToList, canEditBoard, canEditCard, dispatch]);
 
   const runBoardAction = useCallback(async (action: any) => {
+    const resolveErrorMessage = (error: any): string => {
+      const data = error?.response?.data;
+      if (typeof data === 'string' && data.trim()) return data;
+      if (data?.detail) return String(data.detail);
+      if (data && typeof data === 'object') {
+        const pairs = Object.entries(data)
+          .map(([key, value]) => {
+            if (Array.isArray(value)) return `${key}: ${value.join(', ')}`;
+            if (typeof value === 'string') return `${key}: ${value}`;
+            return null;
+          })
+          .filter(Boolean) as string[];
+        if (pairs.length) return pairs.join('\n');
+      }
+      return error?.message || t('common.actionFailed');
+    };
+
     try {
       return await dispatch(action).unwrap();
-    } catch {
-      alert(t('common.actionFailed'));
+    } catch (error: any) {
+      alert(resolveErrorMessage(error));
       return null;
     }
   }, [dispatch, t]);
@@ -614,14 +673,11 @@ export const BoardDetailScreen: React.FC = () => {
       backgroundRepeat: !isColorBackground && backgroundValue && !isGradientBackground ? 'no-repeat' : undefined,
     } as React.CSSProperties;
   }, [backgroundValue]);
-  const boardIconSrc = '/board-avatars/ava-anto-treklo.png';
+  const boardIconSrc = '/logo.png';
   const boardIconLetter = board?.title?.trim()?.charAt(0).toUpperCase() || 'B';
-  const fallbackAvatar = '/board-avatars/ava-anto-treklo.png';
+  const fallbackAvatar = '/logo.png';
   const getAvatarSrc = useCallback((profile?: { avatar_url?: string | null; avatar?: string | null }) => {
-    const candidate = profile?.avatar_url || profile?.avatar || '';
-    if (!candidate) return fallbackAvatar;
-    if (candidate.startsWith('data:') || candidate.startsWith('http') || candidate.startsWith('/')) return candidate;
-    return `/${candidate}`;
+    return resolveMediaUrl(profile?.avatar_url || profile?.avatar, fallbackAvatar);
   }, [fallbackAvatar]);
   const getMemberDisplayName = useCallback((memberUser: BoardMember['user']) => {
     const fullName = `${memberUser.first_name || ''} ${memberUser.last_name || ''}`.trim();
@@ -767,7 +823,16 @@ export const BoardDetailScreen: React.FC = () => {
   if (!board) return null;
 
   return (
-    <div className={`board-detail-page ${isTouch ? 'is-touch' : ''}`} style={backgroundStyle}>
+    <>
+      {topToast && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="board-top-toast" role="status" aria-live="polite">
+              {topToast}
+            </div>,
+            document.body
+          )
+        : null}
+      <div className={`board-detail-page ${isTouch ? 'is-touch' : ''} ${isListDragging ? 'drag-list-active' : ''}`} style={backgroundStyle}>
       <BoardHeader
         board={board}
         boardTitle={boardTitle}
@@ -883,6 +948,7 @@ export const BoardDetailScreen: React.FC = () => {
                const url = `${window.location.origin}/boards/${board.id}?card=${selectedCard.id}`;
                try {
                  await navigator.clipboard.writeText(url);
+                 showTopToast(t('common.linkCopied'));
                } catch {
                  window.prompt(t('card.menu.copyLinkPrompt'), url);
                }
@@ -1013,6 +1079,7 @@ export const BoardDetailScreen: React.FC = () => {
         activityLogs={activityLogs}
         isLoading={isActivityLoading}
       />
-    </div>
+      </div>
+    </>
   );
 };

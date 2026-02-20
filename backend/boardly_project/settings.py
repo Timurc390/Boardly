@@ -96,9 +96,13 @@ INSTALLED_APPS = [
 ]
 
 SITE_ID = 1
+SITE_DOMAIN = 'boardly-frontend.fly.dev'
+SITE_DISPLAY_NAME = 'Boardly'
+SITE_PROTOCOL = 'https'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     # ВАЖЛИВО: CORS MiddleWare має бути першим або дуже рано
     'corsheaders.middleware.CorsMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -204,9 +208,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
+MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', str(BASE_DIR / 'media')))
 
 # ----------------------------------------------------------------------
 # CHANNELS (WebSocket)
@@ -265,8 +271,11 @@ SECURE_HSTS_PRELOAD = _env_bool(
     IS_PRODUCTION and SECURE_HSTS_SECONDS > 0,
 )
 
-if _env_bool('SECURE_PROXY_SSL_HEADER_ENABLED', IS_PRODUCTION):
+# Trust Fly proxy HTTPS headers by default so absolute URLs (e.g. avatar/media links)
+# are generated with https:// instead of http:// in API responses.
+if _env_bool('SECURE_PROXY_SSL_HEADER_ENABLED', True):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = _env_bool('USE_X_FORWARDED_HOST', True)
 
 # ----------------------------------------------------------------------
 # AUTHENTICATION BACKENDS
@@ -296,29 +305,47 @@ REST_FRAMEWORK = {
 # ----------------------------------------------------------------------
 # EMAIL SETTINGS (Gmail SMTP)
 # ----------------------------------------------------------------------
-# Замінюємо консольний бекенд на реальний SMTP
-# У dev режимі використовуємо console backend, щоб реєстрація не падала без SMTP.
-if DEBUG:
-    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-else:
-    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-# Встав сюди свою пошту та App Password (не звичайний пароль!)
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = 'Boardly Team <noreply@boardly.com>'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = _env_int('EMAIL_PORT', 587)
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+
+# У dev автоматично вмикаємо SMTP, якщо креденшали задані.
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'tititimurc@gmail.com').strip()
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'fptmriinkxgsseln').strip()
+
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', '').strip()
+if not EMAIL_BACKEND:
+    if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    else:
+        EMAIL_BACKEND = (
+            'django.core.mail.backends.console.EmailBackend'
+            if DEBUG
+            else 'django.core.mail.backends.smtp.EmailBackend'
+        )
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    f'Boardly <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else 'Boardly <noreply@boardly.com>'
+)
+SERVER_EMAIL = os.getenv('SERVER_EMAIL', DEFAULT_FROM_EMAIL)
 
 
 # ----------------------------------------------------------------------
 # DJOSER & SOCIAL AUTH
 # ----------------------------------------------------------------------
 DJOSER = {
-    'PASSWORD_RESET_CONFIRM_URL': 'password-reset/{uid}/{token}',
+    'DOMAIN': SITE_DOMAIN,
+    'SITE_NAME': SITE_DISPLAY_NAME,
+    'PROTOCOL': SITE_PROTOCOL,
+    'PASSWORD_RESET_CONFIRM_URL': 'password-change-confirm/{uid}/{token}',
     'USERNAME_RESET_CONFIRM_URL': 'username-reset/{uid}/{token}',
     'ACTIVATION_URL': 'activate/{uid}/{token}',
     'SEND_ACTIVATION_EMAIL': True,
+    'EMAIL': {
+        'password_reset': 'core.email.BoardlyPasswordResetEmail',
+        'activation': 'core.email.BoardlyActivationEmail',
+    },
     'SERIALIZERS': {
         'user_create': 'core.api.serializers.UserCreateSerializer',
         'user': 'core.api.serializers.UserSerializer',
