@@ -1,5 +1,7 @@
 import client from '../../api/client';
-import { Board, List, Card, Checklist, ChecklistItem, Comment, Label } from '../../types';
+import { type ActivityLog, type Attachment, type Board, type Card, type Checklist, type ChecklistItem, type Comment, type Label, type List } from '../../types';
+
+type BoardMember = NonNullable<Board['members']>[number];
 
 export const getBoards = async (): Promise<Board[]> => {
   const res = await client.get('/boards/');
@@ -34,7 +36,10 @@ export const removeMember = async (membershipId: number): Promise<void> => {
   await client.delete(`/board-members/${membershipId}/`);
 };
 
-export const updateMemberRole = async (membershipId: number, role: 'admin' | 'developer' | 'viewer'): Promise<any> => {
+export const updateMemberRole = async (
+  membershipId: number,
+  role: 'admin' | 'developer' | 'viewer'
+): Promise<BoardMember> => {
   const res = await client.patch(`/board-members/${membershipId}/`, { role });
   return res.data;
 };
@@ -69,7 +74,7 @@ export const createCard = async (listId: number, title: string, order: number): 
 };
 
 export const updateCard = async (id: number, data: Partial<Card> & { label_ids?: number[] }): Promise<Card> => {
-  const payload: any = { ...data };
+  const payload: Partial<Card> & { label_ids?: number[]; list?: number } = { ...data };
   if (data.list) payload.list = data.list;
   const res = await client.patch(`/cards/${id}/`, payload);
   return res.data;
@@ -146,7 +151,7 @@ export const deleteComment = async (commentId: number): Promise<void> => {
   await client.delete(`/comments/${commentId}/`);
 };
 
-export const createAttachment = async (cardId: number, file: File): Promise<any> => {
+export const createAttachment = async (cardId: number, file: File): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('card', String(cardId));
   formData.append('file', file);
@@ -172,7 +177,7 @@ export const deleteLabel = async (labelId: number): Promise<void> => {
   await client.delete(`/labels/${labelId}/`);
 };
 
-export const getBoardActivity = async (boardId: number, userId?: number): Promise<any[]> => {
+export const getBoardActivity = async (boardId: number, userId?: number): Promise<ActivityLog[]> => {
   const res = await client.get('/activity/', { params: { board_id: boardId, user_id: userId } });
   return res.data;
 };

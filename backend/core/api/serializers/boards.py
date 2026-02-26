@@ -2,6 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from core.models import Board, Membership, Label, Activity
 from .users import UserSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MembershipSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -53,7 +56,13 @@ class BoardSerializer(serializers.ModelSerializer):
 
     def get_lists(self, obj):
         from .cards import ListSerializer
-        return ListSerializer(obj.lists.all(), many=True).data
+        queryset = obj.lists.all()
+        logger.warning(
+            '[list-move][board-serialize] board_id=%s list_orders=%s',
+            obj.id,
+            list(queryset.values_list('id', 'title', 'order', 'is_archived')),
+        )
+        return ListSerializer(queryset, many=True).data
 
     def get_is_favorite(self, obj):
         request = self.context.get('request')

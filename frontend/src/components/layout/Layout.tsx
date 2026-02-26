@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { FiLogOut, FiMenu } from 'shared/ui/fiIcons';
 // ВИПРАВЛЕНО: Redux
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { logoutUser } from '../../store/slices/authSlice';
@@ -166,7 +167,7 @@ export const Layout: React.FC = () => {
                 </div>
               </Link>
               <button className="btn-icon nav-mobile-logout" onClick={handleLogout} title={t('nav.logout')} aria-label={t('nav.logout')}>
-                ⎋
+                <FiLogOut aria-hidden="true" />
               </button>
             </div>
           ) : (
@@ -182,7 +183,7 @@ export const Layout: React.FC = () => {
             aria-label={t('nav.menu')}
             aria-expanded={isMobileMenuOpen}
           >
-            ☰
+            <FiMenu aria-hidden="true" />
           </button>
         </div>
       </nav>

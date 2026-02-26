@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { FiArrowLeft } from 'shared/ui/fiIcons';
 import { useI18n } from '../context/I18nContext';
 
 export const HelpScreen: React.FC = () => {
@@ -109,7 +110,7 @@ export const HelpScreen: React.FC = () => {
             Boardly
           </Link>
           <button type="button" className="support-back" onClick={() => navigate(-1)}>
-            <span aria-hidden="true">←</span>
+            <span aria-hidden="true"><FiArrowLeft /></span>
             <span>{t('community.back')}</span>
           </button>
           <h1>{t('help.title')}</h1>

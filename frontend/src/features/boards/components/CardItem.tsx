@@ -1,6 +1,18 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
+import {
+  FiAlignLeft,
+  FiArrowDown,
+  FiArrowLeft,
+  FiArrowRight,
+  FiArrowUp,
+  FiCheck,
+  FiCheckSquare,
+  FiClock,
+  FiMessageCircle,
+  FiPaperclip,
+} from 'shared/ui/fiIcons';
 import { Card } from '../../../types';
 import { useI18n } from '../../../context/I18nContext';
 
@@ -146,7 +158,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
                   title={t('card.uncomplete')}
                   aria-label={t('card.uncomplete')}
                 >
-                  ✓
+                  <FiCheck aria-hidden="true" />
                 </button>
               )}
               {!card.is_completed && isHover && canEdit && (
@@ -173,7 +185,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
                     aria-label={t('card.moveUp')}
                     style={{ width: 20, height: 20, fontSize: 12, opacity: canMoveUp ? 0.8 : 0.3 }}
                   >
-                    ↑
+                    <FiArrowUp aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -184,7 +196,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
                     aria-label={t('card.moveDown')}
                     style={{ width: 20, height: 20, fontSize: 12, opacity: canMoveDown ? 0.8 : 0.3 }}
                   >
-                    ↓
+                    <FiArrowDown aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -195,7 +207,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
                     aria-label={t('card.moveLeft')}
                     style={{ width: 20, height: 20, fontSize: 12, opacity: canMoveLeft ? 0.8 : 0.3 }}
                   >
-                    ←
+                    <FiArrowLeft aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -206,7 +218,7 @@ const CardItemComponent: React.FC<CardItemProps> = ({
                     aria-label={t('card.moveRight')}
                     style={{ width: 20, height: 20, fontSize: 12, opacity: canMoveRight ? 0.8 : 0.3 }}
                   >
-                    →
+                    <FiArrowRight aria-hidden="true" />
                   </button>
                 </div>
               )}
@@ -215,30 +227,30 @@ const CardItemComponent: React.FC<CardItemProps> = ({
               <div className="card-meta-row">
                 {hasDescription && (
                   <span className="card-meta-item" title={t('card.descriptionTitle')}>
-                    <span className="card-meta-icon" aria-hidden="true">≡</span>
+                    <span className="card-meta-icon" aria-hidden="true"><FiAlignLeft /></span>
                   </span>
                 )}
                 {commentCount > 0 && (
                   <span className="card-meta-item" title={t('comments.title')}>
-                    <span className="card-meta-icon" aria-hidden="true">💬</span>
+                    <span className="card-meta-icon" aria-hidden="true"><FiMessageCircle /></span>
                     {commentCount}
                   </span>
                 )}
                 {attachmentCount > 0 && (
                   <span className="card-meta-item" title={t('attachments.title')}>
-                    <span className="card-meta-icon" aria-hidden="true">📎</span>
+                    <span className="card-meta-icon" aria-hidden="true"><FiPaperclip /></span>
                     {attachmentCount}
                   </span>
                 )}
                 {hasChecklist && (
                   <span className={`card-meta-item ${isChecklistComplete ? 'done' : ''}`} title={t('checklist.title')}>
-                    <span className="card-meta-icon" aria-hidden="true">☑</span>
+                    <span className="card-meta-icon" aria-hidden="true"><FiCheckSquare /></span>
                     {checklistStats.done}/{checklistStats.total}
                   </span>
                 )}
                 {hasDueDate && (
                   <span className={dueClass} title={dueTitle} aria-label={`${t('card.dueDate')}: ${dueTitle}`}>
-                    <span aria-hidden="true">🕒</span>
+                    <span aria-hidden="true"><FiClock /></span>
                     <span>{dueText}</span>
                   </span>
                 )}

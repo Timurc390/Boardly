@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { FiAlignLeft } from 'shared/ui/fiIcons';
 import { Card } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
 import { useI18n } from '../../../../context/I18nContext';
@@ -28,7 +29,7 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
     <div className="card-section">
         <div className="card-section-header">
           <h4 className="card-main-section-title">
-            <span className="card-main-section-icon">☰</span>
+            <span className="card-main-section-icon"><FiAlignLeft aria-hidden="true" /></span>
             {t('card.descriptionTitle')}
           </h4>
           {!isEditing && canEdit && (

@@ -1,42 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { FiHelpCircle, FiPlus, FiX } from 'shared/ui/fiIcons';
 import { BoardCard } from './components/BoardCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { useI18n } from '../../context/I18nContext';
-import * as api from './api';
-import { Board } from '../../types';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { logoutUser } from '../../store/slices/authSlice';
+import { createBoardAction, fetchBoardsAction } from '../../store/slices/boardSlice';
+import { useDialogA11y } from '../../shared/hooks/useDialogA11y';
+import { validateImageFile } from '../../shared/utils/fileValidation';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const BOARD_LIST_BACKGROUND_KEY = 'boardly.boards.background';
 const DEFAULT_BOARDS_BACKGROUND = '/board-backgrounds/board-default.jpg';
-
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'textarea:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])'
-].join(', ');
-
-const getFocusableElements = (container: HTMLElement | null) => {
-  if (!container) return [] as HTMLElement[];
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
-};
 
 export const BoardListScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAppSelector(state => state.auth);
-
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { boards, boardsLoading } = useAppSelector((state) => state.board);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
@@ -54,7 +39,6 @@ export const BoardListScreen: React.FC = () => {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const accountPanelRef = useRef<HTMLDivElement | null>(null);
   const backgroundModalRef = useRef<HTMLDivElement | null>(null);
-  const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
   const rawAvatarUrl = user?.profile?.avatar_url || '';
   const rawAvatarPath = user?.profile?.avatar || '';
@@ -67,19 +51,8 @@ export const BoardListScreen: React.FC = () => {
   }, [resolvedAvatarUrl]);
 
   useEffect(() => {
-    const fetchBoards = async () => {
-      try {
-        setIsLoading(true);
-        const data = await api.getBoards();
-        setBoards(data);
-      } catch (error) {
-        console.error('Failed to fetch boards', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchBoards();
-  }, []);
+    dispatch(fetchBoardsAction());
+  }, [dispatch]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -121,8 +94,7 @@ export const BoardListScreen: React.FC = () => {
 
     setIsCreating(true);
     try {
-      const newBoard = await api.createBoard(newBoardTitle);
-      setBoards(prev => [...prev, newBoard]);
+      await dispatch(createBoardAction(newBoardTitle)).unwrap();
       setNewBoardTitle('');
       setIsModalOpen(false);
     } catch (error) {
@@ -135,13 +107,17 @@ export const BoardListScreen: React.FC = () => {
 
   const handleBackgroundUpload = useCallback((file?: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
+    const validation = validateImageFile(file, { maxMb: 5 });
+    if (!validation.valid) {
+      if (validation.error === 'invalid_type') {
+        alert(t('board.background.invalidFile'));
+        return;
+      }
+      if (validation.error === 'too_large') {
+        alert(t('board.background.tooLarge', { size: String(validation.maxMb) }));
+        return;
+      }
       alert(t('board.background.invalidFile'));
-      return;
-    }
-    const maxMb = 5;
-    if (file.size > maxMb * 1024 * 1024) {
-      alert(t('board.background.tooLarge', { size: String(maxMb) }));
       return;
     }
     const reader = new FileReader();
@@ -167,59 +143,16 @@ export const BoardListScreen: React.FC = () => {
     setIsBackgroundModalOpen(true);
   }, [closeAccountPanel, dashboardBackground]);
 
-  useEffect(() => {
-    const isAnyDialogOpen = isAccountOpen || isBackgroundModalOpen;
-    if (!isAnyDialogOpen || typeof document === 'undefined' || typeof window === 'undefined') return;
-
-    lastActiveElementRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-
-    const dialogNode = isBackgroundModalOpen ? backgroundModalRef.current : accountPanelRef.current;
-    const raf = window.requestAnimationFrame(() => {
-      const [firstFocusable] = getFocusableElements(dialogNode);
-      (firstFocusable || dialogNode)?.focus();
-    });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (isBackgroundModalOpen) {
-          closeBackgroundModal();
-        } else {
-          closeAccountPanel();
-        }
-        return;
-      }
-
-      if (event.key !== 'Tab') return;
-      const currentDialog = isBackgroundModalOpen ? backgroundModalRef.current : accountPanelRef.current;
-      const focusable = getFocusableElements(currentDialog);
-      if (!focusable.length) {
-        event.preventDefault();
-        currentDialog?.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      window.cancelAnimationFrame(raf);
-      lastActiveElementRef.current?.focus();
-      lastActiveElementRef.current = null;
-    };
-  }, [closeAccountPanel, closeBackgroundModal, isAccountOpen, isBackgroundModalOpen]);
+  useDialogA11y({
+    isOpen: isAccountOpen && !isBackgroundModalOpen,
+    onClose: closeAccountPanel,
+    dialogRef: accountPanelRef,
+  });
+  useDialogA11y({
+    isOpen: isBackgroundModalOpen,
+    onClose: closeBackgroundModal,
+    dialogRef: backgroundModalRef,
+  });
 
   const handleSwitchAccount = () => {
     dispatch(logoutUser());
@@ -241,7 +174,7 @@ export const BoardListScreen: React.FC = () => {
   const featuredBoards = filteredBoards.slice(0, 5);
   const remainingBoards = filteredBoards.slice(5);
 
-  if (isLoading) {
+  if (boardsLoading) {
     return <div className="loading-state">{t('common.loading')}</div>;
   }
 
@@ -288,7 +221,7 @@ export const BoardListScreen: React.FC = () => {
               className="board-card create-board-card boards-hub-create"
               onClick={() => setIsModalOpen(true)}
             >
-              <span style={{ fontSize: '24px', lineHeight: 1 }}>+</span>
+              <FiPlus aria-hidden="true" style={{ fontSize: '24px', lineHeight: 1 }} />
               <span>{t('common.create')}</span>
             </button>
 
@@ -299,7 +232,7 @@ export const BoardListScreen: React.FC = () => {
         </section>
 
         <Link to="/help" className="board-floating-help" aria-label={t('nav.help')} title={t('nav.help')}>
-          ?
+          <FiHelpCircle aria-hidden="true" />
         </Link>
       </div>
 
@@ -316,7 +249,9 @@ export const BoardListScreen: React.FC = () => {
           >
             <div className="boards-account-header">
               <span id="boards-account-title">{t('board.account.title')}</span>
-              <button type="button" className="boards-account-close" onClick={closeAccountPanel} aria-label={t('common.close')}>✕</button>
+              <button type="button" className="boards-account-close" onClick={closeAccountPanel} aria-label={t('common.close')}>
+                <FiX aria-hidden="true" />
+              </button>
             </div>
             <div className="boards-account-user">
               <div className="boards-account-avatar">
@@ -392,7 +327,7 @@ export const BoardListScreen: React.FC = () => {
                 <p>{t('board.background.urlPlaceholder')}</p>
               </div>
               <button type="button" className="boards-account-close" onClick={closeBackgroundModal} aria-label={t('common.close')}>
-                ✕
+                <FiX aria-hidden="true" />
               </button>
             </div>
 

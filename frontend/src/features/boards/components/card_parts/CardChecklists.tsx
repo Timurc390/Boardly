@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FiCheckSquare, FiTrash2 } from 'shared/ui/fiIcons';
 import { Card } from '../../../../types';
 import { useI18n } from '../../../../context/I18nContext';
 
 interface CardChecklistsProps {
   card: Card;
   canEdit: boolean;
-  onDeleteChecklist: (checklistId: number) => Promise<any> | void;
-  onAddChecklistItem: (checklistId: number, text: string) => Promise<any> | void;
-  onDeleteChecklistItem: (itemId: number, checklistId?: number) => Promise<any> | void;
-  onToggleChecklistItem: (itemId: number, isChecked: boolean) => Promise<any> | void;
-  onUpdateChecklistItem: (itemId: number, text: string) => Promise<any> | void;
+  onDeleteChecklist: (checklistId: number) => Promise<unknown> | void;
+  onAddChecklistItem: (checklistId: number, text: string) => Promise<unknown> | void;
+  onDeleteChecklistItem: (itemId: number, checklistId?: number) => Promise<unknown> | void;
+  onToggleChecklistItem: (itemId: number, isChecked: boolean) => Promise<unknown> | void;
+  onUpdateChecklistItem: (itemId: number, text: string) => Promise<unknown> | void;
   openAddItemSignal?: number;
 }
 
@@ -69,7 +70,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
             <div key={checklist.id} className="card-section checklist-block">
               <div className="checklist-top">
                 <h4 className="card-main-section-title checklist-title">
-                  <span className="card-main-section-icon">☑</span>
+                  <span className="card-main-section-icon"><FiCheckSquare aria-hidden="true" /></span>
                   {checklist.title || t('checklist.title')}
                 </h4>
                 <div className="checklist-header-actions">
@@ -136,7 +137,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
                         title={t('common.delete')}
                         aria-label={t('common.delete')}
                       >
-                        🗑️
+                        <FiTrash2 aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -191,7 +192,7 @@ export const CardChecklists: React.FC<CardChecklistsProps> = ({
       ) : (
         <div className="card-section">
           <h4 className="card-main-section-title">
-            <span className="card-main-section-icon">☑</span>
+            <span className="card-main-section-icon"><FiCheckSquare aria-hidden="true" /></span>
             {t('checklist.title')}
           </h4>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

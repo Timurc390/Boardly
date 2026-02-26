@@ -1,10 +1,16 @@
-import json
-
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 
 from core.models import Board, Membership
+
+
+def _is_valid_action_type(value):
+    if not isinstance(value, str):
+        return False
+    if len(value) > 128:
+        return False
+    return value.startswith("board/") and value.endswith("/fulfilled")
 
 
 class BoardConsumer(AsyncJsonWebsocketConsumer):
@@ -37,12 +43,24 @@ class BoardConsumer(AsyncJsonWebsocketConsumer):
         if msg_type != "board_updated":
             return
 
+        action_type = content.get("action_type")
+        if not _is_valid_action_type(action_type):
+            return
+
+        incoming_board_id = content.get("board_id")
+        if incoming_board_id is not None and str(incoming_board_id) != str(self.board_id):
+            return
+
+        user = self.scope.get("user", AnonymousUser())
+        if user.is_anonymous:
+            return
+
         payload = {
             "type": "board.broadcast",
-            "action_type": content.get("action_type"),
+            "action_type": action_type,
             "payload": content.get("payload"),
-            "sender_id": content.get("sender_id"),
-            "board_id": content.get("board_id"),
+            "sender_id": user.id,
+            "board_id": self.board_id,
         }
         await self.channel_layer.group_send(self.group_name, payload)
 

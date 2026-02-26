@@ -1,52 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Droppable, Draggable } from '@hello-pangea/dnd';
-import { List, Card } from '../../../types';
-import { CardItem } from './CardItem';
-import { Button } from '../../../components/ui/Button';
+import { type List, type Card } from '../../../types';
 import { useI18n } from '../../../context/I18nContext';
-
-const LIST_COLOR_OPTIONS = [
-  '#4CAF50',
-  '#FBC02D',
-  '#E53935',
-  '#1E88E5',
-  '#9E9E9E',
-  '#F5F5F5',
-  '#FB8C00',
-  '#8E24AA',
-  '#00897B',
-  '#8D6E63'
-];
-
-const hexToRgb = (hex: string) => {
-  const raw = hex.replace('#', '').trim();
-  if (!raw) return null;
-  const normalized = raw.length === 3
-    ? raw.split('').map((c) => c + c).join('')
-    : raw;
-  if (normalized.length !== 6) return null;
-  const value = Number.parseInt(normalized, 16);
-  if (Number.isNaN(value)) return null;
-  return [
-    (value >> 16) & 255,
-    (value >> 8) & 255,
-    value & 255
-  ] as const;
-};
-
-const getHeaderColorMeta = (hex: string) => {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return null;
-  const [r, g, b] = rgb;
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  const isLight = luminance > 0.6;
-  return {
-    text: isLight ? '#1f2937' : '#f8fafc',
-    badgeBg: isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)',
-    divider: isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.22)'
-  };
-};
+import { BoardColumnView } from './board_column/BoardColumnView';
+import { BoardColumnMenu } from './board_column/BoardColumnMenu';
+import { getHeaderColorMeta } from './board_column/listColor';
 
 interface BoardColumnProps {
   list: List;
@@ -71,14 +28,13 @@ interface BoardColumnProps {
   listMenuOpen: boolean;
   onToggleListMenu: (listId: number) => void;
   onCloseListMenu: () => void;
-  
   isCollapsed: boolean;
   onToggleCollapse: (listId: number) => void;
 }
 
-const BoardColumnComponent: React.FC<BoardColumnProps> = ({ 
-  list, 
-  index, 
+const BoardColumnComponent: React.FC<BoardColumnProps> = ({
+  list,
+  index,
   listIndex,
   listOptions,
   prevList,
@@ -87,8 +43,8 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   canEditList = true,
   canAddCards = true,
   canEditCard,
-  onAddCard, 
-  onUpdateList, 
+  onAddCard,
+  onUpdateList,
   onDeleteList,
   onCopyList,
   onArchiveAllCards,
@@ -100,42 +56,38 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   onToggleListMenu,
   onCloseListMenu,
   isCollapsed,
-  onToggleCollapse
+  onToggleCollapse,
 }) => {
   const { t } = useI18n();
   const [isAdding, setIsAdding] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
-  
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(list.title);
-  
-  const [isColorPickerOpen, setIsColorPickerOpen] = useState(true);
   const listMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const listMenuDropdownRef = useRef<HTMLDivElement | null>(null);
   const [menuCoords, setMenuCoords] = useState<{ top: number; left: number } | null>(null);
-  
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newCardInputRef = useRef<HTMLInputElement>(null);
-  const isTouchViewport = !!isTouch;
+  const isTouchViewport = Boolean(isTouch);
 
   const visibleCards = useMemo(
-    () => (list.cards || []).filter(card => !card.is_archived),
+    () => (list.cards || []).filter((card) => !card.is_archived),
     [list.cards]
   );
   const visibleCount = visibleCards.length;
   const prevVisibleCount = useMemo(
-    () => (prevList?.cards || []).filter(card => !card.is_archived).length,
+    () => (prevList?.cards || []).filter((card) => !card.is_archived).length,
     [prevList?.cards]
   );
   const nextVisibleCount = useMemo(
-    () => (nextList?.cards || []).filter(card => !card.is_archived).length,
+    () => (nextList?.cards || []).filter((card) => !card.is_archived).length,
     [nextList?.cards]
   );
 
   const listColor = list.color?.trim() || '';
   const normalizedListColor = listColor.toLowerCase();
   const headerMeta = listColor ? getHeaderColorMeta(listColor) : null;
-  const hasListColor = !!headerMeta;
+  const hasListColor = Boolean(headerMeta);
   const headerStyle: React.CSSProperties | undefined = headerMeta
     ? { background: listColor, color: headerMeta.text, boxShadow: `inset 0 -1px 0 ${headerMeta.divider}` }
     : undefined;
@@ -162,9 +114,10 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   useEffect(() => {
     if (!isAdding || !newCardInputRef.current || isTouch) return;
     const input = newCardInputRef.current;
-    setTimeout(() => {
+    const timeout = window.setTimeout(() => {
       input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }, 50);
+    return () => window.clearTimeout(timeout);
   }, [isAdding, isTouch]);
 
   const getMenuCoords = useCallback((anchor: HTMLElement | null, menuWidth = 250) => {
@@ -230,72 +183,105 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     };
   }, [listMenuOpen, onCloseListMenu]);
 
-  const handleTitleSave = () => {
+  const handleTitleSave = useCallback(() => {
     setIsEditingTitle(false);
     if (titleValue.trim() && titleValue !== list.title) {
       onUpdateList(list.id, { title: titleValue });
-    } else {
-      setTitleValue(list.title);
+      return;
     }
-  };
+    setTitleValue(list.title);
+  }, [list.id, list.title, onUpdateList, titleValue]);
 
-  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleTitleSave();
-    if (e.key === 'Escape') {
+  const handleTitleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter') handleTitleSave();
+    if (event.key === 'Escape') {
       setIsEditingTitle(false);
       setTitleValue(list.title);
     }
-  };
+  }, [handleTitleSave, list.title]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newCardTitle.trim()) {
-      onAddCard(list.id, newCardTitle);
-      setNewCardTitle('');
-      setIsAdding(false);
+  const handleSubmitCard = useCallback((event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newCardTitle.trim()) return;
+    onAddCard(list.id, newCardTitle);
+    setNewCardTitle('');
+    setIsAdding(false);
+  }, [list.id, newCardTitle, onAddCard]);
+
+  const handleMenuAction = useCallback((action: 'add' | 'rename' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'remove') => {
+    onCloseListMenu();
+
+    if (action === 'add') {
+      if (!canAddCards) return;
+      setIsAdding(true);
+      window.setTimeout(() => newCardInputRef.current?.focus(), 0);
+      return;
     }
-  };
 
-  const handleMenuAction = (action: 'add' | 'rename' | 'copy' | 'archive' | 'archiveAllCards' | 'move' | 'moveAll' | 'remove') => {
-      onCloseListMenu();
-      if (action === 'add') {
-        if (!canAddCards) return;
-        setIsAdding(true);
-        setTimeout(() => newCardInputRef.current?.focus(), 0);
-        return;
-      }
-      if (action === 'rename') {
-        setTitleValue(list.title);
-        setIsEditingTitle(true);
-        return;
-      }
-      if (action === 'copy' && onCopyList) onCopyList(list.id);
-      if (action === 'archive') onUpdateList(list.id, { is_archived: true });
-      if (action === 'archiveAllCards' && onArchiveAllCards) onArchiveAllCards(list.id);
-      if (action === 'move' && onMoveList) {
-        const nextRaw = window.prompt(t('list.menu.movePrompt'), String(listIndex + 1));
-        if (!nextRaw) return;
-        const nextPosition = Number(nextRaw);
-        if (Number.isNaN(nextPosition)) return;
-        const boundedPosition = Math.max(1, Math.min(listOptions.length, nextPosition));
-        onMoveList(list.id, listIndex, boundedPosition - 1);
-        return;
-      }
-      if (action === 'moveAll' && onMoveCard) {
-        const targets = listOptions.filter(option => option.id !== list.id);
-        if (targets.length === 0 || visibleCards.length === 0) return;
-        const optionsText = targets.map(option => `${option.id}: ${option.title}`).join('\n');
-        const selectedRaw = window.prompt(`${t('list.menu.moveAllPrompt')}\n${optionsText}`, String(targets[0].id));
-        if (!selectedRaw) return;
-        const destListId = Number(selectedRaw);
-        if (Number.isNaN(destListId) || !targets.some(option => option.id === destListId)) return;
-        visibleCards.forEach((cardItem, cardIndex) => {
-          onMoveCard(cardItem.id, list.id, destListId, cardIndex);
-        });
-        return;
-      }
-      if (action === 'remove') onDeleteList(list.id);
-  };
+    if (action === 'rename') {
+      setTitleValue(list.title);
+      setIsEditingTitle(true);
+      return;
+    }
+
+    if (action === 'copy' && onCopyList) {
+      onCopyList(list.id);
+      return;
+    }
+
+    if (action === 'archive') {
+      onUpdateList(list.id, { is_archived: true });
+      return;
+    }
+
+    if (action === 'archiveAllCards' && onArchiveAllCards) {
+      onArchiveAllCards(list.id);
+      return;
+    }
+
+    if (action === 'move' && onMoveList) {
+      const nextRaw = window.prompt(t('list.menu.movePrompt'), String(listIndex + 1));
+      if (!nextRaw) return;
+      const nextPosition = Number(nextRaw);
+      if (Number.isNaN(nextPosition)) return;
+      const boundedPosition = Math.max(1, Math.min(listOptions.length, nextPosition));
+      onMoveList(list.id, listIndex, boundedPosition - 1);
+      return;
+    }
+
+    if (action === 'moveAll' && onMoveCard) {
+      const targets = listOptions.filter((option) => option.id !== list.id);
+      if (targets.length === 0 || visibleCards.length === 0) return;
+      const optionsText = targets.map((option) => `${option.id}: ${option.title}`).join('\n');
+      const selectedRaw = window.prompt(`${t('list.menu.moveAllPrompt')}\n${optionsText}`, String(targets[0].id));
+      if (!selectedRaw) return;
+      const destListId = Number(selectedRaw);
+      if (Number.isNaN(destListId) || !targets.some((option) => option.id === destListId)) return;
+      visibleCards.forEach((cardItem, cardIndex) => {
+        onMoveCard(cardItem.id, list.id, destListId, cardIndex);
+      });
+      return;
+    }
+
+    if (action === 'remove') {
+      onDeleteList(list.id);
+    }
+  }, [
+    canAddCards,
+    list.id,
+    list.title,
+    listIndex,
+    listOptions,
+    onArchiveAllCards,
+    onCloseListMenu,
+    onCopyList,
+    onDeleteList,
+    onMoveCard,
+    onMoveList,
+    onUpdateList,
+    t,
+    visibleCards,
+  ]);
 
   const handleMoveListLeft = useCallback(() => {
     if (!onMoveList || !prevList) return;
@@ -310,111 +296,6 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
   const handleCardClick = useCallback((cardItem: Card) => {
     onCardClick(cardItem);
   }, [onCardClick]);
-
-  const fallbackLeft = typeof window !== 'undefined' ? Math.max(8, window.innerWidth - 266) : 8;
-  const resolvedMenuCoords = menuCoords ?? { top: 72, left: fallbackLeft };
-  const listMenuDropdownStyle: React.CSSProperties | undefined = !isTouchViewport
-    ? {
-        position: 'fixed',
-        top: resolvedMenuCoords.top,
-        left: resolvedMenuCoords.left,
-        right: 'auto',
-        minWidth: 250,
-        zIndex: 'var(--z-board-list-menu)'
-      }
-    : undefined;
-
-  const listMenuContent = (
-    <>
-      <div
-        ref={listMenuDropdownRef}
-        className={`list-menu-dropdown ${isTouchViewport ? 'is-touch-portal' : ''}`.trim()}
-        role="menu"
-        aria-label={t('list.menu')}
-        style={listMenuDropdownStyle}
-      >
-        <div className="list-menu-header">
-          <span>{t('list.menu')}</span>
-          <button
-            type="button"
-            className="list-menu-close"
-            onClick={onCloseListMenu}
-            aria-label={t('common.close')}
-          >
-            ✕
-          </button>
-        </div>
-        <div className="list-menu-section">
-          {canAddCards && (
-            <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('add')}>
-              {t('list.menu.addCard')}
-            </button>
-          )}
-          {canEditList && (
-            <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('rename')}>
-              {t('common.edit')}
-            </button>
-          )}
-          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('copy')}>
-            {t('list.copy')}
-          </button>
-          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('move')}>
-            {t('list.menu.move')}
-          </button>
-          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('moveAll')}>
-            {t('list.menu.moveAll')}
-          </button>
-        </div>
-        <div className="list-color-section">
-          <button
-            type="button"
-            className="list-color-header"
-            onClick={() => setIsColorPickerOpen((prev) => !prev)}
-          >
-            <span className="list-color-title">{t('list.color.title')}</span>
-            <span className="list-color-chevron">{isColorPickerOpen ? '▾' : '▸'}</span>
-          </button>
-          {isColorPickerOpen && (
-            <>
-              <div className="list-color-grid">
-                {LIST_COLOR_OPTIONS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    className={`list-color-swatch ${normalizedListColor === color.toLowerCase() ? 'active' : ''}`}
-                    style={{ background: color }}
-                    onClick={() => onUpdateList(list.id, { color })}
-                    aria-pressed={normalizedListColor === color.toLowerCase()}
-                    aria-label={color}
-                    title={color}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                className={`list-color-none ${!listColor ? 'active' : ''}`}
-                onClick={() => onUpdateList(list.id, { color: '' })}
-              >
-                {t('list.color.none')}
-              </button>
-            </>
-          )}
-        </div>
-        <div className="list-menu-divider" />
-        <div className="list-menu-section">
-          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('archive')}>
-            {t('list.archive')}
-          </button>
-          <button className="list-menu-item" role="menuitem" onClick={() => handleMenuAction('archiveAllCards')}>
-            {t('list.menu.archiveAllCards')}
-          </button>
-          <button className="list-menu-item danger" role="menuitem" onClick={() => handleMenuAction('remove')}>
-            {t('common.delete')}
-          </button>
-        </div>
-      </div>
-    </>
-  );
 
   const handleToggleComplete = useCallback((cardId: number, next: boolean) => {
     onToggleCardComplete(cardId, next);
@@ -444,231 +325,105 @@ const BoardColumnComponent: React.FC<BoardColumnProps> = ({
     onToggleCollapse(list.id);
   }, [list.id, onToggleCollapse]);
 
-  if (isCollapsed) {
-      return (
-    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
-            {(provided, snapshot) => (
-                (() => {
-                  const providedStyle = provided.draggableProps.style || {};
-                  const baseTransform = providedStyle.transform;
-                  const mergedTransform = snapshot.isDragging
-                    ? baseTransform
-                    : [baseTransform, 'rotate(180deg)'].filter(Boolean).join(' ');
-                  return (
-                <div 
-                    className={`kanban-column collapsed ${snapshot.isDragging ? 'dragging-list' : ''}`}
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    style={{ 
-                        ...providedStyle, 
-                        width: '40px', minWidth: '40px', 
-                        alignItems: 'center', cursor: 'pointer',
-                        writingMode: 'vertical-rl',
-                        transform: mergedTransform,
-                        padding: '12px 0',
-                        background: hasListColor ? listColor : 'var(--bg-surface)',
-                        borderRadius: '12px',
-                        border: hasListColor ? `1px solid ${headerMeta.divider}` : '1px solid rgba(255,255,255,0.1)',
-                        color: headerMeta?.text
-                    }}
-                    onClick={handleToggleCollapse}
-                >
-                    <span style={{ fontWeight: 600, color: headerMeta?.text || 'var(--text-primary)' }}>{list.title}</span>
-                    <span className="count-badge" style={{ marginTop: 8, transform: 'rotate(90deg)', ...headerBadgeStyle }}>{visibleCount}</span>
-                </div>
-                  );
-                })()
-            )}
-        </Draggable>
-      );
-  }
+  const handleStartTitleEdit = useCallback(() => {
+    if (canEditList) {
+      setIsEditingTitle(true);
+    }
+  }, [canEditList]);
+
+  const handleStartAddCard = useCallback(() => {
+    setIsAdding(true);
+  }, []);
+
+  const handleCancelAddCard = useCallback(() => {
+    setIsAdding(false);
+  }, []);
+
+  const handleToggleMenu = useCallback(() => {
+    if (!listMenuOpen && !isTouchViewport) {
+      setMenuCoords(getMenuCoords(listMenuTriggerRef.current));
+    }
+    onToggleListMenu(list.id);
+  }, [getMenuCoords, isTouchViewport, list.id, listMenuOpen, onToggleListMenu]);
+
+  const fallbackLeft = typeof window !== 'undefined' ? Math.max(8, window.innerWidth - 266) : 8;
+  const resolvedMenuCoords = menuCoords ?? { top: 72, left: fallbackLeft };
+  const listMenuDropdownStyle: React.CSSProperties | undefined = !isTouchViewport
+    ? {
+      position: 'fixed',
+      top: resolvedMenuCoords.top,
+      left: resolvedMenuCoords.left,
+      right: 'auto',
+      minWidth: 250,
+      zIndex: 'var(--z-board-list-menu)',
+    }
+    : undefined;
+
+  const listMenuContent = (
+    <BoardColumnMenu
+      canAddCards={canAddCards}
+      canEditList={canEditList}
+      isTouchViewport={isTouchViewport}
+      listColor={listColor}
+      normalizedListColor={normalizedListColor}
+      onClose={onCloseListMenu}
+      onMenuAction={handleMenuAction}
+      onPickColor={(color) => onUpdateList(list.id, { color })}
+      onClearColor={() => onUpdateList(list.id, { color: '' })}
+      dropdownRef={listMenuDropdownRef}
+      dropdownStyle={listMenuDropdownStyle}
+      t={t}
+    />
+  );
 
   return (
-    <Draggable draggableId={`list-${list.id}`} index={index} isDragDisabled={!canEditList}>
-      {(provided, snapshot) => (
-        <div
-          className={`kanban-column ${hasListColor ? 'has-color' : ''} ${snapshot.isDragging ? 'dragging-list' : ''}`}
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          style={provided.draggableProps.style}
-        >
-          <div className={`list-header ${hasListColor ? 'has-color' : ''}`} {...provided.dragHandleProps} style={headerStyle}>
-            {isEditingTitle ? (
-              <input
-                ref={titleInputRef}
-                className="form-input"
-                value={titleValue}
-                onChange={e => setTitleValue(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={handleTitleKeyDown}
-                style={{ height: '30px', padding: '4px 8px', fontSize: '14px', width: '100%' }}
-              />
-            ) : (
-              <>
-                <span 
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (canEditList) setIsEditingTitle(true);
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    if (canEditList) setIsEditingTitle(true);
-                  }}
-                  style={{ cursor: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8, flex: 1, color: headerMeta?.text }}
-                  title={list.title}
-                >
-                  {list.title}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
-                    <span className="count-badge" style={headerBadgeStyle}>{visibleCount}</span>
-                    {isTouch && canEditList && (
-                      <>
-                        <button
-                          className="btn-icon"
-                          type="button"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); handleMoveListLeft(); }}
-                          disabled={!prevList}
-                          title={t('list.moveLeft')}
-                          aria-label={t('list.moveLeft')}
-                          style={{ fontSize: 12, width: 22, height: 22, opacity: prevList ? 0.8 : 0.3, ...headerIconStyle }}
-                        >
-                          ◀
-                        </button>
-                        <button
-                          className="btn-icon"
-                          type="button"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); handleMoveListRight(); }}
-                          disabled={!nextList}
-                          title={t('list.moveRight')}
-                          aria-label={t('list.moveRight')}
-                          style={{ fontSize: 12, width: 22, height: 22, opacity: nextList ? 0.8 : 0.3, ...headerIconStyle }}
-                        >
-                          ▶
-                        </button>
-                      </>
-                    )}
-                    
-                    {canEditList && (
-                      <>
-                        <button 
-                          ref={listMenuTriggerRef}
-                          className="list-menu-trigger btn-icon"
-                          type="button"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!listMenuOpen && !isTouchViewport) {
-                              setMenuCoords(getMenuCoords(listMenuTriggerRef.current));
-                            }
-                            onToggleListMenu(list.id);
-                          }}
-                          aria-haspopup="menu"
-                          aria-expanded={listMenuOpen}
-                          aria-label={t('list.menu')}
-                          style={{ fontSize: 16, width: 24, height: 24, ...headerIconStyle }}
-                        >
-                          •••
-                        </button>
-
-                        {listMenuOpen && (typeof document !== 'undefined' ? createPortal(listMenuContent, document.body) : listMenuContent)}
-                      </>
-                    )}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="list-body">
-            <Droppable droppableId={`list-${list.id}`} type="card">
-              {(provided, snapshot) => (
-                <div
-                  className={`task-list ${snapshot.isDraggingOver ? 'drag-over' : ''}`}
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                >
-                  {visibleCards.map((card, idx) => (
-                    <CardItem 
-                      key={card.id} 
-                      card={card} 
-                      index={idx} 
-                      onClick={handleCardClick}
-                      onToggleComplete={handleToggleComplete}
-                      isTouch={isTouch}
-                      canEdit={canEditCard ? canEditCard(card) : canEditList}
-                      canMoveLeft={!!prevList}
-                      canMoveRight={!!nextList}
-                      canMoveUp={idx > 0}
-                      canMoveDown={idx < visibleCount - 1}
-                      onMoveLeft={handleMoveCardLeft}
-                      onMoveRight={handleMoveCardRight}
-                      onMoveUp={handleMoveCardUp}
-                      onMoveDown={handleMoveCardDown}
-                    />
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-
-            {canAddCards && (
-              <div className="add-card-wrapper">
-              {isAdding ? (
-                  <form onSubmit={handleSubmit}>
-                  <input type="text" name="fake-user" autoComplete="username" style={{ display: 'none' }} />
-                  <input type="password" name="fake-pass" autoComplete="new-password" style={{ display: 'none' }} />
-                  <input
-                      ref={newCardInputRef}
-                      className="form-input"
-                      autoFocus
-                      placeholder={t('card.create.placeholder')}
-                      value={newCardTitle}
-                      onChange={e => setNewCardTitle(e.target.value)}
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      inputMode="text"
-                      enterKeyHint="done"
-                      style={{ marginBottom: 8 }}
-                  />
-                  <div style={{ display: 'flex', gap: 6 }}>
-                      <Button type="submit" size="sm" className="btn-primary">{t('common.add')}</Button>
-                      <button 
-                          type="button" 
-                          className="btn-secondary" 
-                          style={{ padding: '6px 10px', fontSize: 12, borderRadius: 6 }} 
-                          onClick={() => setIsAdding(false)}
-                      >
-                          {t('common.cancel')}
-                      </button>
-                  </div>
-                  </form>
-              ) : (
-                  <button
-                      className="btn-ghost"
-                      onClick={() => setIsAdding(true)}
-                  >
-                      {t('card.create.newButton')}
-                  </button>
-              )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Draggable>
+    <BoardColumnView
+      list={list}
+      index={index}
+      isCollapsed={isCollapsed}
+      canEditList={canEditList}
+      canAddCards={canAddCards}
+      isTouch={isTouch}
+      prevList={prevList}
+      nextList={nextList}
+      visibleCards={visibleCards}
+      visibleCount={visibleCount}
+      hasListColor={hasListColor}
+      listColor={listColor}
+      headerMeta={headerMeta}
+      headerStyle={headerStyle}
+      headerBadgeStyle={headerBadgeStyle}
+      headerIconStyle={headerIconStyle}
+      isEditingTitle={isEditingTitle}
+      titleValue={titleValue}
+      setTitleValue={setTitleValue}
+      onTitleSave={handleTitleSave}
+      onTitleKeyDown={handleTitleKeyDown}
+      onStartTitleEdit={handleStartTitleEdit}
+      titleInputRef={titleInputRef}
+      listMenuOpen={listMenuOpen}
+      listMenuTriggerRef={listMenuTriggerRef}
+      onToggleMenu={handleToggleMenu}
+      listMenuContent={listMenuContent}
+      onToggleCollapse={handleToggleCollapse}
+      isAdding={isAdding}
+      newCardTitle={newCardTitle}
+      setNewCardTitle={setNewCardTitle}
+      onSubmitCard={handleSubmitCard}
+      onStartAddCard={handleStartAddCard}
+      onCancelAddCard={handleCancelAddCard}
+      newCardInputRef={newCardInputRef}
+      onCardClick={handleCardClick}
+      onToggleCardComplete={handleToggleComplete}
+      canEditCard={canEditCard}
+      onMoveCardLeft={handleMoveCardLeft}
+      onMoveCardRight={handleMoveCardRight}
+      onMoveCardUp={handleMoveCardUp}
+      onMoveCardDown={handleMoveCardDown}
+      onMoveListLeft={handleMoveListLeft}
+      onMoveListRight={handleMoveListRight}
+      t={t}
+    />
   );
 };
 

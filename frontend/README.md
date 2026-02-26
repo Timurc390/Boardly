@@ -21,6 +21,20 @@ Frontend runs on `http://localhost:3000`.
 - `npm run qa:public` - `lint + mobile public smoke + desktop smoke + build`.
 - `npm run qa:local` - `lint + authenticated mobile smoke + desktop smoke + build`.
 
+## Playwright Local Setup
+For full mobile smoke (`viewport-390x844` + `android-pixel-5`), install Playwright browsers and host dependencies:
+
+```bash
+npx playwright install
+sudo npx playwright install-deps
+```
+
+If system deps cannot be installed locally, run Chromium-only mobile smoke:
+
+```bash
+npx playwright test tests/public-mobile-pages.spec.ts --workers=1 --project=android-pixel-5
+```
+
 ## Authenticated Smoke Env Vars
 `tests/mobile-ui.spec.ts` needs:
 - `TEST_USERNAME`

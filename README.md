@@ -64,6 +64,18 @@ For authenticated smoke tests, set:
 - Frontend production build is served via `nginx`.
 - CI workflow lives in `.github/workflows/frontend-ci.yml`.
 
+### Realtime Config (Redis + WS reconnect)
+- Backend channel layer:
+  - `CHANNEL_REDIS_URL` (or `REDIS_URL`) enables `channels_redis` transport.
+  - If not set, backend falls back to `InMemoryChannelLayer` (ok for local dev, not for multi-instance production).
+- Frontend WebSocket base:
+  - `REACT_APP_WS_URL` (optional). If omitted, WS URL is derived from `REACT_APP_API_URL` or current host.
+- Frontend reconnect tuning (optional):
+  - `REACT_APP_WS_MAX_RECONNECT_ATTEMPTS`
+  - `REACT_APP_WS_BASE_RECONNECT_MS`
+  - `REACT_APP_WS_MAX_RECONNECT_MS`
+  - `REACT_APP_WS_RECONNECT_JITTER_MS`
+
 ## License
 MIT License. See `LICENSE`.
 

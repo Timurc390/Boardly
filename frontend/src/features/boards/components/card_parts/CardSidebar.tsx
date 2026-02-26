@@ -1,7 +1,9 @@
 import React from 'react';
+import { FiArchive, FiCopy, FiImage, FiTrash2, FiUserPlus, FiX } from 'shared/ui/fiIcons';
 import { Card } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
 import { useI18n } from '../../../../context/I18nContext';
+import { confirmAction } from '../../../../shared/utils/confirm';
 import { resolveMediaUrl } from '../../../../utils/mediaUrl';
 
 interface CardSidebarProps {
@@ -80,7 +82,7 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
             {isCardMember ? (
               canLeaveCard ? (
                 <button type="button" className="sidebar-btn btn-danger" onClick={(e) => { e.preventDefault(); onLeaveCard(); }}>
-                  <span className="sidebar-btn-icon">🏃‍♂️</span>
+                  <span className="sidebar-btn-icon"><FiArchive aria-hidden="true" /></span>
                   {t('card.sidebar.leave')}
                 </button>
               ) : null
@@ -88,7 +90,7 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
               (card.is_public || canManageMembers) ? (
                 canJoinCard ? (
                   <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onJoinCard(); }}>
-                    <span className="sidebar-btn-icon">🙋‍♂️</span>
+                    <span className="sidebar-btn-icon"><FiUserPlus aria-hidden="true" /></span>
                     {t('card.sidebar.join')}
                   </button>
                 ) : null
@@ -149,14 +151,16 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
                       }
                     }}
                   >
-                    <span className="sidebar-btn-icon">🖼️</span>
+                    <span className="sidebar-btn-icon"><FiImage aria-hidden="true" /></span>
                     {t('card.cover.title')}
                   </button>
                   {isCoverMenuOpen && (
                     <div className="card-cover-menu">
                       <div className="card-cover-menu-header">
                         <span>{t('card.cover.title')}</span>
-                        <button type="button" className="btn-icon" onClick={onToggleCoverMenu} aria-label={t('common.close')}>✕</button>
+                        <button type="button" className="btn-icon" onClick={onToggleCoverMenu} aria-label={t('common.close')}>
+                          <FiX aria-hidden="true" />
+                        </button>
                       </div>
                       <div className="card-cover-section">
                         <div className="card-cover-section-title">{t('card.cover.size')}</div>
@@ -257,20 +261,20 @@ export const CardSidebar: React.FC<CardSidebarProps> = ({
           <div className="card-sidebar-section">
             <h4 className="card-sidebar-title">{t('card.sidebar.actions')}</h4>
             <button type="button" className="sidebar-btn" onClick={(e) => { e.preventDefault(); onCopyCard(); }}>
-              <span className="sidebar-btn-icon">📋</span>
+              <span className="sidebar-btn-icon"><FiCopy aria-hidden="true" /></span>
               {t('card.copy')}
             </button>
             {canArchive && (
               <button type="button" className="sidebar-btn" onClick={() => onUpdateCard({is_archived: !card.is_archived})}>
-                  <span className="sidebar-btn-icon">{card.is_archived ? '↩️' : '📦'}</span>
+                  <span className="sidebar-btn-icon"><FiArchive aria-hidden="true" /></span>
                   {card.is_archived ? t('card.unarchive') : t('card.archive')}
               </button>
             )}
             {canDelete && (
               <button type="button" className="sidebar-btn btn-danger" style={{color: 'var(--danger)'}} onClick={() => {
-                  if(window.confirm(t('confirm.deleteCard'))) onDeleteCard();
+                  if (confirmAction(t('confirm.deleteCard'))) onDeleteCard();
               }}>
-                <span className="sidebar-btn-icon">🗑️</span>
+                <span className="sidebar-btn-icon"><FiTrash2 aria-hidden="true" /></span>
                 {t('common.delete')}
               </button>
             )}

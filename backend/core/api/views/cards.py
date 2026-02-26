@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from django.db import transaction
 from django.utils.dateparse import parse_date, parse_datetime
+import logging
 
 # Додані імпорти для копіювання та перевірки прав
 from core.models import List, Card, CardMember, Checklist, ChecklistItem, CardLabel, Membership, Label
@@ -21,12 +22,17 @@ from core.services.permissions import (
     can_join_card,
 )
 
+logger = logging.getLogger(__name__)
+
 class ListViewSet(viewsets.ModelViewSet):
     serializer_class = ListSerializer
     permission_classes = [permissions.IsAuthenticated] 
 
     def get_queryset(self):
-        queryset = List.objects.all().prefetch_related('cards')
+        user = self.request.user
+        queryset = List.objects.filter(
+            Q(board__owner=user) | Q(board__members=user)
+        ).distinct().prefetch_related('cards')
         board_id = self.request.query_params.get('board') # Виправлено board_id на board для фільтрації, якщо треба
         if board_id:
             queryset = queryset.filter(board__id=board_id)
@@ -49,7 +55,64 @@ class ListViewSet(viewsets.ModelViewSet):
         prev_archived = previous.is_archived
         prev_order = previous.order
         ensure_board_admin(self.request.user, previous.board, 'Only admins can update lists.')
-        list_obj = serializer.save()
+        with transaction.atomic():
+            has_order_update = 'order' in serializer.validated_data and not previous.is_archived
+            requested_order = int(serializer.validated_data.get('order') or prev_order or 1) if has_order_update else None
+
+            if has_order_update:
+                list_obj = serializer.save()
+                active_lists = list(
+                    List.objects.select_for_update()
+                    .filter(board=list_obj.board, is_archived=False)
+                    .order_by('order', 'id')
+                )
+                active_ids = [item.id for item in active_lists]
+                active_snapshot_before = [f'{item.id}:{item.title}:{item.order}' for item in active_lists]
+                logger.warning(
+                    '[list-move][backend-start] board_id=%s user_id=%s list_id=%s list_title=%s prev_order=%s requested_order=%s active_before=%s',
+                    list_obj.board_id,
+                    self.request.user.id,
+                    list_obj.id,
+                    list_obj.title,
+                    prev_order,
+                    requested_order,
+                    active_snapshot_before,
+                )
+                if list_obj.id in active_ids:
+                    active_ids.remove(list_obj.id)
+                    target_index = max(0, min(len(active_ids), requested_order - 1))
+                    active_ids.insert(target_index, list_obj.id)
+                    order_by_id = {list_id: index for index, list_id in enumerate(active_ids, start=1)}
+                    changed = []
+                    for item in active_lists:
+                        next_order = order_by_id.get(item.id)
+                        if next_order is None:
+                            continue
+                        if item.order != next_order:
+                            item.order = next_order
+                            changed.append(item)
+                    if changed:
+                        List.objects.bulk_update(changed, ['order'])
+                    active_snapshot_after = [f'{item.id}:{item.title}:{order_by_id.get(item.id)}' for item in active_lists]
+                    logger.warning(
+                        '[list-move][backend-reordered] board_id=%s list_id=%s list_title=%s target_index=%s active_after=%s changed_count=%s',
+                        list_obj.board_id,
+                        list_obj.id,
+                        list_obj.title,
+                        target_index,
+                        active_snapshot_after,
+                        len(changed),
+                    )
+                list_obj.refresh_from_db()
+                logger.warning(
+                    '[list-move][backend-result] board_id=%s list_id=%s list_title=%s final_order=%s',
+                    list_obj.board_id,
+                    list_obj.id,
+                    list_obj.title,
+                    list_obj.order,
+                )
+            else:
+                list_obj = serializer.save()
 
         if 'is_archived' in serializer.validated_data and list_obj.is_archived != prev_archived:
             action = 'archive_list' if list_obj.is_archived else 'unarchive_list'
@@ -131,7 +194,10 @@ class CardViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Card.objects.all().select_related('list', 'list__board').prefetch_related(
+        user = self.request.user
+        queryset = Card.objects.filter(
+            Q(list__board__owner=user) | Q(list__board__members=user)
+        ).distinct().select_related('list', 'list__board').prefetch_related(
             'members', 'checklists__items', 'cardlabel_set__label'
         )
         list_id = self.request.query_params.get('list_id')

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { FiLock } from 'shared/ui/fiIcons';
 import { KanbanPreview } from '../components/KanbanPreview';
 import { useI18n } from '../context/I18nContext';
 import { useAppDispatch } from '../store/hooks';
@@ -61,7 +62,7 @@ export const ResetPasswordConfirmScreen: React.FC = () => {
     <div className="auth-page-split">
       <div className="auth-left">
         <div className="auth-header">
-          <h1>🔐 {status === 'success' ? t('resetConfirm.successTitle') : t('common.loading')}</h1>
+          <h1><FiLock aria-hidden="true" /> {status === 'success' ? t('resetConfirm.successTitle') : t('common.loading')}</h1>
           <p>
             {status === 'success'
               ? t('resetConfirm.successHint')

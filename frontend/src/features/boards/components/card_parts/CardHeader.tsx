@@ -1,7 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  FiArchive,
+  FiCheckCircle,
+  FiChevronDown,
+  FiCircle,
+  FiCopy,
+  FiImage,
+  FiLink2,
+  FiMoreHorizontal,
+  FiMove,
+  FiTrash2,
+  FiUserPlus,
+  FiX,
+} from 'shared/ui/fiIcons';
 import { Card, Board } from '../../../../types';
 import { useI18n } from '../../../../context/I18nContext';
+import { confirmAction } from '../../../../shared/utils/confirm';
 import { resolveMediaUrl } from '../../../../utils/mediaUrl';
 
 interface CardHeaderProps {
@@ -289,7 +304,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           closeHeaderMenus();
         }}
       >
-        <span className="card-menu-icon">🙋‍♂️</span>
+        <span className="card-menu-icon"><FiUserPlus aria-hidden="true" /></span>
         {isCardMember ? t('card.sidebar.leave') : t('card.sidebar.join')}
       </button>
       <button
@@ -301,19 +316,19 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
         }}
         disabled={!canMoveCard}
       >
-        <span className="card-menu-icon">➜</span>
+        <span className="card-menu-icon"><FiMove aria-hidden="true" /></span>
         {t('card.menu.move')}
       </button>
       <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyCard(); closeHeaderMenus(); }}>
-        <span className="card-menu-icon">📋</span>
+        <span className="card-menu-icon"><FiCopy aria-hidden="true" /></span>
         {t('card.menu.copy')}
       </button>
       <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onCopyLink(); closeHeaderMenus(); }}>
-        <span className="card-menu-icon">🔗</span>
+        <span className="card-menu-icon"><FiLink2 aria-hidden="true" /></span>
         {t('card.menu.share')}
       </button>
       <button type="button" className="card-menu-item" role="menuitem" onClick={() => { onArchiveToggle(); closeHeaderMenus(); }}>
-        <span className="card-menu-icon">📦</span>
+        <span className="card-menu-icon"><FiArchive aria-hidden="true" /></span>
         {t('card.menu.archive')}
       </button>
       <div className="card-menu-divider" />
@@ -322,13 +337,13 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
         className="card-menu-item danger"
         role="menuitem"
         onClick={() => {
-          if (window.confirm(t('confirm.deleteCard'))) {
+          if (confirmAction(t('confirm.deleteCard'))) {
             onDeleteCard();
             closeHeaderMenus();
           }
         }}
       >
-        <span className="card-menu-icon">🗑️</span>
+        <span className="card-menu-icon"><FiTrash2 aria-hidden="true" /></span>
         {t('card.menu.delete')}
       </button>
     </div>
@@ -353,7 +368,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
               title={t('card.cover.title')}
               aria-label={t('card.cover.title')}
             >
-              ◍
+              <FiImage aria-hidden="true" />
             </button>
           )}
           <div className="card-list-pill-wrapper">
@@ -371,7 +386,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
               }}
             >
               {listTitle}
-              <span className="card-list-pill-caret">▾</span>
+              <span className="card-list-pill-caret"><FiChevronDown aria-hidden="true" /></span>
             </button>
           </div>
         </div>
@@ -399,10 +414,12 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
               aria-label={t('card.menu')}
               title={t('card.menu')}
             >
-              •••
+              <FiMoreHorizontal aria-hidden="true" />
             </button>
           </div>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label={t('common.close')}>✕</button>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label={t('common.close')}>
+            <FiX aria-hidden="true" />
+          </button>
         </div>
       </div>
       {menuNode && (shouldPortal ? createPortal(menuNode, document.body) : menuNode)}
@@ -416,7 +433,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             onClick={() => canEdit && onUpdateCard({ is_completed: !card.is_completed })}
             disabled={!canEdit}
           >
-            {card.is_completed ? '✓' : '○'}
+            {card.is_completed ? <FiCheckCircle aria-hidden="true" /> : <FiCircle aria-hidden="true" />}
           </button>
           <input 
               className="card-title-input"

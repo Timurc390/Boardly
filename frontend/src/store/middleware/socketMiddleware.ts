@@ -1,15 +1,15 @@
-import { Middleware } from '@reduxjs/toolkit';
+import { type Middleware } from '@reduxjs/toolkit';
 import { applySocketUpdate, setSocketStatus } from '../slices/boardSlice';
 import { API_URL } from '../../api/client';
-import type { Dispatch } from 'redux';
+import { BOARD_REALTIME_BROADCAST_ACTIONS, type BoardRealtimeActionType } from '../realtime/boardRealtimeActions';
+import {
+  buildOutgoingRealtimePayload,
+  validateRealtimePayloadByAction,
+} from '../realtime/wsPayloadMapper';
+import { createWsConnectionManager } from '../realtime/wsConnectionManager';
+import { isRecord, toNumber } from '../realtime/wsValueUtils';
+import { wsLog } from '../realtime/wsLogger';
 
-let socket: WebSocket | null = null;
-let currentBoardId: number | null = null;
-let reconnectAttempts = 0;
-let reconnectTimer: number | null = null;
-let manualClose = false;
-
-type UnknownRecord = Record<string, unknown>;
 type SocketState = {
   auth: {
     token?: string | null;
@@ -19,56 +19,14 @@ type SocketState = {
     currentBoard?: { id?: number | null } | null;
   };
 };
-type StoreApi = {
-  dispatch: Dispatch;
-  getState: () => SocketState;
-};
 
-const ACTIONS_TO_BROADCAST = new Set([
-  'board/update/fulfilled',
-  'board/addList/fulfilled',
-  'board/copyList/fulfilled',
-  'board/updateList/fulfilled',
-  'board/moveList/fulfilled',
-  'board/deleteList/fulfilled',
-  'board/addCard/fulfilled',
-  'board/updateCard/fulfilled',
-  'board/deleteCard/fulfilled',
-  'board/moveCard/fulfilled',
-  'board/copyCard/fulfilled',
-  'board/joinCard/fulfilled',
-  'board/leaveCard/fulfilled',
-  'board/removeCardMember/fulfilled',
-  'board/createLabel/fulfilled',
-  'board/updateLabel/fulfilled',
-  'board/deleteLabel/fulfilled',
-  'board/addChecklistItem/fulfilled',
-  'board/updateChecklistItem/fulfilled',
-  'board/deleteChecklistItem/fulfilled',
-  'board/addChecklist/fulfilled',
-  'board/addComment/fulfilled',
-  'board/updateComment/fulfilled',
-  'board/deleteComment/fulfilled',
-  'board/addCardMember/fulfilled',
-  'board/addAttachment/fulfilled',
-  'board/deleteAttachment/fulfilled',
-  'board/removeMember/fulfilled',
-  'board/updateMemberRole/fulfilled'
-]);
+const WS_HEARTBEAT_ACTION = 'board/ws_heartbeat/fulfilled';
 
-const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
-
-const normalizeBase = (value: string) => value.replace(/\/+$/, '');
-const getReconnectDelay = () => Math.min(1000 * (reconnectAttempts + 1), 10000);
-
-const toNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
+type ReconnectMetrics = {
+  scheduled: number;
+  exhausted: number;
+  lastAttempt: number;
+  lastDelayMs: number;
 };
 
 const getActionType = (action: unknown): string | null => {
@@ -77,10 +35,11 @@ const getActionType = (action: unknown): string | null => {
 };
 
 const getMetaArg = (action: unknown): unknown => {
-  if (!isRecord(action)) return undefined;
-  if (!isRecord(action.meta)) return undefined;
+  if (!isRecord(action) || !isRecord(action.meta)) return undefined;
   return action.meta.arg;
 };
+
+const normalizeBase = (value: string) => value.replace(/\/+$/, '');
 
 const getWsBase = () => {
   const envWs = process.env.REACT_APP_WS_URL;
@@ -99,206 +58,269 @@ const getWsBase = () => {
   return `${protocol}//${host}`;
 };
 
-const buildWsUrl = (boardId: number, token: string) => {
-  const base = getWsBase();
-  return `${base}/ws/board/${boardId}/?token=${token}`;
+const buildWsUrl = (boardId: number, token: string) => `${getWsBase()}/ws/board/${boardId}/?token=${token}`;
+
+const toPositiveInt = (value: string | undefined, fallback: number) => {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 };
 
-const attachSocketHandlers = (storeApi: StoreApi) => {
-  const { dispatch, getState } = storeApi;
-  if (!socket) return;
+export const socketMiddleware: Middleware = (storeApi) => {
+  const getState = () => storeApi.getState() as SocketState;
+  const getToken = () => getState().auth.token || localStorage.getItem('authToken');
 
-  socket.onopen = () => {
-    console.log('[WS] Connection established!');
-    reconnectAttempts = 0;
-    dispatch(setSocketStatus(true));
+  const heartbeatIntervalMs = toPositiveInt(process.env.REACT_APP_WS_HEARTBEAT_MS, 15000);
+  const heartbeatTimeoutMs = toPositiveInt(process.env.REACT_APP_WS_HEARTBEAT_TIMEOUT_MS, 45000);
+  let heartbeatTimer: number | null = null;
+  let heartbeatTimeoutTimer: number | null = null;
+  let lastHeartbeatAckAt = 0;
+
+  const reconnectMetrics: ReconnectMetrics = {
+    scheduled: 0,
+    exhausted: 0,
+    lastAttempt: 0,
+    lastDelayMs: 0,
   };
 
-  socket.onmessage = (event) => {
-    try {
-      const data: unknown = JSON.parse(event.data);
-      if (!isRecord(data)) return;
-      console.log('[WS] Incoming Broadcast:', data);
-
-      const myUserId = getState().auth.user?.id ?? null;
-      const senderId = toNumber(data.sender_id);
-      if (senderId && myUserId && senderId === myUserId) {
-        return;
-      }
-
-      if (data.type === 'board_updated' && typeof data.action_type === 'string') {
-        dispatch(applySocketUpdate({
-          actionType: data.action_type,
-          payload: data.payload,
-        }));
-      }
-    } catch (err) {
-      console.error('[WS] Error parsing message:', err);
+  const clearHeartbeatTimers = () => {
+    if (heartbeatTimer !== null) {
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    if (heartbeatTimeoutTimer !== null) {
+      window.clearTimeout(heartbeatTimeoutTimer);
+      heartbeatTimeoutTimer = null;
     }
   };
 
-  socket.onclose = () => {
-    console.log('[WS] Connection closed.');
-    dispatch(setSocketStatus(false));
-
-    if (!manualClose && currentBoardId) {
-      reconnectAttempts += 1;
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      const delay = getReconnectDelay();
-      reconnectTimer = window.setTimeout(() => {
-        const token = getState().auth.token || localStorage.getItem('authToken');
-        if (!token || !currentBoardId) return;
-        console.log(`[WS] Reconnecting to board ${currentBoardId}...`);
-        socket = new WebSocket(buildWsUrl(currentBoardId, token));
-        attachSocketHandlers(storeApi);
-      }, delay);
+  const scheduleHeartbeatTimeoutCheck = () => {
+    if (heartbeatTimeoutTimer !== null) {
+      window.clearTimeout(heartbeatTimeoutTimer);
     }
+
+    heartbeatTimeoutTimer = window.setTimeout(() => {
+      const now = Date.now();
+      if (!lastHeartbeatAckAt || now - lastHeartbeatAckAt > heartbeatTimeoutMs) {
+        wsLog('warn', {
+          event: 'heartbeat_timeout',
+          boardId: getState().board.currentBoard?.id ?? null,
+          details: {
+            timeoutMs: heartbeatTimeoutMs,
+            lastAckAt: lastHeartbeatAckAt || null,
+          },
+        });
+      }
+    }, heartbeatTimeoutMs + 500);
   };
-};
 
-export const socketMiddleware: Middleware = (storeApi) => (next) => (action) => {
-  const { getState } = storeApi;
-  const actionType = getActionType(action);
+  const startHeartbeat = () => {
+    clearHeartbeatTimers();
+    lastHeartbeatAckAt = Date.now();
 
-  if (actionType === 'board/fetchById/pending') {
-    const pendingArg = getMetaArg(action);
-    const boardId = toNumber(pendingArg);
-    const token = getState().auth.token || localStorage.getItem('authToken');
+    heartbeatTimer = window.setInterval(() => {
+      if (!manager.isOpen()) return;
+      const state = getState();
+      const boardId = state.board?.currentBoard?.id;
+      if (!boardId) return;
 
-    if (!token || !boardId) {
-      if (!token) console.warn('[WS] No token found, skipping connection');
-      return next(action);
-    }
+      manager.send(
+        JSON.stringify({
+          type: 'board_updated',
+          action_type: WS_HEARTBEAT_ACTION,
+          payload: { ts: Date.now() },
+          board_id: boardId,
+          sender_id: state.auth?.user?.id,
+        })
+      );
 
-    const alreadyConnected =
-      currentBoardId === boardId &&
-      socket &&
-      (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING);
+      scheduleHeartbeatTimeoutCheck();
+    }, heartbeatIntervalMs);
+  };
 
-    if (!alreadyConnected) {
-      if (socket) {
-        manualClose = true;
-        socket.close();
+  const manager = createWsConnectionManager({
+    buildWsUrl,
+    getToken,
+    onStatusChange: (isConnected) => {
+      storeApi.dispatch(setSocketStatus(isConnected));
+      if (isConnected) {
+        startHeartbeat();
+      } else {
+        clearHeartbeatTimers();
       }
-      currentBoardId = boardId;
-      manualClose = false;
+    },
+    onError: (error) => {
+      wsLog('error', {
+        event: 'socket_error',
+        boardId: getState().board.currentBoard?.id ?? null,
+        details: error,
+      });
+    },
+    onLifecycleEvent: (event) => {
+      switch (event.type) {
+        case 'connect_start':
+          wsLog('info', { event: 'connect_start', boardId: event.boardId });
+          break;
+        case 'open':
+          wsLog('info', {
+            event: 'open',
+            boardId: event.boardId,
+            attempt: event.reconnectAttempts,
+          });
+          break;
+        case 'error':
+          wsLog('error', {
+            event: 'lifecycle_error',
+            boardId: event.boardId,
+            details: event.details,
+          });
+          break;
+        case 'close':
+          wsLog('warn', {
+            event: 'close',
+            boardId: event.boardId,
+            code: event.code,
+            reason: event.reason || 'no_reason',
+            manual: event.manual,
+            details: { wasClean: event.wasClean },
+          });
+          break;
+        case 'reconnect_scheduled':
+          reconnectMetrics.scheduled += 1;
+          reconnectMetrics.lastAttempt = event.attempt;
+          reconnectMetrics.lastDelayMs = event.delayMs;
+          wsLog('info', {
+            event: 'reconnect_scheduled',
+            boardId: event.boardId,
+            attempt: event.attempt,
+            delayMs: event.delayMs,
+            details: reconnectMetrics,
+          });
+          break;
+        case 'reconnect_attempt':
+          wsLog('info', {
+            event: 'reconnect_attempt',
+            boardId: event.boardId,
+            attempt: event.attempt,
+            details: reconnectMetrics,
+          });
+          break;
+        case 'reconnect_exhausted':
+          reconnectMetrics.exhausted += 1;
+          wsLog('error', {
+            event: 'reconnect_exhausted',
+            boardId: event.boardId,
+            attempt: event.attempt,
+            details: reconnectMetrics,
+          });
+          break;
+        case 'manual_close':
+          wsLog('debug', {
+            event: 'manual_close',
+            boardId: event.boardId,
+          });
+          break;
+        default:
+          break;
+      }
+    },
+    onMessage: (rawData) => {
+      try {
+        const data: unknown = JSON.parse(rawData);
+        if (!isRecord(data)) return;
 
-      const wsUrl = buildWsUrl(boardId, token);
-      console.log(`[WS] Connecting to board ${boardId}...`);
-      socket = new WebSocket(wsUrl);
-      attachSocketHandlers(storeApi as StoreApi);
-    }
-  }
+        const myUserId = getState().auth.user?.id ?? null;
+        const senderId = toNumber(data.sender_id);
+        if (senderId && myUserId && senderId === myUserId) {
+          if (data.action_type === WS_HEARTBEAT_ACTION) {
+            lastHeartbeatAckAt = Date.now();
+          }
+          return;
+        }
 
-  const result = next(action);
+        if (data.type === 'board_updated' && typeof data.action_type === 'string') {
+          if (data.action_type === WS_HEARTBEAT_ACTION) {
+            lastHeartbeatAckAt = Date.now();
+            return;
+          }
 
-  if (actionType && ACTIONS_TO_BROADCAST.has(actionType) && socket?.readyState === WebSocket.OPEN) {
-    console.log(`[WS] Sending action to others: ${actionType}`);
-    const state = getState();
-    const rawAction = isRecord(action) ? action : {};
-    const metaArg = getMetaArg(action);
-    let payload: unknown = rawAction.payload;
+          if (!validateRealtimePayloadByAction(data.action_type, data.payload)) {
+            wsLog('warn', {
+              event: 'incoming_payload_invalid',
+              boardId: toNumber(data.board_id),
+              reason: data.action_type,
+              details: data.payload,
+            });
+            return;
+          }
 
-    if (actionType === 'board/moveCard/fulfilled' && isRecord(metaArg)) {
-      const order = toNumber(metaArg.order);
-      const listId = toNumber(metaArg.listId);
-      if (order !== null && listId !== null) {
-        const destIndex = Math.max(0, order - 1);
-        payload = {
-          card: rawAction.payload,
-          ws_meta: {
-            destListId: listId,
-            destIndex,
-          },
-        };
+          storeApi.dispatch(
+            applySocketUpdate({
+              actionType: data.action_type as BoardRealtimeActionType,
+              payload: data.payload,
+            })
+          );
+        }
+      } catch (err) {
+        wsLog('error', {
+          event: 'message_parse_error',
+          boardId: getState().board.currentBoard?.id ?? null,
+          details: err,
+        });
+      }
+    },
+    maxReconnectAttempts: toPositiveInt(process.env.REACT_APP_WS_MAX_RECONNECT_ATTEMPTS, 20),
+    baseReconnectDelayMs: toPositiveInt(process.env.REACT_APP_WS_BASE_RECONNECT_MS, 1000),
+    maxReconnectDelayMs: toPositiveInt(process.env.REACT_APP_WS_MAX_RECONNECT_MS, 10000),
+    reconnectJitterMs: toPositiveInt(process.env.REACT_APP_WS_RECONNECT_JITTER_MS, 250),
+  });
+
+  return (next) => (action) => {
+    const actionType = getActionType(action);
+
+    if (actionType === 'board/fetchById/pending') {
+      const boardId = toNumber(getMetaArg(action));
+      const token = getToken();
+
+      if (token && boardId) {
+        manager.connect(boardId, token);
       }
     }
 
-    if (
-      (actionType === 'board/updateList/fulfilled' || actionType === 'board/moveList/fulfilled') &&
-      isRecord(metaArg)
-    ) {
-      const order = toNumber(metaArg.order);
-      if (order !== null) {
-        const destIndex = Math.max(0, order - 1);
-        payload = {
-          list: rawAction.payload,
-          ws_meta: {
-            destIndex,
-          },
-        };
+    const result = next(action);
+
+    if (actionType && BOARD_REALTIME_BROADCAST_ACTIONS.has(actionType) && manager.isOpen()) {
+      const state = getState();
+      const rawAction = isRecord(action) ? action : {};
+      const payload = buildOutgoingRealtimePayload(actionType, rawAction.payload, getMetaArg(action));
+
+      if (!validateRealtimePayloadByAction(actionType, payload)) {
+        wsLog('warn', {
+          event: 'outgoing_payload_invalid',
+          boardId: state.board?.currentBoard?.id ?? null,
+          reason: actionType,
+          details: payload,
+        });
+        return result;
       }
+
+      manager.send(
+        JSON.stringify({
+          type: 'board_updated',
+          action_type: actionType,
+          payload,
+          board_id: state.board?.currentBoard?.id,
+          sender_id: state.auth?.user?.id,
+        })
+      );
     }
 
-    if (actionType === 'board/addChecklistItem/fulfilled' && isRecord(metaArg)) {
-      const checklistId = toNumber(metaArg.checklistId);
-      if (checklistId !== null) {
-        payload = {
-          item: rawAction.payload,
-          ws_meta: {
-            checklistId,
-          },
-        };
-      }
+    if (actionType === 'auth/logout/fulfilled' || actionType === 'board/clearCurrentBoard') {
+      clearHeartbeatTimers();
+      manager.close();
     }
 
-    if (actionType === 'board/deleteChecklistItem/fulfilled' && isRecord(metaArg)) {
-      const checklistId = toNumber(metaArg.checklistId);
-      if (checklistId !== null) {
-        payload = {
-          itemId: rawAction.payload,
-          ws_meta: {
-            checklistId,
-          },
-        };
-      }
-    }
-
-    if (actionType === 'board/addComment/fulfilled' && isRecord(metaArg)) {
-      const cardId = toNumber(metaArg.cardId);
-      if (cardId !== null) {
-        payload = {
-          comment: rawAction.payload,
-          ws_meta: {
-            cardId,
-          },
-        };
-      }
-    }
-
-    if (actionType === 'board/addChecklist/fulfilled' && isRecord(metaArg)) {
-      const cardId = toNumber(metaArg.cardId);
-      if (cardId !== null) {
-        payload = {
-          checklist: rawAction.payload,
-          ws_meta: {
-            cardId,
-          },
-        };
-      }
-    }
-
-    socket.send(JSON.stringify({
-      type: 'board_updated',
-      action_type: actionType,
-      payload,
-      board_id: state.board?.currentBoard?.id,
-      sender_id: state.auth?.user?.id
-    }));
-  }
-
-  if (actionType === 'auth/logout/fulfilled' || actionType === 'board/clearCurrentBoard') {
-    if (socket) {
-      manualClose = true;
-      socket.close();
-      socket = null;
-    }
-    currentBoardId = null;
-    if (reconnectTimer) {
-      window.clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  }
-
-  return result;
+    return result;
+  };
 };

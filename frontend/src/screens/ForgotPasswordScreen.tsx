@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { FiArrowLeft, FiLock } from 'shared/ui/fiIcons';
 //import { useAuth } from '../context/AuthContext.tsx.bak';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -38,7 +39,7 @@ export const ForgotPasswordScreen: React.FC = () => {
     <div className="auth-page-split">
       <div className="auth-left">
         <div className="auth-header">
-           <h1>🔐 {t('passwordReset.title')}</h1>
+           <h1><FiLock aria-hidden="true" /> {t('passwordReset.title')}</h1>
            <p>{t('passwordReset.description')}</p>
         </div>
 
@@ -82,7 +83,7 @@ export const ForgotPasswordScreen: React.FC = () => {
 
                 <div className="auth-footer">
                     <Link to="/auth" className="btn-link">
-                        ← {t('passwordReset.backToLogin')}
+                        <FiArrowLeft aria-hidden="true" /> {t('passwordReset.backToLogin')}
                     </Link>
                 </div>
             </>

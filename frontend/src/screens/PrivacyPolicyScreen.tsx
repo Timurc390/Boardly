@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { FiArrowLeft } from 'shared/ui/fiIcons';
 import { useI18n } from '../context/I18nContext';
 import {
   getPrivacyPolicyContent,
@@ -35,7 +36,7 @@ export const PrivacyPolicyScreen: React.FC = () => {
       <main className="privacy-policy-main">
         <section className="privacy-policy-hero pp-reveal" style={{ ['--pp-delay' as any]: '90ms' }}>
           <button type="button" className="privacy-policy-back" onClick={() => navigate(-1)}>
-            <span aria-hidden="true">←</span>
+            <span aria-hidden="true"><FiArrowLeft /></span>
             <span>{t('community.back')}</span>
           </button>
           <h1>{t('privacy.footer.policy')}</h1>

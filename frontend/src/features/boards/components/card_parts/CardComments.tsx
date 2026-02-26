@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FiMessageCircle, FiX } from 'shared/ui/fiIcons';
 import { Card, User, Comment } from '../../../../types';
 import { useI18n } from '../../../../context/I18nContext';
 import { resolveMediaUrl } from '../../../../utils/mediaUrl';
@@ -156,7 +157,7 @@ export const CardComments: React.FC<CardCommentsProps> = ({
     <div className="card-section card-comments-panel" ref={rootRef}>
       <div className="card-comments-header">
         <div className="card-comments-title">
-          <span className="card-comments-icon" aria-hidden="true">💬</span>
+          <span className="card-comments-icon" aria-hidden="true"><FiMessageCircle /></span>
           {t('comments.title')}
         </div>
         {onClose && (
@@ -166,7 +167,7 @@ export const CardComments: React.FC<CardCommentsProps> = ({
             onClick={onClose}
             aria-label={t('common.close')}
           >
-            ✕
+            <FiX aria-hidden="true" />
           </button>
         )}
       </div>

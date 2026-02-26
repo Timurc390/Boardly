@@ -188,7 +188,10 @@ class LabelViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Label.objects.all()
+        user = self.request.user
+        queryset = Label.objects.filter(
+            Q(board__owner=user) | Q(board__members=user)
+        ).distinct()
         board_id = self.request.query_params.get('board_id')
         if board_id:
             queryset = queryset.filter(board__id=board_id)
@@ -232,7 +235,10 @@ class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Activity.objects.all().select_related('user', 'board')
+        user = self.request.user
+        queryset = Activity.objects.filter(
+            Q(board__owner=user) | Q(board__members=user)
+        ).distinct().select_related('user', 'board')
         board_id = self.request.query_params.get('board_id')
         user_id = self.request.query_params.get('user_id')
         if board_id:

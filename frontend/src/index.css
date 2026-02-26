@@ -8632,12 +8632,58 @@ ul { list-style: none; }
   padding: 0;
   gap: 10px;
   border-radius: 6px;
+  display: flex;
+  align-items: center;
 }
 .card-members-popover-item:hover {
   background: rgba(255,255,255,0.08);
 }
 .card-members-popover-item.active {
   background: rgba(185,167,255,0.14);
+}
+.card-popover-member-status {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+.card-popover-member-status.assigned {
+  color: #7fd6a3;
+}
+.card-popover-member-status.unassigned {
+  color: rgba(255,255,255,0.62);
+}
+.card-member-action-btn {
+  margin-left: auto;
+  min-width: 78px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.36);
+  background: transparent;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
+}
+.card-member-action-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.6);
+}
+.card-member-action-btn.add {
+  border-color: rgba(127,214,163,0.8);
+  color: #9ff0be;
+}
+.card-member-action-btn.remove {
+  border-color: rgba(255,122,122,0.8);
+  color: #ff9a9a;
+}
+.card-member-action-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.card-member-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .card-members-popover-avatar {
   width: 33px;
@@ -8696,6 +8742,28 @@ ul { list-style: none; }
 }
 :root[data-theme='light'] .card-members-popover-item.active {
   background: rgba(122,73,184,0.14);
+}
+:root[data-theme='light'] .card-popover-member-status.assigned {
+  color: #0f7b45;
+}
+:root[data-theme='light'] .card-popover-member-status.unassigned {
+  color: rgba(17,24,39,0.6);
+}
+:root[data-theme='light'] .card-member-action-btn {
+  border-color: rgba(17,24,39,0.28);
+  color: #111827;
+}
+:root[data-theme='light'] .card-member-action-btn:hover:not(:disabled) {
+  background: rgba(17,24,39,0.06);
+  border-color: rgba(17,24,39,0.4);
+}
+:root[data-theme='light'] .card-member-action-btn.add {
+  border-color: rgba(15,123,69,0.6);
+  color: #0f7b45;
+}
+:root[data-theme='light'] .card-member-action-btn.remove {
+  border-color: rgba(176,32,32,0.55);
+  color: #b02020;
 }
 :root[data-theme='light'] .card-members-popover-avatar {
   background: #d5d9e3;

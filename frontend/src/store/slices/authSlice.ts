@@ -1,6 +1,9 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
+import { isAxiosError } from 'axios';
 import client from '../../api/client';
-import { User, ProfileData } from '../../types';
+import { type ProfileData, type User } from '../../types';
+import { extractAuthErrorMessage, type AuthErrorPayload } from '../../shared/utils/authError';
+import { getApiErrorPayload } from '../../shared/utils/apiError';
 
 interface AuthState {
   user: User | null;
@@ -8,8 +11,23 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
-  successMessage: string | null; // Для повідомлень про успіх (наприклад, "Пароль змінено")
+  successMessage: string | null;
 }
+
+type AuthRejectValue = AuthErrorPayload | string;
+
+type LoginPayload = {
+  username: string;
+  password: string;
+};
+
+type RegisterPayload = {
+  username: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+};
 
 const initialState: AuthState = {
   user: null,
@@ -20,78 +38,73 @@ const initialState: AuthState = {
   successMessage: null,
 };
 
-const toErrorMessage = (payload: any) => {
-  if (!payload) return 'Помилка авторизації.';
-  if (typeof payload === 'string') return payload;
-  if (payload.detail) return payload.detail;
-  if (Array.isArray(payload.non_field_errors)) return payload.non_field_errors[0];
-  const firstKey = Object.keys(payload)[0];
-  if (firstKey && Array.isArray(payload[firstKey])) return payload[firstKey][0];
-  return 'Помилка авторизації.';
+const parseApiErrorPayload = (error: unknown, fallback: string): AuthRejectValue => {
+  return getApiErrorPayload(error, fallback) as AuthRejectValue;
 };
 
-// --- Async Thunks ---
+const toErrorMessage = (payload: unknown) => extractAuthErrorMessage(payload, 'Помилка авторизації.');
 
-export const fetchMe = createAsyncThunk(
+export const fetchMe = createAsyncThunk<User, void, { rejectValue: AuthRejectValue }>(
   'auth/fetchMe',
   async (_, { rejectWithValue }) => {
     try {
-      const res = await client.get('/users/me/');
+      const res = await client.get<User>('/users/me/');
       return res.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Failed to fetch user');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Failed to fetch user'));
     }
   }
 );
 
-export const loginUser = createAsyncThunk(
+export const loginUser = createAsyncThunk<string, LoginPayload, { rejectValue: AuthRejectValue }>(
   'auth/login',
-  async (data: any, { dispatch, rejectWithValue }) => {
+  async (data, { dispatch, rejectWithValue }) => {
     try {
-      const res = await client.post('/auth/token/login/', data);
+      const res = await client.post<{ auth_token: string }>('/auth/token/login/', data);
       const token = res.data.auth_token;
       localStorage.setItem('authToken', token);
       dispatch(fetchMe());
       return token;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Login failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Login failed'));
     }
   }
 );
 
-export const googleLoginUser = createAsyncThunk(
+export const googleLoginUser = createAsyncThunk<
+  string,
+  { code?: string; access_token?: string },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/googleLogin',
-  async (payload: { code?: string; access_token?: string }, { dispatch, rejectWithValue }) => {
+  async (payload, { dispatch, rejectWithValue }) => {
     try {
-      const res = await client.post('/auth/google/', payload);
-      const token = res.data.key || res.data.auth_token;
+      const res = await client.post<{ key?: string; auth_token?: string }>('/auth/google/', payload);
+      const token = res.data.key || res.data.auth_token || '';
       localStorage.setItem('authToken', token);
       dispatch(fetchMe());
       return token;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Google login failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Google login failed'));
     }
   }
 );
 
-export const logoutUser = createAsyncThunk(
-  'auth/logout',
-  async (_, { dispatch }) => {
-    try {
-      await client.post('/auth/token/logout/');
-    } catch (e) {
-      // Ignore logout errors
-    }
-    localStorage.removeItem('authToken');
-    return null;
+export const logoutUser = createAsyncThunk<null>('auth/logout', async () => {
+  try {
+    await client.post('/auth/token/logout/');
+  } catch {
+    // Ignore logout errors.
   }
-);
 
-export const registerUser = createAsyncThunk(
+  localStorage.removeItem('authToken');
+  return null;
+});
+
+export const registerUser = createAsyncThunk<boolean, RegisterPayload, { rejectValue: AuthRejectValue }>(
   'auth/register',
-  async (data: any, { rejectWithValue }) => {
+  async (data, { rejectWithValue }) => {
     try {
-      // Djoser user_create serializer does not accept profile-only fields (e.g. organization).
       await client.post('/auth/users/', {
         username: (data.username || '').trim(),
         password: data.password || '',
@@ -99,62 +112,67 @@ export const registerUser = createAsyncThunk(
         last_name: data.last_name || '',
         email: (data.email || `${data.username}@boardly.local`).trim(),
       });
-      // Повертаємо true, але не логінимось (чекаємо активації)
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Registration failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Registration failed'));
     }
   }
 );
 
-// --- Profile Management ---
-
-export const updateUserProfile = createAsyncThunk(
+export const updateUserProfile = createAsyncThunk<
+  User,
+  Partial<User> & { profile?: Partial<ProfileData> },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/updateProfile',
-  async (data: Partial<User> & { profile?: Partial<ProfileData> }, { dispatch, rejectWithValue }) => {
+  async (data, { dispatch, rejectWithValue }) => {
     try {
-      const res = await client.patch('/users/me/', data);
-      dispatch(fetchMe()); // Оновлюємо дані в стейті
+      const res = await client.patch<User>('/users/me/', data);
+      dispatch(fetchMe());
       return res.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Update failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Update failed'));
     }
   }
 );
 
-export const uploadUserAvatar = createAsyncThunk(
+export const uploadUserAvatar = createAsyncThunk<unknown, File, { rejectValue: AuthRejectValue }>(
   'auth/uploadAvatar',
-  async (file: File, { dispatch, rejectWithValue }) => {
+  async (file, { dispatch, rejectWithValue }) => {
     try {
       const formData = new FormData();
       formData.append('avatar', file);
       const res = await client.post('/users/me/avatar/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       dispatch(fetchMe());
       return res.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Upload failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Upload failed'));
     }
   }
 );
 
-export const removeUserAvatar = createAsyncThunk(
+export const removeUserAvatar = createAsyncThunk<unknown, void, { rejectValue: AuthRejectValue }>(
   'auth/removeAvatar',
   async (_, { dispatch, rejectWithValue }) => {
     try {
       const res = await client.delete('/users/me/avatar/');
       dispatch(fetchMe());
       return res.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Delete failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Delete failed'));
     }
   }
 );
 
-export const changeUserPassword = createAsyncThunk(
+export const changeUserPassword = createAsyncThunk<
+  boolean,
+  { current_password: string; new_password: string; re_new_password?: string },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/changePassword',
-  async (data: { current_password: string; new_password: string; re_new_password?: string }, { rejectWithValue }) => {
+  async (data, { rejectWithValue }) => {
     try {
       try {
         await client.post('/users/me/password/', {
@@ -162,107 +180,121 @@ export const changeUserPassword = createAsyncThunk(
           new_password: data.new_password,
           re_new_password: data.re_new_password ?? data.new_password,
         });
-      } catch (firstErr: any) {
-        const status = firstErr?.response?.status;
+      } catch (firstError: unknown) {
+        const status = isAxiosError(firstError) ? firstError.response?.status : undefined;
         if (status !== 404) {
-          throw firstErr;
+          throw firstError;
         }
 
-        // Backward compatibility with Djoser endpoint.
         try {
           await client.post('/auth/users/set_password/', {
             current_password: data.current_password,
             new_password: data.new_password,
             re_new_password: data.re_new_password ?? data.new_password,
           });
-        } catch (djoserErr: any) {
-          const payload = djoserErr?.response?.data;
-          const hasReNewPasswordError =
-            payload && typeof payload === 'object' && 're_new_password' in payload;
+        } catch (djoserError: unknown) {
+          const payload = isAxiosError(djoserError)
+            ? (djoserError.response?.data as Record<string, unknown> | undefined)
+            : undefined;
+
+          const hasReNewPasswordError = Boolean(payload && typeof payload === 'object' && 're_new_password' in payload);
           if (!hasReNewPasswordError) {
-            throw djoserErr;
+            throw djoserError;
           }
+
           await client.post('/auth/users/set_password/', {
             current_password: data.current_password,
             new_password: data.new_password,
           });
         }
       }
+
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Password change failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Password change failed'));
     }
   }
 );
 
-export const verifyCurrentPassword = createAsyncThunk(
+export const verifyCurrentPassword = createAsyncThunk<
+  boolean,
+  string,
+  { rejectValue: AuthRejectValue }
+>(
   'auth/verifyCurrentPassword',
-  async (current_password: string, { rejectWithValue }) => {
+  async (current_password, { rejectWithValue }) => {
     try {
       await client.post('/users/me/password/check-current/', { current_password });
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Current password verification failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Current password verification failed'));
     }
   }
 );
 
-export const sendEmailVerification = createAsyncThunk(
+export const sendEmailVerification = createAsyncThunk<
+  boolean,
+  string,
+  { rejectValue: AuthRejectValue }
+>(
   'auth/sendEmailVerification',
-  async (email: string, { rejectWithValue }) => {
+  async (email, { rejectWithValue }) => {
     try {
       await client.post('/auth/users/resend_activation/', { email });
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Verification email failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Verification email failed'));
     }
   }
 );
 
-export const deleteUserAccount = createAsyncThunk(
+export const deleteUserAccount = createAsyncThunk<boolean, void, { rejectValue: AuthRejectValue }>(
   'auth/deleteAccount',
   async (_, { rejectWithValue }) => {
     try {
       await client.delete('/users/me/');
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Delete account failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Delete account failed'));
     }
   }
 );
 
-// --- Account Management ---
-
-export const activateUserAccount = createAsyncThunk(
+export const activateUserAccount = createAsyncThunk<
+  boolean,
+  { uid: string; token: string },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/activate',
-  async ({ uid, token }: { uid: string; token: string }, { rejectWithValue }) => {
+  async ({ uid, token }, { rejectWithValue }) => {
     try {
       await client.post('/auth/users/activation/', { uid, token });
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Activation failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Activation failed'));
     }
   }
 );
 
-export const resetUserPassword = createAsyncThunk(
+export const resetUserPassword = createAsyncThunk<boolean, string, { rejectValue: AuthRejectValue }>(
   'auth/resetPassword',
-  async (email: string, { rejectWithValue }) => {
+  async (email, { rejectWithValue }) => {
     try {
       await client.post('/auth/users/reset_password/', { email });
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Reset password request failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Reset password request failed'));
     }
   }
 );
 
-export const requestUserPasswordChange = createAsyncThunk(
+export const requestUserPasswordChange = createAsyncThunk<
+  boolean,
+  { current_password?: string; new_password: string; re_new_password?: string },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/requestUserPasswordChange',
-  async (
-    data: { current_password?: string; new_password: string; re_new_password?: string },
-    { rejectWithValue }
-  ) => {
+  async (data, { rejectWithValue }) => {
     try {
       await client.post('/users/me/password/request-change/', {
         current_password: data.current_password ?? '',
@@ -270,20 +302,24 @@ export const requestUserPasswordChange = createAsyncThunk(
         re_new_password: data.re_new_password ?? data.new_password,
       });
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Password change request failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Password change request failed'));
     }
   }
 );
 
-export const confirmUserPasswordReset = createAsyncThunk(
+export const confirmUserPasswordReset = createAsyncThunk<
+  boolean,
+  { uid?: string; token?: string },
+  { rejectValue: AuthRejectValue }
+>(
   'auth/resetPasswordConfirm',
-  async (data: { uid?: string; token?: string }, { rejectWithValue }) => {
+  async (data, { rejectWithValue }) => {
     try {
       await client.post('/users/password/confirm-change/', data);
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data || 'Password reset failed');
+    } catch (error: unknown) {
+      return rejectWithValue(parseApiErrorPayload(error, 'Password reset failed'));
     }
   }
 );
@@ -293,18 +329,17 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setToken(state, action: PayloadAction<string>) {
-        state.token = action.payload;
-        state.isAuthenticated = true;
-        localStorage.setItem('authToken', action.payload);
+      state.token = action.payload;
+      state.isAuthenticated = true;
+      localStorage.setItem('authToken', action.payload);
     },
     clearError(state) {
-        state.error = null;
-        state.successMessage = null;
-    }
+      state.error = null;
+      state.successMessage = null;
+    },
   },
   extraReducers: (builder) => {
     builder
-      // Fetch Me
       .addCase(fetchMe.pending, (state) => {
         state.loading = true;
       })
@@ -320,7 +355,6 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         localStorage.removeItem('authToken');
       })
-      // Login
       .addCase(loginUser.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -334,7 +368,6 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = toErrorMessage(action.payload);
       })
-      // Google Login
       .addCase(googleLoginUser.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -348,13 +381,11 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = toErrorMessage(action.payload);
       })
-      // Logout - MOVED UP before addMatcher
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
       })
-      // Profile Updates - MOVED UP before addMatcher
       .addCase(updateUserProfile.fulfilled, (state) => {
         state.loading = false;
         state.successMessage = 'Профіль оновлено';
@@ -362,11 +393,6 @@ const authSlice = createSlice({
       .addCase(uploadUserAvatar.fulfilled, (state) => {
         state.successMessage = 'Аватар оновлено';
       });
-      // Matchers must be LAST
-      // .addMatcher(...) logic was removed or needs to be re-added carefully if needed. 
-      // In the previous code, matchers were duplicating logic for login/googleLogin which are already handled above.
-      // If you want generic matchers, they must be at the end.
-      // Based on the specific error, moving `addCase` up fixes the chain type issue.
   },
 });
 
