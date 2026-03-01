@@ -3,10 +3,12 @@ import { FiArrowRight, FiMessageCircle } from 'shared/ui/fiIcons';
 import { type Board, type Card, type User } from '../../../types';
 import { CardHeader } from './card_parts/CardHeader';
 import { CardDescription } from './card_parts/CardDescription';
+import { CardScheduleSettings } from './card_parts/CardScheduleSettings';
 import { CardChecklists } from './card_parts/CardChecklists';
 import { CardComments } from './card_parts/CardComments';
 import { CardQuickActions } from './card_parts/CardQuickActions';
 import { CardModalPopovers } from './card_parts/CardModalPopovers';
+import { coverColorOptions, labelColorOptions } from './card_parts/cardOptions';
 import { useAppSelector } from '../../../store/hooks';
 import { useI18n } from '../../../context/I18nContext';
 import { useCardModalAttachmentFlow } from '../hooks/useCardModalAttachmentFlow';
@@ -45,32 +47,6 @@ interface CardModalProps {
   onAddAttachment: (file: File) => Promise<void> | void;
   onDeleteAttachment: (attachmentId: number) => void;
 }
-
-const labelColorOptions = [
-  '#61bd4f',
-  '#f2d600',
-  '#ff9f1a',
-  '#eb5a46',
-  '#c377e0',
-  '#0079bf',
-  '#00c2e0',
-  '#51e898',
-  '#ff78cb',
-  '#344563',
-];
-
-const coverColorOptions = [
-  '#4CAF50',
-  '#FBC02D',
-  '#E53935',
-  '#1E88E5',
-  '#9E9E9E',
-  '#F5F5F5',
-  '#FB8C00',
-  '#8E24AA',
-  '#00897B',
-  '#8D6E63',
-];
 
 export const CardModal: React.FC<CardModalProps> = ({ 
   card, board, isOpen, onClose, 
@@ -335,6 +311,7 @@ export const CardModal: React.FC<CardModalProps> = ({
               canEdit={canEditCard} 
               onUpdateCard={onUpdateCard} 
             />
+            <CardScheduleSettings card={card} canEdit={canEditCard} onUpdateCard={onUpdateCard} />
 
             <div ref={checklistsSectionRef}>
               <CardChecklists 
