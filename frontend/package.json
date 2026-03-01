@@ -30,7 +30,7 @@
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.58.2",
     "browserstack-node-sdk": "^1.49.2"
   },
   "scripts": {
