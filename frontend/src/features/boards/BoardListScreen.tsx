@@ -12,6 +12,8 @@ import { createBoardAction, fetchBoardsAction } from '../../store/slices/boardSl
 import { useDialogA11y } from '../../shared/hooks/useDialogA11y';
 import { validateImageFile } from '../../shared/utils/fileValidation';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { getBoardTemplates } from './api';
+import { type BoardTemplate } from '../../types';
 
 const BOARD_LIST_BACKGROUND_KEY = 'boardly.boards.background';
 const DEFAULT_BOARDS_BACKGROUND = '/board-backgrounds/board-default.jpg';
@@ -27,6 +29,9 @@ export const BoardListScreen: React.FC = () => {
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [templates, setTemplates] = useState<BoardTemplate[]>([]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('blank');
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isBackgroundModalOpen, setIsBackgroundModalOpen] = useState(false);
@@ -53,6 +58,34 @@ export const BoardListScreen: React.FC = () => {
   useEffect(() => {
     dispatch(fetchBoardsAction());
   }, [dispatch]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadTemplates = async () => {
+      setTemplatesLoading(true);
+      try {
+        const items = await getBoardTemplates();
+        if (!mounted) return;
+        setTemplates(items);
+        setSelectedTemplateKey((prev) => {
+          if (!items.length) return 'blank';
+          return items.some((item) => item.key === prev) ? prev : items[0].key;
+        });
+      } catch {
+        // fallback to blank if templates endpoint is unavailable
+        if (mounted) {
+          setTemplates([]);
+          setSelectedTemplateKey('blank');
+        }
+      } finally {
+        if (mounted) setTemplatesLoading(false);
+      }
+    };
+    void loadTemplates();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -94,7 +127,12 @@ export const BoardListScreen: React.FC = () => {
 
     setIsCreating(true);
     try {
-      await dispatch(createBoardAction(newBoardTitle)).unwrap();
+      await dispatch(
+        createBoardAction({
+          title: newBoardTitle,
+          templateKey: selectedTemplateKey || 'blank',
+        })
+      ).unwrap();
       setNewBoardTitle('');
       setIsModalOpen(false);
     } catch (error) {
@@ -391,6 +429,49 @@ export const BoardListScreen: React.FC = () => {
               onChange={e => setNewBoardTitle(e.target.value)}
             />
           </div>
+          <div className="form-group">
+            <label className="form-label">{t('board.create.templateLabel')}</label>
+            <select
+              className="form-input"
+              value={selectedTemplateKey}
+              onChange={(e) => setSelectedTemplateKey(e.target.value)}
+              disabled={templatesLoading || templates.length === 0}
+            >
+              {(templates.length ? templates : [{ key: 'blank', name: t('board.template.blank.name'), description: '', lists: [], labels: [] }]).map((template) => (
+                <option key={template.key} value={template.key}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            {templates.length > 0 && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {templates.find((item) => item.key === selectedTemplateKey)?.description || ''}
+              </div>
+            )}
+          </div>
+          {templates.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">{t('board.create.quickFromTemplate')}</label>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {templates.slice(0, 3).map((template) => (
+                  <button
+                    key={template.key}
+                    type="button"
+                    className="btn-secondary"
+                    style={{ width: 'auto' }}
+                    onClick={() => {
+                      setSelectedTemplateKey(template.key);
+                      if (!newBoardTitle.trim()) {
+                        setNewBoardTitle(`${template.name}`);
+                      }
+                    }}
+                  >
+                    {template.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="modal-footer">
             <Button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}

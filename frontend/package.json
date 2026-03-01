@@ -6,6 +6,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@reduxjs/toolkit": "^2.11.2",
+    "@sentry/react": "^10.22.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -29,7 +30,7 @@
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.58.2",
     "browserstack-node-sdk": "^1.49.2"
   },
   "scripts": {

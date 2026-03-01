@@ -63,6 +63,8 @@ For authenticated smoke tests, set:
 - Backend uses ASGI (`daphne`) for HTTP + WebSocket support.
 - Frontend production build is served via `nginx`.
 - CI workflow lives in `.github/workflows/frontend-ci.yml`.
+- Backend CI workflow lives in `.github/workflows/backend-ci.yml`.
+- Secret scan workflow lives in `.github/workflows/gitleaks.yml`.
 
 ### Realtime Config (Redis + WS reconnect)
 - Backend channel layer:
@@ -75,6 +77,29 @@ For authenticated smoke tests, set:
   - `REACT_APP_WS_BASE_RECONNECT_MS`
   - `REACT_APP_WS_MAX_RECONNECT_MS`
   - `REACT_APP_WS_RECONNECT_JITTER_MS`
+
+### Observability
+- Backend Sentry:
+  - `SENTRY_DSN`
+  - `SENTRY_TRACES_SAMPLE_RATE`
+- Frontend Sentry:
+  - `REACT_APP_SENTRY_DSN`
+  - `REACT_APP_SENTRY_ENV`
+  - `REACT_APP_SENTRY_TRACES_SAMPLE_RATE`
+- Health endpoints:
+  - `GET /api/health/`
+  - `GET /healthz/`
+
+### Security Baseline
+- Rotate all leaked/legacy SMTP credentials and update production secrets.
+- Dependabot config: `.github/dependabot.yml`.
+- Secret scanning in CI: `gitleaks` workflow.
+- For GitHub branch protection (requires repository admin), run:
+  - `pwsh scripts/github/apply-branch-protection.ps1`
+- To enable GitHub secret scanning/push protection (requires repository admin), run:
+  - `pwsh scripts/github/enable-security-analysis.ps1`
+- Production deploy checklist:
+  - `docs/ops/deploy-checklist.md`
 
 ## License
 MIT License. See `LICENSE`.
