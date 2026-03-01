@@ -5,7 +5,7 @@ daphne>=4.0.0
 djangorestframework>=3.14
 django-cors-headers>=4.3
 djoser>=2.2
-django-allauth==65.13.1
+django-allauth==65.14.3
 dj-rest-auth==7.0.2
 dj-database-url>=2.1
 psycopg2-binary>=2.9
