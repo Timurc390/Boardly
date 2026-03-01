@@ -1,0 +1,68 @@
+name: Due Reminders
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_ENV: production
+      DJANGO_DEBUG: "false"
+      DJANGO_SECRET_KEY: ${{ secrets.PROD_DJANGO_SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      ALLOWED_HOSTS: ${{ secrets.PROD_ALLOWED_HOSTS }}
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: ${{ secrets.PROD_EMAIL_HOST }}
+      EMAIL_PORT: ${{ secrets.PROD_EMAIL_PORT }}
+      EMAIL_USE_TLS: "true"
+      EMAIL_HOST_USER: ${{ secrets.PROD_EMAIL_HOST_USER }}
+      EMAIL_HOST_PASSWORD: ${{ secrets.PROD_EMAIL_HOST_PASSWORD }}
+      DEFAULT_FROM_EMAIL: ${{ secrets.PROD_DEFAULT_FROM_EMAIL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          required=(
+            DJANGO_SECRET_KEY
+            DATABASE_URL
+            ALLOWED_HOSTS
+            EMAIL_HOST
+            EMAIL_PORT
+            EMAIL_HOST_USER
+            EMAIL_HOST_PASSWORD
+            DEFAULT_FROM_EMAIL
+          )
+          missing=0
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required secret-derived value: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run due reminders command
+        run: python manage.py send_due_reminders

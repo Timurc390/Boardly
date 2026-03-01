@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FiArrowLeft, FiMenu, FiSearch } from 'shared/ui/fiIcons';
-import { LanguageSelect } from '../../../components/LanguageSelect';
+import { FiArrowLeft, FiSearch } from 'shared/ui/fiIcons';
 import { useI18n } from '../../../context/I18nContext';
 import { Board, User } from '../../../types';
 import { BoardHeaderMembers } from './board_header/BoardHeaderMembers';
+import { BoardGlobalMenu } from './board_header/BoardGlobalMenu';
 
 type BoardMember = NonNullable<Board['members']>[number];
 type HeaderMember = { user: User; membership?: BoardMember };
@@ -95,54 +95,13 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
     <>
       <div className={`board-header ${headerMemberId ? 'member-popover-open' : ''}`}>
         <div className="board-header-main">
-          <div className="board-global-menu">
-            <button
-              className="btn-icon board-global-menu-trigger"
-              onClick={onToggleGlobalMenu}
-              aria-label={t('nav.menu')}
-              aria-expanded={isGlobalMenuOpen}
-              aria-haspopup="menu"
-            >
-              <FiMenu aria-hidden="true" />
-            </button>
-            {isGlobalMenuOpen && (
-              <>
-                <div className="board-global-menu-overlay" onClick={onCloseGlobalMenu} />
-                <div className="board-global-menu-dropdown" role="menu" aria-label={t('nav.menu')}>
-                  <Link to="/boards" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
-                    {t('nav.board')}
-                  </Link>
-                  <Link to="/my-cards" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
-                    {t('nav.myCards')}
-                  </Link>
-                  <Link to="/help" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
-                    {t('nav.help')}
-                  </Link>
-                  <Link to="/community" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
-                    {t('nav.community')}
-                  </Link>
-                  <div className="board-global-menu-divider" />
-                  <div className="board-global-menu-lang">
-                    <LanguageSelect compact />
-                  </div>
-                  <Link to="/profile" className="board-global-menu-item" role="menuitem" onClick={onCloseGlobalMenu}>
-                    {t('nav.profile')}
-                  </Link>
-                  <button
-                    type="button"
-                    className="board-global-menu-item board-global-menu-button"
-                    role="menuitem"
-                    onClick={() => {
-                      onLogout();
-                      onCloseGlobalMenu();
-                    }}
-                  >
-                    {t('nav.logout')}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <BoardGlobalMenu
+            isOpen={isGlobalMenuOpen}
+            onToggle={onToggleGlobalMenu}
+            onClose={onCloseGlobalMenu}
+            onLogout={onLogout}
+            t={t}
+          />
           <Link to="/boards" className="btn-icon board-back-btn" aria-label={t('nav.board')}>
             <FiArrowLeft aria-hidden="true" />
           </Link>
