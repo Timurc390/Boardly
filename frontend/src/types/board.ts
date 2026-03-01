@@ -47,6 +47,8 @@ export interface Card {
   due_date?: string | null;
   is_completed?: boolean;
   is_archived?: boolean;
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
+  reminder_minutes_before?: number | null;
   
   // НОВЕ ПОЛЕ
   is_public?: boolean;
@@ -102,6 +104,14 @@ export interface Board {
   
   created_at?: string;
   updated_at?: string;
+}
+
+export interface BoardTemplate {
+  key: string;
+  name: string;
+  description: string;
+  lists: string[];
+  labels: Array<{ name: string; color: string }>;
 }
 
 export interface ActivityLog {
