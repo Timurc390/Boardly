@@ -1,0 +1,10 @@
+title = "Boardly Gitleaks Config"
+
+[allowlist]
+description = "Allow local/dev placeholders that are not real credentials."
+regexes = [
+  '''replace-with-long-random-secret''',
+  '''ci-insecure-secret-key''',
+  '''your-login''',
+  '''your-password''',
+]

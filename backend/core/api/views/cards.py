@@ -11,6 +11,7 @@ import logging
 from core.models import List, Card, CardMember, Checklist, ChecklistItem, CardLabel, Membership, Label
 from core.api.serializers import ListSerializer, CardSerializer, MyCardSerializer
 from core.services.activity_logger import log_activity
+from core.services.recurrence import get_next_due_date
 from core.services.permissions import (
     ensure_board_admin,
     ensure_card_edit,
@@ -162,7 +163,9 @@ class ListViewSet(viewsets.ModelViewSet):
                     order=card.order,
                     due_date=card.due_date,
                     is_completed=card.is_completed,
-                    is_public=card.is_public
+                    is_public=card.is_public,
+                    recurrence=card.recurrence,
+                    reminder_minutes_before=card.reminder_minutes_before,
                 )
                 
                 # Копіюємо мітки
@@ -290,11 +293,34 @@ class CardViewSet(viewsets.ModelViewSet):
         prev_description = previous.description
         prev_due_date = previous.due_date
         prev_completed = previous.is_completed
+        prev_recurrence = previous.recurrence
+        prev_reminder_minutes_before = previous.reminder_minutes_before
         prev_label_ids = set(CardLabel.objects.filter(card=previous).values_list('label_id', flat=True))
         
         card = serializer.save()
         board_id = card.list.board_id if card.list_id else None
         board_title = card.list.board.title if card.list_id else None
+
+        completed_just_now = (
+            'is_completed' in serializer.validated_data
+            and prev_completed is False
+            and card.is_completed is True
+        )
+        if completed_just_now and card.recurrence != 'none' and card.due_date:
+            next_due_date = get_next_due_date(card.due_date, card.recurrence)
+            card.is_completed = False
+            card.due_date = next_due_date
+            card.last_reminder_sent_at = None
+            card.save(update_fields=['is_completed', 'due_date', 'last_reminder_sent_at'])
+            log_activity(self.request.user, 'reschedule_recurring_card', 'card', card.id, {
+                'board_id': board_id,
+                'board_title': board_title,
+                'card_id': card.id,
+                'title': card.title,
+                'recurrence': card.recurrence,
+                'due_before': prev_due_date.isoformat() if prev_due_date else None,
+                'due_after': next_due_date.isoformat(),
+            })
 
         # --- Логування ---
         if 'list' in serializer.validated_data and card.list_id != prev_list_id:
@@ -343,6 +369,23 @@ class CardViewSet(viewsets.ModelViewSet):
                     'title': card.title,
                     'due_before': prev_due_date.isoformat() if prev_due_date else None,
                     'due_after': card.due_date.isoformat() if card.due_date else None
+                })
+            if (
+                'recurrence' in serializer.validated_data
+                and card.recurrence != prev_recurrence
+            ) or (
+                'reminder_minutes_before' in serializer.validated_data
+                and card.reminder_minutes_before != prev_reminder_minutes_before
+            ):
+                log_activity(self.request.user, 'update_card_schedule', 'card', card.id, {
+                    'board_id': board_id,
+                    'board_title': board_title,
+                    'card_id': card.id,
+                    'title': card.title,
+                    'recurrence_before': prev_recurrence,
+                    'recurrence_after': card.recurrence,
+                    'reminder_before': prev_reminder_minutes_before,
+                    'reminder_after': card.reminder_minutes_before,
                 })
             if 'label_ids' in serializer.validated_data:
                 new_label_ids = set(CardLabel.objects.filter(card=card).values_list('label_id', flat=True))
@@ -452,7 +495,9 @@ class CardViewSet(viewsets.ModelViewSet):
                 cover_size=original_card.cover_size,
                 order=original_card.order + 1,
                 due_date=original_card.due_date,
-                is_public=original_card.is_public
+                is_public=original_card.is_public,
+                recurrence=original_card.recurrence,
+                reminder_minutes_before=original_card.reminder_minutes_before,
             )
             
             for card_label in CardLabel.objects.filter(card=original_card):

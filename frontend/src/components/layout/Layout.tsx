@@ -8,6 +8,7 @@ import { logoutUser } from '../../store/slices/authSlice';
 import { useI18n } from '../../context/I18nContext';
 import { LanguageSelect } from '../LanguageSelect';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { PwaInstallButton } from '../../shared/ui/PwaInstallButton';
 
 export const Layout: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -112,6 +113,7 @@ export const Layout: React.FC = () => {
                 </div>
 
                 <div className="nav-actions-col nav-actions-secondary">
+                  <PwaInstallButton />
                   <LanguageSelect className="nav-lang-select" compact onLocaleChange={closeMobileMenu} />
                   
                   <Link to="/profile" className={`link ${isActive('/profile')}`} style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={closeMobileMenu}>
@@ -145,6 +147,7 @@ export const Layout: React.FC = () => {
                   </div>
                 </div>
                 <div className="nav-actions-col nav-actions-secondary">
+                  <PwaInstallButton />
                   <LanguageSelect className="nav-lang-select" compact onLocaleChange={closeMobileMenu} />
                   <Link to="/auth" className="btn btn-primary" style={{ padding: '8px 16px', width: 'auto' }}>
                     {t('auth.signIn')}
