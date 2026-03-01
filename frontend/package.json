@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
-    "browserstack-node-sdk": "^1.49.2"
+    "browserstack-node-sdk": "^1.49.12"
   },
   "scripts": {
     "start": "react-scripts start",
