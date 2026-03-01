@@ -11781,3 +11781,41 @@ body.modal-open {
     max-height: calc(100dvh - var(--board-touch-header-offset) - env(safe-area-inset-bottom) - 8px) !important;
   }
 }
+
+.card-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card-description-draft-banner {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(61, 202, 255, 0.35);
+  background: rgba(61, 202, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-description-draft-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .card-schedule-grid {
+    grid-template-columns: 1fr;
+  }
+}
