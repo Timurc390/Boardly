@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FiAlignLeft } from 'shared/ui/fiIcons';
 import { Card } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
@@ -14,15 +14,48 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
   const { t } = useI18n();
   const [description, setDescription] = useState(card.description || '');
   const [isEditing, setIsEditing] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const draftKey = useMemo(() => `boardly.card.${card.id}.description.draft`, [card.id]);
 
   useEffect(() => {
     setDescription(card.description || '');
   }, [card.description]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const draft = window.localStorage.getItem(draftKey);
+    setHasDraft(Boolean(draft && draft !== (card.description || '')));
+  }, [card.description, draftKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isEditing) return;
+    window.localStorage.setItem(draftKey, description);
+    setHasDraft(Boolean(description && description !== (card.description || '')));
+  }, [card.description, description, draftKey, isEditing]);
+
   const handleSave = () => {
     if (!canEdit) return;
     onUpdateCard({ description });
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(draftKey);
+    }
+    setHasDraft(false);
     setIsEditing(false);
+  };
+
+  const handleRestoreDraft = () => {
+    if (typeof window === 'undefined') return;
+    const draft = window.localStorage.getItem(draftKey);
+    if (!draft) return;
+    setDescription(draft);
+    setIsEditing(true);
+  };
+
+  const handleClearDraft = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(draftKey);
+    }
+    setHasDraft(false);
   };
 
   return (
@@ -38,6 +71,19 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({ card, canEdit,
             </button>
           )}
         </div>
+        {!isEditing && hasDraft && canEdit && (
+          <div className="card-description-draft-banner">
+            <span>{t('card.description.draftFound')}</span>
+            <div className="card-description-draft-actions">
+              <button type="button" className="card-section-action" onClick={handleRestoreDraft}>
+                {t('card.description.restoreDraft')}
+              </button>
+              <button type="button" className="card-section-action" onClick={handleClearDraft}>
+                {t('card.description.clearDraft')}
+              </button>
+            </div>
+          </div>
+        )}
         {isEditing ? (
             <div className="card-description-editor">
                 <textarea 

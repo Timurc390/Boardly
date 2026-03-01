@@ -4,7 +4,7 @@ from core.api.views import (
     UserViewSet, BoardViewSet, ListViewSet, CardViewSet,
     LabelViewSet, ChecklistViewSet, ChecklistItemViewSet, ActivityViewSet, ActivityLogViewSet,
     GoogleLogin, BoardMemberViewSet, FavoriteBoardViewSet,
-    AttachmentViewSet, CommentViewSet, MyCardsViewSet
+    AttachmentViewSet, CommentViewSet, MyCardsViewSet, HealthCheckView,
 )
 
 # Створюємо роутер і реєструємо всі ViewSet'и
@@ -25,6 +25,7 @@ router.register(r'activities', ActivityViewSet, basename='activity')
 router.register(r'activity', ActivityLogViewSet, basename='activity-log')
 
 urlpatterns = [
+    path('health/', HealthCheckView.as_view(), name='health'),
     # Всі маршрути з роутера
     path('', include(router.urls)),
     
