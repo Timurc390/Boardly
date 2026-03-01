@@ -19,11 +19,17 @@
   - `REACT_APP_SENTRY_DSN`
   - `REACT_APP_SENTRY_ENV` (`production`)
   - `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` (e.g. `0.05`)
+- If deploying to Fly, export these env vars locally and run:
+  - `pwsh scripts/fly/set-prod-secrets.ps1`
 
 ## 3. Migrations
 - Run backend migration:
   - `python manage.py migrate`
 - Verify migration `0023` is applied.
+- For Fly production apps:
+  - `pwsh scripts/fly/run-prod-migrations.ps1`
+- For GitHub Actions-driven migration:
+  - Run workflow `.github/workflows/prod-migrate.yml`.
 
 ## 4. Recurring Reminders Job
 - Configure repository secrets for scheduled workflow:
@@ -41,6 +47,8 @@
 - Backend unhandled errors (5xx).
 - Frontend `error` events.
 - WebSocket reconnect exhaustion / disconnect spike.
+- Suggested rule definitions:
+  - `docs/ops/sentry-alert-rules.md`
 
 ## 6. Manual Smoke
 - Templates:

@@ -98,8 +98,14 @@ For authenticated smoke tests, set:
   - `pwsh scripts/github/apply-branch-protection.ps1`
 - To enable GitHub secret scanning/push protection (requires repository admin), run:
   - `pwsh scripts/github/enable-security-analysis.ps1`
+- To set Fly production runtime secrets (Sentry/WS + optional SMTP), run:
+  - `pwsh scripts/fly/set-prod-secrets.ps1`
+- To run Fly production migrations and verify `core.0023`, run:
+  - `pwsh scripts/fly/run-prod-migrations.ps1`
 - Production deploy checklist:
   - `docs/ops/deploy-checklist.md`
+- Sentry alert templates:
+  - `docs/ops/sentry-alert-rules.md`
 
 ## License
 MIT License. See `LICENSE`.
