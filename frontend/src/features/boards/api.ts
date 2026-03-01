@@ -1,5 +1,5 @@
 import client from '../../api/client';
-import { type ActivityLog, type Attachment, type Board, type Card, type Checklist, type ChecklistItem, type Comment, type Label, type List } from '../../types';
+import { type ActivityLog, type Attachment, type Board, type BoardTemplate, type Card, type Checklist, type ChecklistItem, type Comment, type Label, type List } from '../../types';
 
 type BoardMember = NonNullable<Board['members']>[number];
 
@@ -8,8 +8,15 @@ export const getBoards = async (): Promise<Board[]> => {
   return res.data;
 };
 
-export const createBoard = async (title: string): Promise<Board> => {
-  const res = await client.post('/boards/', { title });
+export const createBoard = async (title: string, templateKey?: string): Promise<Board> => {
+  const payload: Record<string, string> = { title };
+  if (templateKey) payload.template_key = templateKey;
+  const res = await client.post('/boards/', payload);
+  return res.data;
+};
+
+export const getBoardTemplates = async (): Promise<BoardTemplate[]> => {
+  const res = await client.get('/boards/templates/');
   return res.data;
 };
 
