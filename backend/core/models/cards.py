@@ -28,6 +28,13 @@ class Card(models.Model):
     """
     Завдання (Картка).
     """
+    RECURRENCE_CHOICES = (
+        ('none', 'None'),
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+    )
+
     list = models.ForeignKey(List, on_delete=models.CASCADE, related_name='cards', verbose_name="Список")
     title = models.CharField(max_length=255, verbose_name="Заголовок Картки")
     description = models.TextField(blank=True, verbose_name="Опис Картки")
@@ -40,6 +47,22 @@ class Card(models.Model):
 
     # НОВЕ ПОЛЕ: Статус приватності картки
     is_public = models.BooleanField(default=True, verbose_name="Публічна картка")
+    recurrence = models.CharField(
+        max_length=10,
+        choices=RECURRENCE_CHOICES,
+        default='none',
+        verbose_name="Recurring schedule",
+    )
+    reminder_minutes_before = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Reminder minutes before due date",
+    )
+    last_reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Last due reminder sent at",
+    )
 
     members = models.ManyToManyField(User, through='CardMember', related_name='assigned_cards', verbose_name="Призначені учасники")
     
