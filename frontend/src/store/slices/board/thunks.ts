@@ -18,11 +18,17 @@ export const fetchBoardsAction = createAsyncThunk<Board[], void, BoardThunkConfi
   }
 );
 
-export const createBoardAction = createAsyncThunk<Board, string, BoardThunkConfig>(
+export const createBoardAction = createAsyncThunk<
+  Board,
+  string | { title: string; templateKey?: string },
+  BoardThunkConfig
+>(
   'board/createBoard',
-  async (title: string, { rejectWithValue }) => {
+  async (arg, { rejectWithValue }) => {
     try {
-      return await api.createBoard(title);
+      const title = typeof arg === 'string' ? arg : arg.title;
+      const templateKey = typeof arg === 'string' ? undefined : arg.templateKey;
+      return await api.createBoard(title, templateKey);
     } catch (err: unknown) {
       return rejectWithValue(extractApiErrorDetail(err, 'Помилка створення дошки'));
     }

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiClock, FiMoreHorizontal, FiSettings, FiShield, FiUser } from 'shared/ui/fiIcons';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { FiArrowLeft, FiClock, FiSettings, FiShield, FiUser } from 'shared/ui/fiIcons';
 import { useI18n } from '../context/I18nContext';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -9,6 +9,7 @@ import {
 } from '../store/slices/authSlice';
 import { ProfileMobileMenu } from '../features/profile/components/ProfileMobileMenu';
 import { ProfileDialogs } from '../features/profile/components/ProfileDialogs';
+import { ProfileHeader } from '../features/profile/components/ProfileHeader';
 import { ProfileSidebar } from '../features/profile/components/ProfileSidebar';
 import { ProfileTabContent } from '../features/profile/components/ProfileTabContent';
 import { usePasswordChange } from '../features/profile/hooks/usePasswordChange';
@@ -183,25 +184,15 @@ export const ProfileScreen: React.FC = () => {
         />
 
         <main className="profile-main">
-          <div className="profile-header">
-            <div className="profile-header-controls">
-              <Link to="/boards" className="profile-top-back">
-                <BackIcon />
-                <span>{t('community.back')}</span>
-              </Link>
-              <button
-                type="button"
-                className="profile-mobile-menu-trigger"
-                aria-label={t('profile.tabsLabel')}
-                aria-expanded={isMobileSettingsMenuOpen}
-                onClick={() => setIsMobileSettingsMenuOpen(true)}
-              >
-                <FiMoreHorizontal aria-hidden="true" />
-              </button>
-            </div>
-            <h1>{headerTitle}</h1>
-            {headerSubtitle && <p>{headerSubtitle}</p>}
-          </div>
+          <ProfileHeader
+            backIcon={<BackIcon />}
+            title={headerTitle}
+            subtitle={headerSubtitle}
+            backLabel={t('community.back')}
+            tabsLabel={t('profile.tabsLabel')}
+            isMobileMenuOpen={isMobileSettingsMenuOpen}
+            onOpenMobileMenu={() => setIsMobileSettingsMenuOpen(true)}
+          />
 
           <ProfileMobileMenu
             isOpen={isMobileSettingsMenuOpen}

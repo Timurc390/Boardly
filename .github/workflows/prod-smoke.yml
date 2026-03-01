@@ -1,0 +1,20 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health endpoint
+        run: |
+          curl --fail --silent --show-error "${{ secrets.PROD_BACKEND_HEALTH_URL }}"
+
+      - name: Frontend homepage
+        run: |
+          curl --fail --silent --show-error "${{ secrets.PROD_FRONTEND_URL }}"
+
+      - name: Frontend manifest
+        run: |
+          curl --fail --silent --show-error "${{ secrets.PROD_FRONTEND_URL }}/manifest.json"
