@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from core.models import Board, Membership, Label, Activity
+from core.services.board_templates import BOARD_TEMPLATES
 from .users import UserSerializer
 import logging
 
@@ -39,6 +40,12 @@ class BoardSerializer(serializers.ModelSerializer):
     members = MembershipSerializer(source='membership_set', many=True, read_only=True)
     lists = serializers.SerializerMethodField()
     labels = LabelSerializer(many=True, read_only=True)
+    template_key = serializers.ChoiceField(
+        choices=tuple((key, key) for key in BOARD_TEMPLATES.keys()),
+        required=False,
+        write_only=True,
+        default='blank',
+    )
     # Динамічне поле: чи є дошка в обраному у поточного користувача
     is_favorite = serializers.SerializerMethodField()
 
@@ -48,11 +55,16 @@ class BoardSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'background_url', 
             'is_archived', 'is_favorite', 'owner', 'created_at', 
             'invite_link', 'members', 'lists', 'labels',
+            'template_key',
             'dev_can_create_cards', 'dev_can_edit_assigned_cards',
             'dev_can_archive_assigned_cards', 'dev_can_join_card',
             'dev_can_create_lists'
         )
         read_only_fields = ('owner', 'invite_link', 'created_at')
+
+    def create(self, validated_data):
+        validated_data.pop('template_key', None)
+        return super().create(validated_data)
 
     def get_lists(self, obj):
         from .cards import ListSerializer

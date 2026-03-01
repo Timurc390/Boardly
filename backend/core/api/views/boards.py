@@ -9,6 +9,7 @@ from core.models import Board, List, Membership, Label, Activity
 from core.api.serializers import BoardSerializer, MembershipSerializer, LabelSerializer, ActivitySerializer
 from core.services.activity_logger import log_activity
 from core.services.permissions import IsOwnerOrReadOnly, ensure_board_admin
+from core.services.board_templates import get_board_template, list_board_templates
 
 class BoardViewSet(viewsets.ModelViewSet):
     serializer_class = BoardSerializer
@@ -30,19 +31,28 @@ class BoardViewSet(viewsets.ModelViewSet):
         return Board.objects.filter(Q(owner=user) | Q(members=user)).distinct()
 
     def perform_create(self, serializer):
+        template_key = serializer.validated_data.get('template_key')
+        template = get_board_template(template_key)
         board = serializer.save(owner=self.request.user)
         # Створюємо членство для власника
         Membership.objects.create(user=self.request.user, board=board, role='admin')
-        
-        List.objects.bulk_create([
-            List(title='To Do', board=board, order=1),
-            List(title='In Progress', board=board, order=2),
-            List(title='Done', board=board, order=3),
-        ])
+
+        list_titles = template.get('lists') or ['To Do', 'In Progress', 'Done']
+        List.objects.bulk_create(
+            [List(title=title, board=board, order=index) for index, title in enumerate(list_titles, start=1)]
+        )
+
+        for label in template.get('labels', []):
+            name = (label.get('name') or '').strip()
+            color = (label.get('color') or '').strip() or '#0079bf'
+            if name:
+                Label.objects.get_or_create(board=board, name=name, defaults={'color': color})
+
         log_activity(self.request.user, 'create_board', 'board', board.id, {
             'title': board.title,
             'board_id': board.id,
-            'board_title': board.title
+            'board_title': board.title,
+            'template_key': template_key or 'blank',
         })
 
     def perform_update(self, serializer):
@@ -92,6 +102,10 @@ class BoardViewSet(viewsets.ModelViewSet):
         Membership.objects.create(board=board, user=request.user, role='viewer')
         serializer = self.get_serializer(board)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='templates')
+    def templates(self, request):
+        return Response(list_board_templates())
 
 class FavoriteBoardViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = BoardSerializer
