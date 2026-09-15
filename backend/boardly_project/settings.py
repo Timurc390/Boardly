@@ -170,7 +170,10 @@ else:
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
-    DATABASES["default"] = dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
+    # sslmode is taken from DATABASE_URL itself (e.g. Neon URLs include sslmode=require);
+    # Fly's internal Postgres has no SSL configured since traffic is already encrypted
+    # on the private 6PN/flycast network, so SSL must not be force-enabled here.
+    DATABASES["default"] = dj_database_url.parse(DATABASE_URL, conn_max_age=600)
 
 
 
